@@ -288,6 +288,8 @@ class RuleField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 隐藏输入只能是单行，多行字段的最小行数也不能超过最大行数。
+    final int lines = obscure ? 1 : (maxLines < minLines ? minLines : maxLines);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -297,8 +299,8 @@ class RuleField extends StatelessWidget {
           controller: controller,
           obscureText: obscure,
           keyboardType: keyboard,
-          minLines: minLines,
-          maxLines: obscure ? 1 : maxLines,
+          minLines: obscure ? 1 : minLines,
+          maxLines: lines,
           style: C.mono.copyWith(fontSize: 13),
         ),
         const SizedBox(height: 4),
