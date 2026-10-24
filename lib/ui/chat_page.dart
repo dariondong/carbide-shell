@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,25 @@ import '../tools/ask_tool.dart';
 import 'components.dart';
 import 'md_text.dart';
 import 'theme.dart';
+
+/// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。
+final Map<String, Uint8List> _photoCache = <String, Uint8List>{};
+
+/// 从 `data:image/…;base64,…` 里取出字节。没带前缀或解不开就给 null。
+Uint8List? photoBytes(String url) {
+  final Uint8List? hit = _photoCache[url];
+  if (hit != null) return hit;
+  final int comma = url.indexOf(',');
+  if (comma < 0 || !url.startsWith('data:')) return null;
+  try {
+    final Uint8List bytes = base64Decode(url.substring(comma + 1));
+    if (_photoCache.length > 24) _photoCache.clear();
+    _photoCache[url] = bytes;
+    return bytes;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// One conversation. Its transcript lives on disk, so leaving and coming back
 /// keeps everything.
@@ -46,6 +66,9 @@ class _ChatPageState extends State<ChatPage> {
   bool _atBottom = true;
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
+
+  /// 和 `_attachNames` 一一对应：图片那一格是 data URL，文本文件那一格是空串。
+  final List<String> _attachPhotos = <String>[];
 
   List<LlmMessage> get _messages => widget.conversation.messages;
 
@@ -137,11 +160,13 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _send() async {
     final LiveSession? live = _live;
     final String text = _input.text.trim();
-    if (live == null || text.isEmpty || live.running) return;
+    if (live == null || live.running) return;
+    if (text.isEmpty && _images.isEmpty) return;
     _input.clear();
     final List<String> images = List<String>.of(_images);
     _images.clear();
     _attachNames.clear();
+    _attachPhotos.clear();
     setState(() {});
     // 交给托管处跑：切到别的对话、回到列表，这一轮都还在。
     await widget.hub.send(live, text, images: images);
@@ -280,8 +305,10 @@ class _ChatPageState extends State<ChatPage> {
                 : name.endsWith('.gif')
                     ? 'image/gif'
                     : 'image/jpeg';
-        _images.add('data:$mime;base64,${base64Encode(bytes)}');
+        final String url = 'data:$mime;base64,${base64Encode(bytes)}';
+        _images.add(url);
         _attachNames.add(f.name);
+        _attachPhotos.add(url);
         continue;
       }
       final bool isText = name.endsWith('.txt') ||
@@ -321,6 +348,7 @@ class _ChatPageState extends State<ChatPage> {
     _input.text = '${_input.text}${_input.text.isEmpty ? '' : '\n\n'}'
         '文件 $name：\n\n```\n$clipped\n```';
     _attachNames.add(name);
+    _attachPhotos.add('');
   }
 
   void _toast(String text) {
@@ -353,7 +381,7 @@ class _ChatPageState extends State<ChatPage> {
     final String runningId = _runningId();
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
-        out.add(_userTurn(m.text));
+        out.add(_userTurn(m));
       } else if (m.role == LlmRole.assistant) {
         if (m.text.trim().isNotEmpty) out.add(_answer(m.text));
         if (m.calls.isNotEmpty) out.add(_toolTurn(m.calls, outputs, runningId));
@@ -368,7 +396,8 @@ class _ChatPageState extends State<ChatPage> {
     return out;
   }
 
-  Widget _userTurn(String text) {
+  Widget _userTurn(LlmMessage message) {
+    final String text = message.text;
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
@@ -387,10 +416,82 @@ class _ChatPageState extends State<ChatPage> {
                 style: TextStyle(fontSize: 12, color: C.blue, height: 1.1)),
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(text, style: C.ask)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (text.trim().isNotEmpty) Text(text, style: C.ask),
+                if (message.images.isNotEmpty) ...<Widget>[
+                  if (text.trim().isNotEmpty) const SizedBox(height: 9),
+                  _photoStrip(message.images),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  /// 一轮里带的照片：小图排一行，点开看大图。
+  Widget _photoStrip(List<String> photos) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        for (int i = 0; i < photos.length; i += 1)
+          GestureDetector(
+            onTap: () => _openPhoto(photos, i),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(C.radiusSmall),
+              child: Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  color: C.paper2,
+                  border: Border.all(color: C.rule2),
+                  borderRadius: BorderRadius.circular(C.radiusSmall),
+                ),
+                child: _photoImage(photos[i], fit: BoxFit.cover),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _photoImage(String url, {required BoxFit fit}) {
+    final Uint8List? bytes = photoBytes(url);
+    if (bytes == null) {
+      return const Center(
+        child: Text('读不出这张图',
+            style: TextStyle(fontSize: 11, color: C.grey2)),
+      );
+    }
+    return Image.memory(
+      bytes,
+      fit: fit,
+      gaplessPlayback: true,
+      errorBuilder: (BuildContext ctx, Object error, StackTrace? stack) =>
+          const Center(
+        child: Text('读不出这张图',
+            style: TextStyle(fontSize: 11, color: C.grey2)),
+      ),
+    );
+  }
+
+  /// 点开一张：全屏、可拖动放大，点一下退出。
+  void _openPhoto(List<String> photos, int start) {
+    Navigator.of(context).push<void>(PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: const Color(0xF2181C23),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (BuildContext ctx, Animation<double> a, Animation<double> b) =>
+          _PhotoViewer(photos: photos, start: start),
+      transitionsBuilder:
+          (BuildContext ctx, Animation<double> a, Animation<double> b, Widget child) =>
+              FadeTransition(opacity: a, child: child),
+    ));
   }
 
   Widget _answer(String text, {bool streaming = false}) {
@@ -617,7 +718,11 @@ class _ChatPageState extends State<ChatPage> {
               children: <Widget>[
                 for (int i = 0; i < _attachNames.length; i += 1)
                   Container(
-                    padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
+                    padding: EdgeInsets.fromLTRB(
+                        i < _attachPhotos.length && _attachPhotos[i].isNotEmpty ? 4 : 10,
+                        4,
+                        6,
+                        4),
                     decoration: BoxDecoration(
                       color: C.blueSoft,
                       borderRadius: BorderRadius.circular(20),
@@ -625,12 +730,25 @@ class _ChatPageState extends State<ChatPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
+                        if (i < _attachPhotos.length && _attachPhotos[i].isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: _photoImage(_attachPhotos[i], fit: BoxFit.cover),
+                              ),
+                            ),
+                          ),
                         Text(_attachNames[i],
                             style: C.monoSmall.copyWith(color: C.blue, fontSize: 10.5)),
                         GestureDetector(
                           onTap: () => setState(() {
                             _attachNames.removeAt(i);
                             if (i < _images.length) _images.removeAt(i);
+                            if (i < _attachPhotos.length) _attachPhotos.removeAt(i);
                           }),
                           child: const Padding(
                             padding: EdgeInsets.only(left: 6),
@@ -899,5 +1017,77 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
     final double p = (_pulse.value + i / 3) % 1;
     final double wave = p < 0.5 ? p * 2 : (1 - p) * 2;
     return 0.25 + 0.75 * wave;
+  }
+}
+
+/// 全屏看一张照片：左右翻、双指放大，点一下退出。
+class _PhotoViewer extends StatefulWidget {
+  const _PhotoViewer({required this.photos, required this.start});
+
+  final List<String> photos;
+  final int start;
+
+  @override
+  State<_PhotoViewer> createState() => _PhotoViewerState();
+}
+
+class _PhotoViewerState extends State<_PhotoViewer> {
+  late final PageController _page =
+      PageController(initialPage: widget.start.clamp(0, widget.photos.length - 1));
+  late int _index = widget.start;
+
+  @override
+  void dispose() {
+    _page.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).maybePop(),
+      child: Scaffold(
+        backgroundColor: const Color(0x00000000),
+        body: SafeArea(
+          child: Stack(
+            children: <Widget>[
+              PageView.builder(
+                controller: _page,
+                itemCount: widget.photos.length,
+                onPageChanged: (int i) => setState(() => _index = i),
+                itemBuilder: (BuildContext ctx, int i) => InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(
+                    child: photoBytes(widget.photos[i]) == null
+                        ? const Text('读不出这张图',
+                            style: TextStyle(color: C.onInk, fontSize: 13))
+                        : Image.memory(
+                            photoBytes(widget.photos[i])!,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                          ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 6,
+                child: Center(
+                  child: Text(
+                    widget.photos.length > 1
+                        ? '${_index + 1} / ${widget.photos.length}'
+                        : '',
+                    style: const TextStyle(
+                        fontSize: 12, color: C.onInk, letterSpacing: 0.4),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
