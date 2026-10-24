@@ -20,6 +20,7 @@ class _AboutPageState extends State<AboutPage> {
   String _status = '';
   UpdateInfo? _found;
   bool _checked = false;
+  bool _withPre = true;
 
   Future<void> _check() async {
     if (_busy) return;
@@ -30,7 +31,7 @@ class _AboutPageState extends State<AboutPage> {
     });
     final UpdateChecker checker = UpdateChecker();
     try {
-      final List<UpdateInfo> list = await checker.fetch();
+      final List<UpdateInfo> list = await checker.fetch(includePrerelease: _withPre);
       if (!mounted) return;
       if (list.isEmpty) {
         setState(() {
@@ -116,6 +117,25 @@ class _AboutPageState extends State<AboutPage> {
               const SizedBox(height: 20),
               Row(
                 children: <Widget>[
+                  GestureDetector(
+                    onTap: () => setState(() => _withPre = !_withPre),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      margin: const EdgeInsets.only(right: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _withPre ? C.blue : C.card,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _withPre ? C.blue : C.rule2),
+                      ),
+                      child: _withPre
+                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+                  const Text('含预发布', style: TextStyle(fontSize: 12, color: C.grey)),
+                  const SizedBox(width: 14),
                   SquareButton(
                     label: _busy ? '检查中…' : '检查更新',
                     filled: true,
