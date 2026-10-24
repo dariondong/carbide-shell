@@ -56,6 +56,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     final AgentSession session = await widget.services.sessionFor(widget.conversation);
     session.loop.approver = this;
     session.loop.onChanged = _refresh;
+    session.loop.tokens = widget.conversation.tokensUsed;
     if (!mounted) return;
     setState(() => _session = session);
   }
@@ -127,6 +128,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       _images.clear();
       _attachNames.clear();
       await session.loop.send(text, cancel: token, images: images);
+      widget.conversation.tokensUsed = session.loop.tokens;
       await widget.services.persist(widget.conversation);
     } finally {
       if (mounted) setState(() => _running = false);
@@ -296,6 +298,30 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     );
   }
 
+  static String _fmtTokens(int n) {
+    if (n < 1000) return '$n';
+    final double k = n / 1000;
+    return '${k.toStringAsFixed(k < 10 ? 1 : 0)}k';
+  }
+
+  Widget _usage(AgentSession? session) {
+    if (session == null) return const SizedBox.shrink();
+    final int tokens = session.loop.liveTokens;
+    final double hit = session.loop.cacheHitRate;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Text('${session.loop.step}/${session.loop.maxSteps}', style: C.monoSmall),
+        const SizedBox(height: 2),
+        Text(
+          '${_fmtTokens(tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
+          style: C.monoSmall.copyWith(color: hit > 0 ? C.blue : C.grey2, fontSize: 9.5),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AgentSession? session = _session;
@@ -336,8 +362,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                   ],
                 ),
               ),
-              Text('${session?.loop.step ?? 0}/${session?.loop.maxSteps ?? 0}',
-                  style: C.monoSmall),
+              _usage(session),
               const SizedBox(width: 10),
               if (_running)
                 GestureDetector(

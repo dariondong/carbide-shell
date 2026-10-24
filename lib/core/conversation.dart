@@ -12,6 +12,7 @@ class Conversation {
     List<LlmMessage>? messages,
     DateTime? updatedAt,
     this.autoApproveAll = false,
+    this.tokensUsed = 0,
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -28,6 +29,9 @@ class Conversation {
 
   /// This conversation asked for no more confirmations.
   bool autoApproveAll;
+
+  /// Tokens spent across every turn of this conversation.
+  int tokensUsed;
 
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
@@ -47,6 +51,7 @@ class Conversation {
         'hostId': hostId,
         'updatedAt': updatedAt.toIso8601String(),
         'autoApproveAll': autoApproveAll,
+        'tokensUsed': tokensUsed,
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -68,6 +73,7 @@ class Conversation {
       messages: messages,
       updatedAt: DateTime.tryParse('${json['updatedAt'] ?? ''}') ?? DateTime.now(),
       autoApproveAll: json['autoApproveAll'] == true,
+      tokensUsed: (json['tokensUsed'] as num?)?.toInt() ?? 0,
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],

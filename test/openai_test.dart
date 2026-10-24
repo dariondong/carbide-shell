@@ -73,6 +73,30 @@ void main() {
       expect(reply.usage.total, 15);
     });
 
+    test('读得出缓存命中', () {
+      final LlmReply reply = parseChatResponse(<String, Object?>{
+        'choices': <Object?>[
+          <String, Object?>{
+            'message': <String, Object?>{'content': '好'},
+          },
+        ],
+        'usage': <String, Object?>{
+          'prompt_tokens': 2000,
+          'completion_tokens': 60,
+          'prompt_tokens_details': <String, Object?>{'cached_tokens': 1600},
+        },
+      });
+      expect(reply.usage.prompt, 2000);
+      expect(reply.usage.cached, 1600);
+      expect(reply.usage.cacheHitRate, closeTo(0.8, 0.001));
+    });
+
+    test('没有缓存字段时命中率是零', () {
+      final LlmUsage u = usageFrom(<String, Object?>{'prompt_tokens': 100});
+      expect(u.cacheHitRate, 0);
+      expect(const LlmUsage().cacheHitRate, 0);
+    });
+
     test('没有 choices 就报错', () {
       expect(() => parseChatResponse(<String, Object?>{}), throwsA(isA<Exception>()));
     });

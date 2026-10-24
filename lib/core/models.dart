@@ -28,12 +28,22 @@ enum ApprovalVerdict { allow, ask, deny }
 enum LlmRole { system, user, assistant, tool }
 
 class LlmUsage {
-  const LlmUsage({this.prompt = 0, this.completion = 0});
+  const LlmUsage({this.prompt = 0, this.completion = 0, this.cached = 0});
 
   final int prompt;
   final int completion;
 
+  /// Prompt tokens the provider served from its cache.
+  final int cached;
+
   int get total => prompt + completion;
+
+  /// 0..1. Zero when the provider did not report a cache.
+  double get cacheHitRate {
+    if (prompt <= 0 || cached <= 0) return 0;
+    final double rate = cached / prompt;
+    return rate > 1 ? 1 : rate;
+  }
 }
 
 class LlmToolCall {

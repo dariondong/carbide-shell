@@ -72,6 +72,15 @@ class AgentLoop {
   /// Steps used by the current turn, and tokens reported by the provider.
   int step = 0;
   int tokens = 0;
+  int promptTokens = 0;
+  int cachedTokens = 0;
+
+  /// Tokens for the answer arriving right now, so the number keeps moving
+  /// between provider reports.
+  int get liveTokens => tokens + (partial.length / 3).round();
+
+  double get cacheHitRate =>
+      promptTokens <= 0 ? 0 : (cachedTokens / promptTokens).clamp(0.0, 1.0);
 
   /// Text of the answer being streamed right now. Empty when idle.
   String partial = '';
@@ -115,6 +124,8 @@ class AgentLoop {
         return _finish('模型请求失败：$e');
       }
       tokens += reply.usage.total;
+      promptTokens += reply.usage.prompt;
+      cachedTokens += reply.usage.cached;
 
       partial = '';
       if (!reply.wantsTools) {

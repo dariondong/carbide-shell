@@ -85,7 +85,10 @@ class OpenAiProvider implements LlmProvider {
       tools: tools,
     );
     final bool streaming = onText != null;
-    if (streaming) body['stream'] = true;
+    if (streaming) {
+      body['stream'] = true;
+      body['stream_options'] = <String, Object?>{'include_usage': true};
+    }
     req.write(jsonEncode(body));
     final HttpClientResponse res = await req.close();
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -198,10 +201,7 @@ LlmReply parseChatResponse(Map<String, Object?> json) {
   LlmUsage usage = const LlmUsage();
   final Object? rawUsage = json['usage'];
   if (rawUsage is Map) {
-    usage = LlmUsage(
-      prompt: _asInt(rawUsage['prompt_tokens']),
-      completion: _asInt(rawUsage['completion_tokens']),
-    );
+    usage = usageFrom(rawUsage);
   }
   return LlmReply(text: text, calls: calls, usage: usage);
 }
@@ -241,6 +241,7 @@ Future<LlmReply> _readStream(
 ) async {
   final StringBuffer text = StringBuffer();
   final Map<int, _ToolAcc> tools = <int, _ToolAcc>{};
+  LlmUsage usage = const LlmUsage();
   final Stream<String> lines =
       res.transform(utf8.decoder).transform(const LineSplitter());
   await for (final String line in lines) {
@@ -255,6 +256,8 @@ Future<LlmReply> _readStream(
       continue;
     }
     if (decoded is! Map) continue;
+    final Object? rawUsage = decoded['usage'];
+    if (rawUsage is Map) usage = usageFrom(rawUsage);
     final Object? choices = decoded['choices'];
     if (choices is! List || choices.isEmpty) continue;
     final Object? first = choices.first;
@@ -295,5 +298,19 @@ Future<LlmReply> _readStream(
       args: _decodeArgs(acc.args.toString()),
     ));
   }
-  return LlmReply(text: text.toString(), calls: calls);
+  return LlmReply(text: text.toString(), calls: calls, usage: usage);
+}
+
+/// Reads usage in both the OpenAI shape and the DeepSeek cache fields.
+LlmUsage usageFrom(Object? raw) {
+  if (raw is! Map) return const LlmUsage();
+  int cached = 0;
+  final Object? details = raw['prompt_tokens_details'];
+  if (details is Map) cached = _asInt(details['cached_tokens']);
+  if (cached == 0) cached = _asInt(raw['prompt_cache_hit_tokens']);
+  return LlmUsage(
+    prompt: _asInt(raw['prompt_tokens']),
+    completion: _asInt(raw['completion_tokens']),
+    cached: cached,
+  );
 }

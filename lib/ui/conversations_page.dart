@@ -123,7 +123,11 @@ class _ConversationsPageState extends State<ConversationsPage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
-                Text('${c.turns} 轮', style: C.monoSmall.copyWith(color: C.grey2)),
+                Text('${c.turns} 轮',
+                    style: C.monoSmall.copyWith(color: C.grey2)),
+                const SizedBox(height: 2),
+                Text('${_tokens(c.tokensUsed)} tok',
+                    style: C.monoSmall.copyWith(color: C.grey2)),
                 const SizedBox(height: 4),
                 Text(_ago(c.updatedAt), style: C.monoSmall.copyWith(color: C.grey2)),
               ],
@@ -139,6 +143,12 @@ class _ConversationsPageState extends State<ConversationsPage> {
         ),
       ),
     );
+  }
+
+  static String _tokens(int n) {
+    if (n < 1000) return '$n';
+    final double k = n / 1000;
+    return '${k.toStringAsFixed(k < 10 ? 1 : 0)}k';
   }
 
   static String _ago(DateTime at) {
