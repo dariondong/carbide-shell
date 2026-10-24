@@ -488,7 +488,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          _Knob(value: value, onChanged: onChanged),
+          ToggleKnob(value: value, onChanged: onChanged),
         ],
       ),
     );
@@ -518,40 +518,6 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 一枚开关。不用 Material 那个，免得系统主题把它染成别的颜色。
-class _Knob extends StatelessWidget {
-  const _Knob({required this.value, required this.onChanged});
-
-  final bool value;
-  final void Function(bool) onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 44,
-        height: 26,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: value ? C.blue : C.rule2,
-          borderRadius: BorderRadius.circular(13),
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 140),
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 20,
-            height: 20,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          ),
         ),
       ),
     );

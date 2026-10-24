@@ -12,6 +12,7 @@ import 'ui/conversations_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
+import 'ui/tasks_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
 
@@ -166,6 +167,12 @@ class _HomeShellState extends State<HomeShell> {
           index: _index,
           children: <Widget>[
             chatTab,
+            TasksPage(
+              tasks: widget.tasks,
+              scheduler: widget.scheduler,
+              hosts: s.hosts,
+              onChanged: _refresh,
+            ),
             HostsPage(hosts: s.hosts, secrets: s.secrets, onChanged: _refresh),
             TerminalPage(hosts: s.hosts, pool: s.pool),
             MemoryPage(services: s, onChanged: _refresh),
@@ -189,10 +196,11 @@ class _HomeShellState extends State<HomeShell> {
         child: Row(
           children: <Widget>[
             _nav(0, Icons.forum_outlined, '会话'),
-            _nav(1, Icons.dns_outlined, '主机'),
-            _nav(2, Icons.terminal, '终端'),
-            _nav(3, Icons.bookmarks_outlined, '记忆'),
-            _nav(4, Icons.settings_outlined, '设置'),
+            _nav(1, Icons.schedule_outlined, '任务'),
+            _nav(2, Icons.dns_outlined, '主机'),
+            _nav(3, Icons.terminal, '终端'),
+            _nav(4, Icons.bookmarks_outlined, '记忆'),
+            _nav(5, Icons.settings_outlined, '设置'),
           ],
         ),
       ),
@@ -211,7 +219,7 @@ class _HomeShellState extends State<HomeShell> {
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
             decoration: BoxDecoration(
               color: on ? C.blueSoft : const Color(0x00000000),
               borderRadius: BorderRadius.circular(20),
