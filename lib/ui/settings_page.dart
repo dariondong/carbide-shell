@@ -103,7 +103,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _persist() async {
-    final AppSettings s = widget.settings.value
+    widget.settings.value
       ..baseUrl = _base.text.trim()
       ..model = _model.text.trim()
       ..maxSteps = _intOf(_steps.text, 12, 1, 50)
