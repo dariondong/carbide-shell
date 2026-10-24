@@ -12,6 +12,7 @@ import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
+import 'data/tasks.dart';
 import 'services.dart';
 import 'tools/ssh_tools.dart';
 
@@ -33,17 +34,24 @@ Future<void> main() async {
   const SecretStore secrets = SecureSecretStore();
   final SshPool pool = SshPool(hosts: hosts, secrets: secrets);
 
+  final TaskStore tasks = TaskStore(File('${dir.path}/tasks.json'));
+  await tasks.load();
+
+  final AppServices services = AppServices(
+    hosts: hosts,
+    secrets: secrets,
+    settings: settings,
+    policy: ApprovalPolicy(mode: _modeFrom(settings.value.approvalMode)),
+    pool: pool,
+    memory: memory,
+    conversations: conversations,
+    workspace: workspace.path,
+  );
+
   runApp(CarbideApp(
-    services: AppServices(
-      hosts: hosts,
-      secrets: secrets,
-      settings: settings,
-      policy: ApprovalPolicy(mode: _modeFrom(settings.value.approvalMode)),
-      pool: pool,
-      memory: memory,
-      conversations: conversations,
-      workspace: workspace.path,
-    ),
+    services: services,
+    tasks: tasks,
+    scheduler: TaskScheduler(services: services, tasks: tasks),
   ));
 }
 

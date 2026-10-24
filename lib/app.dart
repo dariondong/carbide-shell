@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'core/conversation.dart';
 import 'data/hosts.dart';
+import 'data/tasks.dart';
 import 'data/update.dart';
 import 'services.dart';
 import 'ui/about_page.dart';
@@ -15,9 +16,16 @@ import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
 
 class CarbideApp extends StatelessWidget {
-  const CarbideApp({super.key, required this.services});
+  const CarbideApp({
+    super.key,
+    required this.services,
+    required this.tasks,
+    required this.scheduler,
+  });
 
   final AppServices services;
+  final TaskStore tasks;
+  final TaskScheduler scheduler;
 
   @override
   Widget build(BuildContext context) {
@@ -25,15 +33,22 @@ class CarbideApp extends StatelessWidget {
       title: 'Carbide Shell',
       debugShowCheckedModeBanner: false,
       theme: C.theme(),
-      home: HomeShell(services: services),
+      home: HomeShell(services: services, tasks: tasks, scheduler: scheduler),
     );
   }
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.services});
+  const HomeShell({
+    super.key,
+    required this.services,
+    required this.tasks,
+    required this.scheduler,
+  });
 
   final AppServices services;
+  final TaskStore tasks;
+  final TaskScheduler scheduler;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -46,7 +61,15 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    widget.scheduler.onChanged = _refresh;
+    widget.scheduler.start();
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
+  }
+
+  @override
+  void dispose() {
+    widget.scheduler.stop();
+    super.dispose();
   }
 
   /// Once a day, ask GitHub for a newer release. Offline is fine: a failed
