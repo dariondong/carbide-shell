@@ -130,7 +130,7 @@ class _TasksPageState extends State<TasksPage> {
               const SectionLabel('定时任务'),
               const SizedBox(height: 8),
               if (list.isEmpty)
-                _hint('还没有定时任务。写一句话定个时间，到点它自己去做。')
+                _hint('还没有定时任务。定好时间与要做的事，到点自动执行。')
               else
                 for (final ScheduledTask task in list)
                   Padding(
@@ -141,7 +141,7 @@ class _TasksPageState extends State<TasksPage> {
               const SectionLabel('资源监听'),
               const SizedBox(height: 8),
               if (_watchList.isEmpty)
-                _hint('还没有监听。选一台机器的 CPU、内存或磁盘，过线就推一条通知给你，不叫模型。')
+                _hint('还没有监听。选定一台主机的 CPU、内存或磁盘，超过阈值时发一条通知，不调用模型。')
               else
                 for (final WatchTask watch in _watchList)
                   Padding(
@@ -156,7 +156,7 @@ class _TasksPageState extends State<TasksPage> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: const Text(
             '定时任务在应用里计时。应用被系统清掉时不会触发，三小时内错过的会在下次打开时补跑一次。'
-            '到点后它自己动手，不再问你，只有危险命令会被拦下。资源监听只看数字，过线就推一条通知。',
+            '到点后自动执行，不再询问；只有危险命令会被拦下。资源监听只读指标，超过阈值时发一条通知。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ),
@@ -316,7 +316,7 @@ class _TasksPageState extends State<TasksPage> {
               padding: EdgeInsets.zero,
               child: Column(
                 children: <Widget>[
-                  _addRow('定时任务', '到点让它自己去做一件事', 'task', ctx),
+                  _addRow('定时任务', '到点自动执行一件事', 'task', ctx),
                   const RuleLine(),
                   _addRow('资源监听', '过线就推一条通知，不叫模型', 'watch', ctx),
                 ],
@@ -519,7 +519,7 @@ class _TasksPageState extends State<TasksPage> {
     widget.onChanged();
     if (value && task.kind == ScheduleKind.once && task.nextAt == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('这个任务的时间已经过去了，改一下时间才会跑。')),
+        const SnackBar(content: Text('这个任务的时间已经过去了，改过时间才会跑。')),
       );
     }
   }
@@ -933,7 +933,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                   RuleField(
                     controller: _prompt,
                     label: '做什么',
-                    hint: '看看磁盘还剩多少，超过 85% 就说一声',
+                    hint: '看磁盘使用率，超过 85% 时说明情况',
                     minLines: 4,
                     maxLines: 8,
                   ),
@@ -1038,7 +1038,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    '到点时它自己动手，不会停下来问你。要人确认的动作会跳过，危险命令在策略里就被拦下。',
+                    '到点自动执行，不会停下来等人确认。需要确认的动作会跳过，危险命令由策略层拦下。',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
                   if (!_isNew) ...<Widget>[
@@ -1591,7 +1591,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                   if (_kind == WatchKind.loginNew) ...<Widget>[
                     const SizedBox(height: 12),
                     const Text(
-                      '记住见过的来源，第一次出现的来源登录就提醒。第一次打开时会把当前的来源都记下，之后才认得出新的。',
+                      '记住已有的登录来源；首次出现的来源登录时提醒。第一次读取会先记录当前来源，之后才认得出新的。',
                       style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                     ),
                   ],

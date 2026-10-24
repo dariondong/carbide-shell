@@ -164,7 +164,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
               child: hosts.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
-                      child: Text('还没有主机。先回主机页加一台，再回来看。',
+                      child: Text('还没有主机。先在主机页添加一台。',
                           style: TextStyle(fontSize: 13.5, height: 1.6, color: C.body)),
                     )
                   : ListView.builder(
@@ -183,7 +183,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
               child: const Text(
-                '读的是 /proc 和 df，只读、不用 root。离开这一页就不再读，也不会在后台连着。',
+                '读取 /proc 与 df，只读，不需要 root。离开本页后停止读取，不在后台保持连接。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
               ),
             ),

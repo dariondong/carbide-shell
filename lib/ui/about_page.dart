@@ -186,7 +186,7 @@ class _AboutPageState extends State<AboutPage> {
               const RuleLine(),
               const SizedBox(height: 16),
               const Text(
-                '密钥和记忆都存在本机。这个页面只会去问一次 GitHub 的版本列表。',
+                '密钥与记忆都保存在本机。本页只请求一次 GitHub 的版本列表。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.8),
               ),
             ],

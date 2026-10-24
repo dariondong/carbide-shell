@@ -276,7 +276,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
                   Text(
                     hostId.isEmpty
                         ? '这个对话可以操作全部主机。'
-                        : '这个对话只管这一台，记忆也单独存在它名下。',
+                        : '这个对话只操作这一台，记忆也保存在它名下。',
                     style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
                   ),
                 ],

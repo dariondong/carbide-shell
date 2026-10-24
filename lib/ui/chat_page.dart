@@ -545,7 +545,7 @@ class _ChatPageState extends State<ChatPage> {
           const Text('说说要做什么',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 10),
-          const Text('比如：看看磁盘，把 nginx 的老日志清一下。', style: C.answer),
+          const Text('例如：看磁盘使用率，清掉 nginx 的老日志。', style: C.answer),
           const SizedBox(height: 22),
           Container(
             width: double.infinity,
@@ -556,8 +556,8 @@ class _ChatPageState extends State<ChatPage> {
             ),
             child: Text(
               widget.conversation.multiHost
-                  ? '这个对话可以操作全部主机，用哪台由它自己选。'
-                  : '这个对话只管一台主机，记忆也单独存在这台机器名下。',
+                  ? '这个对话可以操作全部主机，用哪一台由它选。'
+                  : '这个对话只操作一台主机，记忆也保存在这台机器名下。',
               style: const TextStyle(fontSize: 12.5, height: 1.6, color: C.grey),
             ),
           ),

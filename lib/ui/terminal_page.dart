@@ -244,7 +244,7 @@ class _TerminalPageState extends State<TerminalPage> {
               Row(
                 children: <Widget>[
                   Text(
-                    live ? '直接点终端也能打字（英文键盘）。中文请用上面这行。' : '连上之后这里就是它的 shell',
+                    live ? '终端本身接受英文键盘输入；中文请用上面这一行。' : '连上之后这里就是它的 shell',
                     style: const TextStyle(fontSize: 10.5, color: C.grey),
                   ),
                   const Spacer(),

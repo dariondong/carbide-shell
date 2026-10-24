@@ -88,7 +88,7 @@ class _HostsPageState extends State<HostsPage> {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
           child: const Text(
-            '密钥放在本机安全存储里，不进对话，也不写日志。',
+            '密钥保存在本机安全存储，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
           ),
         ),

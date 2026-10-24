@@ -98,8 +98,8 @@ class _MemoryPageState extends State<MemoryPage> {
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                       child: Text(
                         _scope == MemoryBook.globalScope
-                            ? '还没有全局记忆。说「记住…」它就会写在这里。'
-                            : '这台机器还没有记忆。绑定它的对话里说「记住…」就会写到这里。',
+                            ? '还没有全局记忆。在对话里说「记住…」，内容会写在这里。'
+                            : '这台机器还没有记忆。在绑定它的对话里说「记住…」，内容会写在这里。',
                         style: const TextStyle(fontSize: 13.5, height: 1.6, color: C.body),
                       ),
                     )

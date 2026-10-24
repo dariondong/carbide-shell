@@ -412,7 +412,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 14),
               const Text(
-                '改动都是当场存的：打字停手半秒，切换类立刻。',
+                '改动即时保存：输入停手半秒后落盘，开关类立即生效。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
               ),
             ],
@@ -558,7 +558,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 14),
           const Text(
-            '密钥只存在本机安全存储，不进对话，不会写进日志。',
+            '密钥只存在本机安全存储，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
@@ -590,7 +590,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 14),
           const Text(
-            '危险命令不管选哪一档都会被拦下。定时任务里没人确认，除危险命令之外一律照做。',
+            '危险命令不因档位放行。定时任务执行时无人确认，除危险命令外一律放行。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
@@ -628,7 +628,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 14),
           const Text(
-            '单个对话可以在对话页顶栏那个旋钮按钮里另写一份，留空就跟这里走。',
+            '单个对话可以在对话页顶栏的按钮里另写一份，留空则沿用这里。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
@@ -792,7 +792,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 14),
           const Text(
-            '长回合、定时任务都靠它在后台活着。系统把应用清掉就都停了。',
+            '长回合与定时任务依赖这个前台服务。系统清掉应用后两者都会停止。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
