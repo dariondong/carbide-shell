@@ -85,7 +85,7 @@ class _ChatPageState extends State<ChatPage> {
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final bool atBottom = _scroll.position.maxScrollExtent - _scroll.pixels < 200;
+    final bool atBottom = _scroll.position.maxScrollExtent - _scroll.position.pixels < 200;
     if (atBottom == _atBottom) return;
     setState(() => _atBottom = atBottom);
   }
