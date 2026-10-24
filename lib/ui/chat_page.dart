@@ -64,6 +64,10 @@ class _ChatPageState extends State<ChatPage> {
 
   /// 读者翻上去了：右下角给一个回到底部的按钮。
   bool _atBottom = true;
+
+  /// 刚进来时先跳到最新那条，不用等人先往下翻。
+  bool _opened = false;
+  Timer? _openJump;
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
 
@@ -95,10 +99,29 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted) return;
     setState(() => _live = live);
     _followTail();
+    _jumpOnOpen();
+  }
+
+  /// 进对话先落在最底下那一条。图片解码后高度会变，所以补跳两次。
+  void _jumpOnOpen() {
+    _openJump?.cancel();
+    _toEnd();
+    _openJump = Timer(const Duration(milliseconds: 90), _toEnd);
+    Timer(const Duration(milliseconds: 260), () {
+      _toEnd();
+      _opened = true;
+    });
+  }
+
+  void _toEnd() {
+    if (!mounted || !_scroll.hasClients) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    if (!_atBottom) setState(() => _atBottom = true);
   }
 
   @override
   void dispose() {
+    _openJump?.cancel();
     widget.hub.removeListener(_refresh);
     _scroll.removeListener(_onScroll);
     _input.dispose();
@@ -133,7 +156,8 @@ class _ChatPageState extends State<ChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       final ScrollPosition p = _scroll.position;
-      if (p.maxScrollExtent - p.pixels > 180) return;
+      // 刚打开的那几帧不看他翻到哪儿了，直接落到最新一条。
+      if (_opened && p.maxScrollExtent - p.pixels > 180) return;
       _scroll.jumpTo(p.maxScrollExtent);
     });
   }
