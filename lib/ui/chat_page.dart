@@ -10,6 +10,7 @@ import '../core/docx.dart';
 import '../core/models.dart';
 import '../data/hub.dart';
 import '../services.dart';
+import '../tools/ask_tool.dart';
 import 'components.dart';
 import 'md_text.dart';
 import 'theme.dart';
@@ -40,6 +41,9 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   LiveSession? _live;
+
+  /// 读者翻上去了：右下角给一个回到底部的按钮。
+  bool _atBottom = true;
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
 
@@ -58,6 +62,7 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     widget.hub.addListener(_refresh);
+    _scroll.addListener(_onScroll);
     _attach();
   }
 
@@ -72,9 +77,26 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     widget.hub.removeListener(_refresh);
+    _scroll.removeListener(_onScroll);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final bool atBottom = _scroll.position.maxScrollExtent - _scroll.pixels < 200;
+    if (atBottom == _atBottom) return;
+    setState(() => _atBottom = atBottom);
+  }
+
+  void _jumpToBottom() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(
+      _scroll.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+    );
   }
 
   void _refresh() {
@@ -528,16 +550,42 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         Expanded(
-          // 对话里的字都能选中，长按就能复制。
-          child: SelectionArea(
-            child: SingleChildScrollView(
-              controller: _scroll,
-              padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _thread(),
+          child: Stack(
+            children: <Widget>[
+              // 对话里的字都能选中，长按就能复制。
+              Positioned.fill(
+                child: SelectionArea(
+                  child: SingleChildScrollView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _thread(),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (!_atBottom)
+                Positioned(
+                  right: 16,
+                  bottom: 12,
+                  child: GestureDetector(
+                    onTap: _jumpToBottom,
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: C.card,
+                        borderRadius: BorderRadius.circular(17),
+                        border: Border.all(color: C.rule2),
+                        boxShadow: C.softShadow,
+                      ),
+                      child: const Icon(Icons.arrow_downward, size: 17, color: C.blue),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (_pending != null)
@@ -549,6 +597,14 @@ class _ChatPageState extends State<ChatPage> {
               onAllowKind: _allowKind,
               onAllowAll: _allowAll,
               kindLabel: _kind,
+            ),
+          ),
+        if (_live?.pendingAsk != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+            child: _AskCard(
+              request: _live!.pendingAsk!,
+              onAnswer: (String text) => _live?.answerAsk(text),
             ),
           ),
         if (_attachNames.isNotEmpty)
@@ -648,6 +704,111 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 模型问人的那张卡。有选项就点，没有就自己写，答完它接着干。
+class _AskCard extends StatefulWidget {
+  const _AskCard({required this.request, required this.onAnswer});
+
+  final AskRequest request;
+  final void Function(String text) onAnswer;
+
+  @override
+  State<_AskCard> createState() => _AskCardState();
+}
+
+class _AskCardState extends State<_AskCard> {
+  final TextEditingController _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final String text = _text.text.trim();
+    if (text.isEmpty) return;
+    _text.clear();
+    widget.onAnswer(text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CardBox(
+      border: const Color(0xFFD9DEF7),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: C.blueSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('在问你',
+                    style: C.label.copyWith(color: C.blue, fontSize: 9.5, letterSpacing: 1)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(widget.request.question, style: C.answer),
+          if (widget.request.options.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 11),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final String option in widget.request.options)
+                  GestureDetector(
+                    onTap: () => widget.onAnswer(option),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: C.card,
+                        borderRadius: BorderRadius.circular(C.radiusSmall),
+                        border: Border.all(color: C.blue),
+                      ),
+                      child: Text(option,
+                          style: const TextStyle(fontSize: 12, color: C.blue)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 11),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: C.card,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                    border: Border.all(color: C.rule),
+                  ),
+                  child: TextField(
+                    controller: _text,
+                    minLines: 1,
+                    maxLines: 3,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    style: const TextStyle(fontSize: 13.5, height: 1.5),
+                    decoration: const InputDecoration(hintText: '也可以自己写一句'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SquareButton(label: '回答', filled: true, onPressed: _send),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

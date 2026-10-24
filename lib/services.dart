@@ -9,6 +9,7 @@ import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
+import 'tools/ask_tool.dart';
 import 'tools/host_tools.dart';
 import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
@@ -53,7 +54,8 @@ class AppServices {
       ..register(SshSftpTool(pool, hosts))
       ..register(HttpTool(settings))
       ..register(FileTool())
-      ..register(RememberTool(store));
+      ..register(RememberTool(store))
+      ..register(AskTool());
     if (isDesktopPlatform) {
       registry.register(LocalExecTool());
     }

@@ -6,7 +6,9 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
+import '../core/tools.dart';
 import '../services.dart';
+import '../tools/ask_tool.dart';
 import 'activity.dart';
 
 /// 一个对话在跑的时候的全部状态。
@@ -17,6 +19,13 @@ class LiveSession {
   LiveSession({required this.conversation, required this.session}) {
     session.loop.approver = _LiveApprover(this);
     session.loop.onChanged = () => hub?.touch(this);
+    _wireAsk();
+  }
+
+  /// 把 ask 工具接到这个对话上：模型提问时等人回答，回答再喂回去。
+  void _wireAsk() {
+    final Tool? tool = session.loop.registry.byName('ask');
+    if (tool is AskTool) tool.resolver = askUser;
   }
 
   final Conversation conversation;
@@ -37,10 +46,32 @@ class LiveSession {
   String pendingKind = '';
   Completer<bool>? _waiter;
 
+  /// 模型正在问的问题，等用户回答。
+  AskRequest? pendingAsk;
+  Completer<String>? _askWaiter;
+
   DateTime lastNote = DateTime.fromMillisecondsSinceEpoch(0);
   String lastNoteText = '';
 
-  bool get waiting => pending != null;
+  bool get waiting => pending != null || pendingAsk != null;
+
+  /// ask 工具在这里停下来等人。页面关着也照样等着，回来再答。
+  Future<String> askUser(AskRequest request) {
+    pendingAsk = request;
+    final Completer<String> waiter = Completer<String>();
+    _askWaiter = waiter;
+    hub?.changed();
+    return waiter.future;
+  }
+
+  /// 用户答了。
+  void answerAsk(String text) {
+    final Completer<String>? waiter = _askWaiter;
+    pendingAsk = null;
+    _askWaiter = null;
+    hub?.changed();
+    if (waiter != null && !waiter.isCompleted) waiter.complete(text);
+  }
 
   /// 循环要人确认时走这里。这个对话记住过这一类的就自己放行。
   Future<bool> ask(ApprovalRequest request) {
@@ -148,6 +179,7 @@ class SessionHub extends ChangeNotifier {
       live.running = false;
       live.cancel = null;
       live.pending = null;
+      live.pendingAsk = null;
       live.conversation.tokensUsed = loop.tokens;
       await services.persist(live.conversation);
       board.done('c:${live.conversation.id}',
