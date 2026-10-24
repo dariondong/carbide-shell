@@ -1,4 +1,5 @@
 import '../core/models.dart';
+import '../core/rules.dart';
 import '../core/schedule.dart';
 import '../core/tools.dart';
 import '../core/watch.dart';
@@ -21,7 +22,8 @@ class TaskAddTool extends Tool {
 
   @override
   String get description =>
-      '排一条定时任务：到点让助手自己去做一件事。要写清楚做什么（会原样当成那一轮的指令）。';
+      '排一条定时任务：到点让助手自己去做一件事。要写清楚做什么（会原样当成那一轮的指令）。'
+      '要「磁盘超过 90% 才清」这种判断，就把条件写进 conditions，到点先读数字，符合了才叫模型。';
 
   @override
   Map<String, Object?> get schema => <String, Object?>{
@@ -43,6 +45,25 @@ class TaskAddTool extends Tool {
           'interval_minutes': <String, Object?>{'type': 'integer', 'description': 'interval 用，多少分钟一次'},
           'once_at': <String, Object?>{'type': 'string', 'description': 'once 用，本地时间 2026-10-26 09:00'},
           'host': <String, Object?>{'type': 'string', 'description': '只管一台时写主机名，留空表示全部主机'},
+          'conditions': <String, Object?>{
+            'type': 'array',
+            'items': <String, Object?>{'type': 'string'},
+            'description': '先看条件：disk>90、cpu>80、memory>=85、load>4、swap>50 这样写，'
+                '到点先读这些数字，符合了才动手。空表示到点直接跑',
+          },
+          'condition_logic': <String, Object?>{
+            'type': 'string',
+            'enum': <String>['all', 'any'],
+            'description': 'all 全部满足（默认），any 满足一条就够',
+          },
+          'gate_retry_minutes': <String, Object?>{
+            'type': 'integer',
+            'description': '条件没满足时隔几分钟再看一次，默认 5',
+          },
+          'gate_window_minutes': <String, Object?>{
+            'type': 'integer',
+            'description': '到点后最多等多少分钟，过了这一轮就不跑，默认 60；0 表示只看一次',
+          },
         },
         'required': <String>['title', 'prompt', 'kind'],
       };
@@ -62,9 +83,36 @@ class TaskAddTool extends Tool {
       'once' => '一次 ${readString(args, 'once_at')}',
       _ => '每天 ${time.isEmpty ? '没写时刻' : time}',
     };
-    return '加定时任务 $title · $when';
+    return '加定时任务 $title · $when${_conditionsBrief(args)}';
   }
 
+  /// 审批卡上把条件一并念出来。
+  static String _conditionsBrief(Map<String, Object?> args) {
+    final List<TaskRule> rules = _rulesOf(args);
+    if (rules.isEmpty) return '';
+    final bool all = readString(args, 'condition_logic', fallback: 'all') != 'any';
+    return ' · 满足 ${rulesText(rules, all: all)} 才跑';
+  }
+
+  /// 把 `disk>90` 这样的句子读成规则。读不出的丢掉，run 里再报错。
+  static List<TaskRule> _rulesOf(Map<String, Object?> args) {
+    final Object? raw = args['conditions'];
+    final List<TaskRule> out = <TaskRule>[];
+    if (raw is List) {
+      for (final Object? item in raw) {
+        if (item is! String) continue;
+        final TaskRule? rule = parseRule(item);
+        if (rule != null) out.add(rule);
+      }
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      // 有的模型把几条写成一行，认一下。
+      for (final String part in raw.split(RegExp(r'[，,;；]|\s+(?:and|和|且)\s+'))) {
+        final TaskRule? rule = parseRule(part);
+        if (rule != null) out.add(rule);
+      }
+    }
+    return out;
+  }
   @override
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
     final String title = readString(args, 'title').trim();
@@ -86,6 +134,17 @@ class TaskAddTool extends Tool {
         return ToolOutcome.failure('主机列表里没有叫 $hostName 的机器。');
       }
       hostId = host.id;
+    }
+
+    // 条件：写得出来的才算条件。
+    final Object? rawConditions = args['conditions'];
+    final List<TaskRule> rules = _rulesOf(args);
+    if (rawConditions is List && rawConditions.isNotEmpty && rules.isEmpty) {
+      return const ToolOutcome.failure(
+          '条件写得认不出来。写成 disk>90、cpu>80、load>4 这样。');
+    }
+    if (rules.isNotEmpty && hostId.isEmpty) {
+      return const ToolOutcome.failure('要看条件就得写一个主机名，条件读的是那一台机器。');
     }
 
     int minuteOfDay = 180;
@@ -124,14 +183,21 @@ class TaskAddTool extends Tool {
       weekdays: weekdays.isEmpty ? <int>[1] : weekdays,
       intervalMinutes: readInt(args, 'interval_minutes', fallback: 60),
       onceAt: onceAt,
+      rules: rules,
+      rulesAll: readString(args, 'condition_logic', fallback: 'all') != 'any',
+      gateRetryMinutes: readInt(args, 'gate_retry_minutes', fallback: 5),
+      gateWindowMinutes: readInt(args, 'gate_window_minutes', fallback: 60),
     );
     task.reschedule(DateTime.now());
     if (task.nextAt == null) {
       return const ToolOutcome.failure('这条排不出下一次：时间已经过去了，或者没写时刻。');
     }
     await tasks.upsert(task);
+    final String condition = rules.isEmpty
+        ? ''
+        : '\n条件：${rulesText(rules, all: task.rulesAll)}，到点先读，符合了才动手。';
     return ToolOutcome.success(
-      stdout: '排好了：${task.title} · ${task.when}\n'
+      stdout: '排好了：${task.title} · ${task.when}$condition\n'
           '下次 ${stampText(task.nextAt!)}。要不要现在先试一次，让用户自己决定。',
     );
   }

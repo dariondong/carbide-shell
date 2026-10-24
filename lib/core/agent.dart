@@ -37,6 +37,7 @@ const String kSystemPrompt = '''
 4. 要改动东西之前，说清楚改什么、删什么、影响什么。
 5. 收尾用一两句话讲结论，不要复述命令输出。
 6. 用户用中文提问就用中文回答。
+7. 用户说「什么什么的时候就做什么」这种带判断的事，用 task_add 把它排成一条定时任务，条件写在 conditions 里（disk>90、cpu>80、load>4 这样），不要只在这一次的回答里说一遍。
 ''';
 
 /// What the loop is doing right now. The header reads this to answer

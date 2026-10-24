@@ -86,9 +86,11 @@ class TaskListTool extends Tool {
       final String next = t.nextAt == null ? '没有下一次' : stampText(t.nextAt!);
       final String last = t.runs.isEmpty
           ? '还没跑过'
-          : (t.runs.first.ok ? '上次成功' : '上次失败');
-      b.writeln('- ${t.title}：${t.when}，$host，'
-          '${t.enabled ? '开着' : '已停'}，下次 $next，$last'
+          : (t.runs.first.ok ? '上次成功' : (t.runs.first.skipped ? '上次条件不够没跑' : '上次失败'));
+      final String condition = t.gated
+          ? '，条件 ${t.conditionText}${t.waitingGate ? '（正在等）' : ''}'
+          : '';
+      b.writeln('- ${t.title}：${t.when}，$host，${t.enabled ? '开着' : '已停'}，下次 $next，$last$condition'
           '（id ${t.id}）');
     }
     return ToolOutcome.success(stdout: b.toString().trimRight());

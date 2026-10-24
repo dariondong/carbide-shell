@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/rules.dart';
 import '../core/schedule.dart';
 import '../core/watch.dart';
 import '../data/hosts.dart';
@@ -174,6 +175,11 @@ class _TasksPageState extends State<TasksPage> {
                   padding: const EdgeInsets.only(right: 6),
                   child: _chip('运行中', fg: C.blue, bg: C.blueSoft),
                 )
+              else if (task.waitingGate)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: _chip('等条件', fg: C.blue, bg: C.blueSoft),
+                )
               else if (!task.enabled)
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -197,6 +203,13 @@ class _TasksPageState extends State<TasksPage> {
             _nextText(task, now),
             style: C.monoSmall.copyWith(color: task.enabled ? C.blue : C.grey2),
           ),
+          if (task.gated) ...<Widget>[
+            const SizedBox(height: 3),
+            Text(
+              '满足 ${task.conditionText} 才跑',
+              style: C.monoSmall.copyWith(color: C.grey),
+            ),
+          ],
           if (task.prompt.trim().isNotEmpty) ...<Widget>[
             const SizedBox(height: 7),
             Text(
@@ -682,6 +695,11 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
   late List<int> _weekdays;
   DateTime? _onceAt;
 
+  /// 到点先看哪几项数字，全过了才叫模型。
+  List<TaskRule> _rules = <TaskRule>[];
+  final List<TextEditingController> _ruleValues = <TextEditingController>[];
+  bool _rulesAll = true;
+
   @override
   void initState() {
     super.initState();
@@ -695,6 +713,11 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     _minuteOfDay = t?.minuteOfDay ?? 180;
     _weekdays = List<int>.of(t?.weekdays ?? <int>[1]);
     _onceAt = t?.onceAt;
+    _rules = List<TaskRule>.of(t?.rules ?? <TaskRule>[]);
+    _rulesAll = t?.rulesAll ?? true;
+    for (final TaskRule r in _rules) {
+      _ruleValues.add(TextEditingController(text: ruleNumber(r.value)));
+    }
   }
 
   @override
@@ -702,6 +725,9 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     _title.dispose();
     _prompt.dispose();
     _interval.dispose();
+    for (final TextEditingController c in _ruleValues) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -727,6 +753,23 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       );
       return;
     }
+    final List<TaskRule> rules = <TaskRule>[];
+    for (int i = 0; i < _rules.length; i += 1) {
+      final double? value = double.tryParse(_ruleValues[i].text.trim());
+      if (value == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('条件里的数要填一个数字。')),
+        );
+        return;
+      }
+      rules.add(TaskRule(metric: _rules[i].metric, op: _rules[i].op, value: value));
+    }
+    if (rules.isNotEmpty && _hostId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('要看条件就得先选一台主机。')),
+      );
+      return;
+    }
     final int minutes = int.tryParse(_interval.text.trim()) ?? 60;
     final ScheduledTask task = widget.task ??
         ScheduledTask(
@@ -744,6 +787,10 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     task.weekdays = days;
     task.intervalMinutes = minutes < 5 ? 5 : minutes;
     task.onceAt = _onceAt;
+    task.rules
+      ..clear()
+      ..addAll(rules);
+    task.rulesAll = _rulesAll;
     task.reschedule(DateTime.now());
     await widget.store.upsert(task);
     if (!mounted) return;
@@ -897,6 +944,50 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                   const SizedBox(height: 14),
                   _timeBlock(),
                   const SizedBox(height: 22),
+                  const SectionLabel('先看条件'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '到点先读这台机器的数字，符合了才叫它动手。不符合就隔一会儿再看，窗口过了这一轮就不跑。',
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
+                  ),
+                  const SizedBox(height: 10),
+                  if (_rules.isNotEmpty) ...<Widget>[
+                    Row(
+                      children: <Widget>[
+                        _chip('都满足', _rulesAll, () => setState(() => _rulesAll = true)),
+                        const SizedBox(width: 8),
+                        _chip('满足一条', !_rulesAll, () => setState(() => _rulesAll = false)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    for (int i = 0; i < _rules.length; i += 1)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _ruleRow(i),
+                      ),
+                  ],
+                  GestureDetector(
+                    onTap: _addRule,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(C.radiusSmall),
+                        border: Border.all(color: C.rule2),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(Icons.add, size: 15, color: C.blue),
+                          const SizedBox(width: 6),
+                          Text(
+                            _rules.isEmpty ? '加一条条件（不加就到点直接跑）' : '再加一条',
+                            style: const TextStyle(fontSize: 12, color: C.blue),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
                   CardBox(
                     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                     child: Row(
@@ -947,6 +1038,115 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addRule() {
+    setState(() {
+      _rules.add(TaskRule(metric: RuleMetric.disk, value: 90));
+      _ruleValues.add(TextEditingController(text: '90'));
+    });
+  }
+
+  void _removeRule(int index) {
+    setState(() {
+      _rules.removeAt(index);
+      _ruleValues.removeAt(index).dispose();
+    });
+  }
+
+  /// 一条条件：指标、比法、数值。
+  Widget _ruleRow(int index) {
+    final TaskRule rule = _rules[index];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: C.card,
+        borderRadius: BorderRadius.circular(C.radiusSmall),
+        border: Border.all(color: C.rule),
+      ),
+      child: Row(
+        children: <Widget>[
+          _menu<RuleMetric>(
+            value: rule.metric,
+            items: RuleMetric.values,
+            label: (RuleMetric m) => kRuleMetricNames[m]!,
+            onPick: (RuleMetric m) => setState(() =>
+                _rules[index] = TaskRule(metric: m, op: rule.op, value: rule.value)),
+          ),
+          const SizedBox(width: 8),
+          _menu<RuleOp>(
+            value: rule.op,
+            items: RuleOp.values,
+            label: (RuleOp o) => kRuleOpNames[o]!,
+            onPick: (RuleOp o) => setState(() =>
+                _rules[index] = TaskRule(metric: rule.metric, op: o, value: rule.value)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _ruleValues[index],
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: C.mono.copyWith(fontSize: 13.5),
+              decoration: const InputDecoration(hintText: '90', isDense: true),
+              onChanged: (String text) {
+                final double? v = double.tryParse(text.trim());
+                if (v == null) return;
+                _rules[index] = TaskRule(
+                    metric: _rules[index].metric,
+                    op: _rules[index].op,
+                    value: v);
+              },
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _removeRule(index),
+            child: const SizedBox(
+              width: 30,
+              height: 30,
+              child: Icon(Icons.close, size: 15, color: C.grey2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一个只有几个选项的小下拉，选完就换那一格的字。
+  Widget _menu<T>({
+    required T value,
+    required List<T> items,
+    required String Function(T) label,
+    required void Function(T) onPick,
+  }) {
+    return PopupMenuButton<T>(
+      padding: EdgeInsets.zero,
+      position: PopupMenuPosition.under,
+      onSelected: onPick,
+      itemBuilder: (BuildContext ctx) => <PopupMenuEntry<T>>[
+        for (final T item in items)
+          PopupMenuItem<T>(
+            value: item,
+            height: 40,
+            child: Text(label(item),
+                style: TextStyle(fontSize: 13, color: item == value ? C.blue : C.ink)),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(label(value), style: const TextStyle(fontSize: 12.5, color: C.ink)),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more, size: 13, color: C.grey2),
           ],
         ),
       ),
@@ -1060,9 +1260,12 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     );
     final DateTime now = DateTime.now();
     final DateTime? next = probe.nextRunAfter(now);
-    if (!_enabled) return '${probe.when} · 已停用';
-    if (next == null) return '${probe.when} · 时间已经过去了';
-    return '${probe.when} · 下次 ${stampText(next, now: now)}';
+    final String gate = _rules.isEmpty
+        ? ''
+        : ' · 满足 ${rulesText(<TaskRule>[for (int i = 0; i < _rules.length; i += 1) TaskRule(metric: _rules[i].metric, op: _rules[i].op, value: double.tryParse(_ruleValues[i].text.trim()) ?? _rules[i].value)], all: _rulesAll)} 才跑';
+    if (!_enabled) return '${probe.when}$gate · 已停用';
+    if (next == null) return '${probe.when}$gate · 时间已经过去了';
+    return '${probe.when}$gate · 下次 ${stampText(next, now: now)}';
   }
 
   Widget _chip(String label, bool on, VoidCallback tap) {
