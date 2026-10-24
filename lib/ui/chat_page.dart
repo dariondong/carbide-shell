@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
 import '../core/conversation.dart';
+import '../core/docx.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
 import '../data/foreground.dart';
@@ -207,19 +208,32 @@ class _ChatPageState extends State<ChatPage> implements Approver {
           name.endsWith('.ini') ||
           name.endsWith('.sh');
       if (isText) {
-        final String body = utf8.decode(bytes, allowMalformed: true);
-        if (body.length > 60000) {
-          _toast('${f.name} 太长了，先截前 60000 字。');
-        }
-        final String clipped = body.length > 60000 ? body.substring(0, 60000) : body;
-        _input.text = '${_input.text}${_input.text.isEmpty ? '' : '\n\n'}'
-            '文件 ${f.name}：\n\n```\n$clipped\n```';
-        _attachNames.add(f.name);
+        _addText(f.name, utf8.decode(bytes, allowMalformed: true));
         continue;
       }
-      _toast('${f.name} 的类型还读不了，现在支持图片和纯文本。');
+      if (name.endsWith('.docx')) {
+        final String? body = docxText(bytes);
+        if (body == null) {
+          _toast('${f.name} 里没读出文字，另存一份 .docx 再试。');
+          continue;
+        }
+        _addText(f.name, body);
+        continue;
+      }
+      _toast('${f.name} 的类型还读不了，现在支持图片、纯文本和 Word（.docx）。');
     }
     if (mounted) setState(() {});
+  }
+
+  /// 把一个文本文件拼进输入框：太长就截，提示一句。
+  void _addText(String name, String body) {
+    if (body.length > 60000) {
+      _toast('$name 太长了，先截前 60000 字。');
+    }
+    final String clipped = body.length > 60000 ? body.substring(0, 60000) : body;
+    _input.text = '${_input.text}${_input.text.isEmpty ? '' : '\n\n'}'
+        '文件 $name：\n\n```\n$clipped\n```';
+    _attachNames.add(name);
   }
 
   void _toast(String text) {
