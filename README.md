@@ -3,7 +3,9 @@
 一个能连服务器干活的 agent，跑在手机和电脑上。
 
 - 纯 Dart 内核：一轮 = 问模型 → 调工具 → 回填结果 → 再问，直到给出结论
-- 工具：`ssh_exec` / `ssh_sftp` / `http_request` / `local_exec`（仅桌面）/ `file_io` / `remember`
+- 工具：`ssh_exec`（可带 timeout_seconds）/ `ssh_sftp` / `http_request` / `local_exec`（仅桌面）/ `file_io` / `remember`
+- 任务与监听：`task_add` / `task_list` / `task_control`、`watch_add` / `watch_list` / `watch_control`
+- 主机：`host_list`，Advance Master 另有 `host_add` / `host_remove`
 - 跑长任务时挂一条前台通知，切出去、锁屏也继续跑
 - 附件：图片进多模态，纯文本与 Word（.docx）抽成文字拼进对话
 - 审批：只读自动放行，写操作弹确认卡，命中危险规则直接拒

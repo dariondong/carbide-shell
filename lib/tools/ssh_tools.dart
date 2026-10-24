@@ -128,6 +128,10 @@ class SshExecTool extends Tool {
         'properties': <String, Object?>{
           'host': <String, Object?>{'type': 'string', 'description': '主机名，来自主机列表'},
           'command': <String, Object?>{'type': 'string', 'description': '要执行的命令'},
+          'timeout_seconds': <String, Object?>{
+            'type': 'integer',
+            'description': '最长等多少秒，默认 15，最多 600。装东西、编译这种慢的往上加',
+          },
         },
         'required': <String>['command'],
       };
@@ -152,10 +156,11 @@ class SshExecTool extends Tool {
         readString(args, 'host').isEmpty ? '没有指定主机，而且主机列表里不止一台。' : '主机列表里没有这台。',
       );
     }
+    final int limit = readInt(args, 'timeout_seconds', fallback: context.timeout.inSeconds);
+    final Duration wait = Duration(seconds: limit < 1 ? 1 : (limit > 600 ? 600 : limit));
     try {
       final SSHClient client = await pool.connect(entry);
-      final SSHRunResult result =
-          await client.runWithResult(command).timeout(context.timeout);
+      final SSHRunResult result = await client.runWithResult(command).timeout(wait);
       return ToolOutcome.success(
         stdout: utf8.decode(result.stdout, allowMalformed: true),
         stderr: utf8.decode(result.stderr, allowMalformed: true),
@@ -164,7 +169,8 @@ class SshExecTool extends Tool {
       );
     } on TimeoutException {
       await pool.drop(entry.id);
-      return ToolOutcome.failure('命令在等输入，${context.timeout.inSeconds} 秒后关掉了连接。');
+      return ToolOutcome.failure(
+          '命令在等输入，${wait.inSeconds} 秒后关掉了连接。要更久就把 timeout_seconds 写大一点。');
     } catch (e) {
       await pool.drop(entry.id);
       final String hint = pool.lastKeyError.isEmpty ? '' : '${pool.lastKeyError} ';

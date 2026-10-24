@@ -18,6 +18,7 @@ import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/ssh_tools.dart';
+import 'tools/status_tools.dart';
 
 /// One conversation's live pieces: its loop and the memory file it writes.
 class AgentSession {
@@ -71,13 +72,23 @@ class AppServices {
       ..register(RememberTool(store))
       ..register(AskTool())
       ..register(TaskAddTool(tasks: tasks, hosts: hosts))
-      ..register(WatchAddTool(watches: watches, hosts: hosts));
+      ..register(WatchAddTool(watches: watches, hosts: hosts))
+      // 已经排好的东西得看得见、停得掉、删得掉，不然模型只能一直往里加
+      ..register(HostListTool(
+          hosts: hosts, onlyHostId: c.multiHost ? '' : c.hostId))
+      ..register(TaskListTool(
+          tasks: tasks, hosts: hosts, onlyHostId: c.multiHost ? '' : c.hostId))
+      ..register(WatchListTool(
+          watches: watches, hosts: hosts, onlyHostId: c.multiHost ? '' : c.hostId))
+      ..register(TaskControlTool(tasks))
+      ..register(WatchControlTool(watches));
     if (isDesktopPlatform) {
       registry.register(LocalExecTool());
     }
-    // Advance Master 才拿得到「加主机」这个写口子。
+    // Advance Master 才拿得到「加主机 / 删主机」这两个写口子。
     if (c.advanceMaster) {
       registry.register(AddHostTool(hosts: hosts, secrets: secrets, pool: pool));
+      registry.register(RemoveHostTool(hosts: hosts, secrets: secrets));
     }
     final AgentLoop loop = AgentLoop(
       llm: SettingsLlmProvider(settings, secrets),
@@ -117,6 +128,12 @@ String environmentText(
   b.writeln(
       '- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
   b.writeln('- 工作目录：$workspace');
+  final DateTime now = DateTime.now();
+  const List<String> week = <String>['一', '二', '三', '四', '五', '六', '日'];
+  String two(int n) => n.toString().padLeft(2, '0');
+  b.writeln('- 现在：${now.year}-${two(now.month)}-${two(now.day)} '
+      '${two(now.hour)}:${two(now.minute)}，星期${week[now.weekday - 1]}（设备本地时间）。'
+      '排时间就按这个算。');
 
   final List<HostEntry> visible = c.multiHost
       ? hosts.hosts

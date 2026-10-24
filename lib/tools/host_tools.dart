@@ -114,3 +114,47 @@ class AddHostTool extends Tool {
     );
   }
 }
+
+/// 把一台主机从列表里删掉，它的密码或私钥一起删。
+///
+/// 跟 host_add 一对，只有 Advance Master 拿得到。
+class RemoveHostTool extends Tool {
+  RemoveHostTool({required this.hosts, required this.secrets});
+
+  final HostStore hosts;
+  final SecretStore secrets;
+
+  @override
+  String get name => 'host_remove';
+
+  @override
+  String get description => '把一台主机从列表里删掉，它的密码或私钥也跟着删。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'name': <String, Object?>{'type': 'string', 'description': '主机名，host_list 里看到的那个'},
+        },
+        'required': <String>['name'],
+      };
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) => ToolRisk.write;
+
+  @override
+  String summarize(Map<String, Object?> args) => '删主机 ${readString(args, 'name')}';
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    final HostEntry? entry = hosts.byName(readString(args, 'name'));
+    if (entry == null) {
+      final String names = hosts.hosts.map((HostEntry h) => h.name).join('、');
+      return ToolOutcome.failure(
+          names.isEmpty ? '主机列表是空的。' : '没有叫这台的主机。现在有：$names');
+    }
+    await hosts.remove(entry.id);
+    await secrets.delete(hostSecretKey(entry.id));
+    return ToolOutcome.success(stdout: '删掉了 ${entry.name}（${entry.address}），密钥也一起删了。');
+  }
+}
