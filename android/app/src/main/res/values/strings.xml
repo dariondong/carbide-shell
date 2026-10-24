@@ -6,4 +6,7 @@
     <string name="task_done_title">任务跑完了</string>
     <string name="task_done_channel_name">任务完成</string>
     <string name="task_done_channel_desc">任务跑完时告诉你一句，点一下回到对话。</string>
+    <string name="alert_channel_name">资源提醒</string>
+    <string name="alert_channel_desc">监听的指标过了线就告诉你一句。</string>
+    <string name="alert_title">Carbide Shell 提醒</string>
 </resources>

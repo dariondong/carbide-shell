@@ -28,6 +28,10 @@ class ForegroundTask {
   /// 跑完了，把通知收掉。人不在这个应用里时留一条「跑完了」，点一下回来。
   static Future<void> finish(String text) => _call('finish', text);
 
+  /// 一条提示：不常驻，点一下回到应用。资源监听过线时用。
+  static Future<void> alert(String title, String text) =>
+      _call('alert', text, title: title);
+
   /// 系统的省电与后台限制那一页。有的系统会连服务一起清掉，这一项让用户自己放开。
   static Future<void> openBatterySettings() => _call('battery', '');
 
@@ -41,10 +45,13 @@ class ForegroundTask {
     }
   }
 
-  static Future<void> _call(String method, String text) async {
+  static Future<void> _call(String method, String text, {String title = ''}) async {
     if (!supported) return;
     try {
-      await _channel.invokeMethod<void>(method, <String, Object?>{'text': text});
+      await _channel.invokeMethod<void>(
+        method,
+        <String, Object?>{'text': text, 'title': title},
+      );
     } on MissingPluginException {
       // 没有原生那一段（桌面、测试环境）：当没这个能力。
     } on PlatformException {

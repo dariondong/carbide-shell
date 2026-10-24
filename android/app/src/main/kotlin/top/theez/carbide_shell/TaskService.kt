@@ -20,6 +20,9 @@ import android.os.IBinder
  */
 class TaskService : Service() {
 
+    /** 跑任务的时候按住 CPU：锁屏之后也能把这一轮跑完，别让套接字在半路睡着。 */
+    private var wake: android.os.PowerManager.WakeLock? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -31,12 +34,39 @@ class TaskService : Service() {
             return START_NOT_STICKY
         }
         instance = this
+        holdWake()
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        releaseWake()
         super.onDestroy()
+    }
+
+    private fun holdWake() {
+        try {
+            if (wake == null) {
+                val power = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                wake = power.newWakeLock(
+                    android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                    "carbide:task"
+                )
+            }
+            val lock = wake ?: return
+            if (!lock.isHeld) lock.acquire(WAKE_LIMIT_MS)
+        } catch (error: Throwable) {
+            // 按不住就算了，通知还在，任务照跑。
+        }
+    }
+
+    private fun releaseWake() {
+        try {
+            val lock = wake
+            if (lock != null && lock.isHeld) lock.release()
+        } catch (error: Throwable) {
+            // ignore
+        }
     }
 
     /** 把自己挂成前台；失败返回 false。 */
@@ -76,6 +106,9 @@ class TaskService : Service() {
         private const val NOTIFICATION_ID = 0xCB01
         private const val DONE_ID = 0xCB02
         private const val DEFAULT_TEXT = "正在执行"
+        private const val ALERT_CHANNEL_ID = "carbide_alert"
+        private const val ALERT_ID = 0xCB03
+        private const val WAKE_LIMIT_MS = 30L * 60 * 1000
 
         @Volatile
         private var instance: TaskService? = null
@@ -118,6 +151,30 @@ class TaskService : Service() {
                 manager.notify(DONE_ID, done(context, text))
             } catch (error: Throwable) {
                 // 通知发不出去也就算了，任务本身已经跑完。
+            }
+        }
+
+        /** 一条提示：不常驻，点一下回到应用。资源监听过线时用，不占常驻那条。 */
+        fun alert(context: Context, title: String, text: String) {
+            try {
+                ensureChannel(
+                    context, ALERT_CHANNEL_ID,
+                    R.string.alert_channel_name, R.string.alert_channel_desc,
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                )
+                val body = text.ifBlank { title }
+                val note = Notification.Builder(context, ALERT_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_carbide_stat)
+                    .setContentTitle(title.ifBlank { context.getString(R.string.alert_title) })
+                    .setContentText(body)
+                    .setStyle(Notification.BigTextStyle().bigText(body))
+                    .setAutoCancel(true)
+                    .setContentIntent(tap(context))
+                    .build()
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(ALERT_ID, note)
+            } catch (error: Throwable) {
+                // 通知发不出去也就算了，数据已经记下。
             }
         }
 

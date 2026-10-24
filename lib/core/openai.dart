@@ -74,6 +74,10 @@ class OpenAiProvider implements LlmProvider {
     return req;
   }
 
+  /// 连不上就把这一次重发，最多三次。切后台、锁屏那一会儿最容易断，
+  /// 断了不该让整轮白跑。已经吐过字之后再断就不重试了，重试会重复半句。
+  static const int _attempts = 3;
+
   @override
   Future<LlmReply> chat({
     required String system,
@@ -95,6 +99,40 @@ class OpenAiProvider implements LlmProvider {
       body['stream'] = true;
       body['stream_options'] = <String, Object?>{'include_usage': true};
     }
+    bool spoke = false;
+    void Function(String)? sink;
+    if (onText != null) {
+      sink = (String delta) {
+        spoke = true;
+        onText(delta);
+      };
+    }
+    Object? last;
+    for (int attempt = 1; attempt <= _attempts; attempt += 1) {
+      try {
+        return await _once(body, sink, cancel, wantsStream);
+      } on LlmException {
+        rethrow;
+      } catch (error) {
+        if (cancel?.cancelled ?? false) throw LlmException('这一轮已经停了。');
+        if (spoke) {
+          throw LlmException('连接断了，回答只到一半：${_short(error)}');
+        }
+        last = error;
+        if (attempt >= _attempts) break;
+        await Future<void>.delayed(Duration(milliseconds: 700 * attempt));
+      }
+    }
+    throw LlmException('连不上模型：${_short(last)}');
+  }
+
+  /// 一次请求。服务端不认 stream 参数时退回一次不流式的。
+  Future<LlmReply> _once(
+    Map<String, Object?> body,
+    void Function(String delta)? sink,
+    CancelToken? cancel,
+    bool wantsStream,
+  ) async {
     HttpClientResponse res = await (await _open(body)).close();
     if (wantsStream && res.statusCode >= 400 && res.statusCode < 500) {
       // 有的服务端不认 stream 参数，退回一次不流式的请求。
@@ -109,10 +147,10 @@ class OpenAiProvider implements LlmProvider {
       throw LlmException('模型返回 HTTP ${res.statusCode}：$trimmed');
     }
     final String mime = res.headers.contentType?.mimeType ?? '';
-    if (onText != null && mime.contains('event-stream')) {
+    if (sink != null && mime.contains('event-stream')) {
       return _readStream(
         res.transform(utf8.decoder).transform(const LineSplitter()),
-        onText,
+        sink,
         cancel,
       );
     }
@@ -121,14 +159,20 @@ class OpenAiProvider implements LlmProvider {
     if (decoded is Map) {
       return parseChatResponse(Map<String, Object?>.from(decoded));
     }
-    if (onText == null) {
+    if (sink == null) {
       throw LlmException('模型返回的不是 JSON 对象。');
     }
     // 头不是 event-stream，内容却是流，照样一行一行读。
-    return _readStream(Stream<String>.fromIterable(whole.split('\n')), onText, cancel);
+    return _readStream(Stream<String>.fromIterable(whole.split('\n')), sink, cancel);
   }
 
   void close() => _client.close(force: true);
+}
+
+/// 异常原文太长，摘一段能放进取话里的。
+String _short(Object? error) {
+  final String text = '${error ?? '未知错误'}'.replaceFirst('Exception: ', '');
+  return text.length > 200 ? '${text.substring(0, 200)}…' : text;
 }
 
 Object? _decodeJson(String text) {

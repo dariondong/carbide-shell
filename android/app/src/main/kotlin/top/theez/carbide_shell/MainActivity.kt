@@ -39,6 +39,16 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "alert" -> {
+                        askNotifications()
+                        TaskService.alert(
+                            this,
+                            call.argument<String>("title").orEmpty(),
+                            call.argument<String>("text").orEmpty(),
+                        )
+                        result.success(null)
+                    }
+
                     "battery" -> {
                         openBatterySettings()
                         result.success(null)
