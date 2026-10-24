@@ -1,0 +1,35 @@
+name: Scaffold platforms
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate platform folders
+        run: |
+          flutter create --project-name carbide_shell --org top.theez \
+            --platforms=android,ios,linux,macos,windows /tmp/scaffold
+          cp -r /tmp/scaffold/android /tmp/scaffold/ios /tmp/scaffold/linux \
+                /tmp/scaffold/macos /tmp/scaffold/windows .
+          cp /tmp/scaffold/.metadata .
+          rm -f android/local.properties windows/flutter/ephemeral/.plugin_symlinks 2>/dev/null || true
+
+      - name: Commit
+        run: |
+          git config user.name "Darion Dong"
+          git config user.email "104741434+dariondong@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "生成 android / ios / linux / macos / windows 脚手架"
+          git push
