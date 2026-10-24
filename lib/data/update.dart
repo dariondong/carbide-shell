@@ -66,14 +66,27 @@ UpdateInfo? parseRelease(Map<String, Object?> json) {
   String apk = '';
   final Object? assets = json['assets'];
   if (assets is List) {
+    // 装包按架构分开出，手机几乎都是 arm64，拿不到就退到第一个 apk。
+    final Map<String, String> byAbi = <String, String>{};
+    String first = '';
     for (final Object? a in assets) {
       if (a is! Map) continue;
       final String name = '${a['name'] ?? ''}';
-      if (name.endsWith('.apk')) {
-        apk = '${a['browser_download_url'] ?? ''}';
+      if (!name.endsWith('.apk')) continue;
+      final String url = '${a['browser_download_url'] ?? ''}';
+      if (first.isEmpty) first = url;
+      for (final String abi in kApkAbis) {
+        if (name.contains(abi)) byAbi[abi] = url;
+      }
+    }
+    for (final String abi in kApkAbis) {
+      final String? url = byAbi[abi];
+      if (url != null) {
+        apk = url;
         break;
       }
     }
+    if (apk.isEmpty) apk = first;
   }
   return UpdateInfo(
     tag: tag,
@@ -85,6 +98,9 @@ UpdateInfo? parseRelease(Map<String, Object?> json) {
     prerelease: json['prerelease'] == true || json['draft'] == true,
   );
 }
+
+/// 装包按架构分开出，优先挑 arm64 那一个。
+const List<String> kApkAbis = <String>['arm64-v8a', 'armeabi-v7a', 'x86_64'];
 
 String normaliseVersion(String tag) {
   String v = tag.trim();

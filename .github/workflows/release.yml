@@ -34,17 +34,23 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release
+        run: flutter build apk --release --split-per-abi
 
       - name: Signature
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+          for f in build/app/outputs/flutter-apk/*-release.apk; do
+            echo "== $f"
+            "$BT/apksigner" verify --print-certs "$f"
+          done
 
       - name: Rename
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             "CarbideShell_${GITHUB_REF_NAME}.apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "build/app/outputs/flutter-apk/app-$abi-release.apk" \
+               "CarbideShell_${GITHUB_REF_NAME}_$abi.apk"
+            ls -l "CarbideShell_${GITHUB_REF_NAME}_$abi.apk"
+          done
 
       - name: Release notes
         run: python3 tool/release_notes.py "${GITHUB_REF_NAME}" > release_notes.md

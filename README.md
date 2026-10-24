@@ -33,7 +33,9 @@ flutter run
 
 ## 发布
 
-打一个 `v*` 标签就出包（`.github/workflows/release.yml`），产物是 `CarbideShell_<tag>.apk`，先发预发布。
+打一个 `v*` 标签就出包（`.github/workflows/release.yml`），装包按架构分开出三个：
+`CarbideShell_<tag>_arm64-v8a.apk` / `_armeabi-v7a.apk` / `_x86_64.apk`，先发预发布。
+手机几乎都是 arm64，应用内更新也优先拿那一个。
 
 签名固定：APK 用仓库里的一套密钥签，所以新版能直接装在旧版上。密钥不进仓库，CI 从这四个仓库密钥里取：
 `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`
