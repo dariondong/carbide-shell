@@ -3,13 +3,41 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
+import 'package:xterm/xterm.dart';
 
 import '../data/hosts.dart';
 import '../tools/ssh_tools.dart';
 import 'components.dart';
 import 'theme.dart';
 
-/// A real shell on a saved host. Input goes straight to the pty.
+/// The terminal theme: our ink as the background, our blue as the cursor.
+const TerminalTheme _termTheme = TerminalTheme(
+  cursor: Color(0xFF8FB0FF),
+  selection: Color(0x558FB0FF),
+  foreground: Color(0xFFE9E7E1),
+  background: Color(0xFF111315),
+  black: Color(0xFF111315),
+  red: Color(0xFFE0574C),
+  green: Color(0xFF57C785),
+  yellow: Color(0xFFE0A24C),
+  blue: Color(0xFF7FA0FF),
+  magenta: Color(0xFFC77DFF),
+  cyan: Color(0xFF4FD3C4),
+  white: Color(0xFFE9E7E1),
+  brightBlack: Color(0xFF7B838A),
+  brightRed: Color(0xFFFF7B70),
+  brightGreen: Color(0xFF7BE39B),
+  brightYellow: Color(0xFFFFC46B),
+  brightBlue: Color(0xFF9DBBFF),
+  brightMagenta: Color(0xFFDD9BFF),
+  brightCyan: Color(0xFF6EE7DA),
+  brightWhite: Color(0xFFFFFFFF),
+  searchHitBackground: Color(0xFFFFF2B0),
+  searchHitBackgroundCurrent: Color(0xFFB9FF9E),
+  searchHitForeground: Color(0xFF111315),
+);
+
+/// A real shell on a saved host. xterm does the ANSI, the pty does the rest.
 class TerminalPage extends StatefulWidget {
   const TerminalPage({super.key, required this.hosts, required this.pool});
 
@@ -21,9 +49,7 @@ class TerminalPage extends StatefulWidget {
 }
 
 class _TerminalPageState extends State<TerminalPage> {
-  final TextEditingController _input = TextEditingController();
-  final ScrollController _scroll = ScrollController();
-  final StringBuffer _buffer = StringBuffer();
+  final Terminal _terminal = Terminal(maxLines: 5000);
   HostEntry? _host;
   SSHSession? _session;
   bool _connecting = false;
@@ -34,30 +60,18 @@ class _TerminalPageState extends State<TerminalPage> {
     super.initState();
     final List<HostEntry> list = widget.hosts.hosts;
     if (list.isNotEmpty) _host = list.first;
+    _terminal.onOutput = (String data) {
+      _session?.write(Uint8List.fromList(utf8.encode(data)));
+    };
+    _terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
+      _session?.resizeTerminal(width, height, pixelWidth, pixelHeight);
+    };
   }
 
   @override
   void dispose() {
     _session?.close();
-    _input.dispose();
-    _scroll.dispose();
     super.dispose();
-  }
-
-  void _write(String text) {
-    if (text.isEmpty) return;
-    setState(() {
-      _buffer.write(text);
-      if (_buffer.length > 40000) {
-        final String all = _buffer.toString();
-        _buffer
-          ..clear()
-          ..write(all.substring(all.length - 40000));
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
-    });
   }
 
   Future<void> _connect() async {
@@ -71,11 +85,17 @@ class _TerminalPageState extends State<TerminalPage> {
       final SSHClient client = await widget.pool.connect(host);
       final SSHSession session = await client.shell();
       session.stdout.listen((Uint8List data) {
-        _write(utf8.decode(data, allowMalformed: true));
+        _terminal.write(utf8.decode(data, allowMalformed: true));
       });
       session.stderr.listen((Uint8List data) {
-        _write(utf8.decode(data, allowMalformed: true));
+        _terminal.write(utf8.decode(data, allowMalformed: true));
       });
+      session.done.then((_) {
+        if (mounted && _session == session) {
+          setState(() => _session = null);
+        }
+      });
+      session.resizeTerminal(_terminal.viewWidth, _terminal.viewHeight);
       setState(() => _session = session);
     } catch (e) {
       setState(() => _error = '$e');
@@ -88,14 +108,6 @@ class _TerminalPageState extends State<TerminalPage> {
     _session?.close();
     setState(() => _session = null);
     if (_host != null) await widget.pool.drop(_host!.id);
-  }
-
-  void _submit() {
-    final String text = _input.text;
-    _input.clear();
-    final SSHSession? session = _session;
-    if (session == null) return;
-    session.write(Uint8List.fromList(utf8.encode('$text\n')));
   }
 
   @override
@@ -129,14 +141,15 @@ class _TerminalPageState extends State<TerminalPage> {
                                 child: Text(h.name, style: C.monoSmall.copyWith(color: C.ink)),
                               ))
                           .toList(),
-                      onChanged: live
-                          ? null
-                          : (HostEntry? h) => setState(() => _host = h),
+                      onChanged:
+                          live ? null : (HostEntry? h) => setState(() => _host = h),
                     ),
                   ),
                 ),
-              Text(live ? '已连接' : (_connecting ? '连接中' : '未连接'),
-                  style: C.monoSmall.copyWith(color: live ? C.blue : C.grey)),
+              Text(
+                live ? '已连接' : (_connecting ? '连接中' : '未连接'),
+                style: C.monoSmall.copyWith(color: live ? C.blue : C.grey),
+              ),
               const SizedBox(width: 12),
               if (live)
                 GestureDetector(
@@ -144,10 +157,7 @@ class _TerminalPageState extends State<TerminalPage> {
                   child: const Text('断开', style: TextStyle(fontSize: 12, color: C.grey)),
                 )
               else
-                SquareButton(
-                  label: '连接',
-                  onPressed: list.isEmpty ? null : _connect,
-                ),
+                SquareButton(label: '连接', onPressed: list.isEmpty ? null : _connect),
             ],
           ),
         ),
@@ -162,45 +172,30 @@ class _TerminalPageState extends State<TerminalPage> {
           child: Container(
             color: C.ink,
             width: double.infinity,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(
-                _buffer.isEmpty ? '连上之后这里就是它的 shell。' : _buffer.toString(),
-                style: const TextStyle(
-                  fontFamily: C.monoFamily,
-                  fontSize: 12.5,
-                  height: 1.6,
-                  color: C.onInk,
-                ),
-              ),
+            child: TerminalView(
+              _terminal,
+              theme: _termTheme,
+              textStyle: const TerminalStyle(fontSize: 12.5, height: 1.35),
+              padding: const EdgeInsets.all(12),
+              backgroundOpacity: 1,
+              autofocus: true,
+              keyboardType: TextInputType.text,
             ),
           ),
         ),
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.rule))),
           child: Row(
             children: <Widget>[
-              Text('❯', style: C.mono.copyWith(color: live ? C.blue : C.grey2)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  enabled: live,
-                  style: const TextStyle(fontFamily: C.monoFamily, fontSize: 13),
-                  onSubmitted: (_) => _submit(),
-                  decoration: const InputDecoration(hintText: '输入命令，回车发送'),
-                ),
+              Text(
+                live ? '直接在上面打字，回车发送' : '连上之后这里就是它的 shell',
+                style: const TextStyle(fontSize: 11, color: C.grey),
               ),
+              const Spacer(),
               GestureDetector(
-                onTap: live ? _submit : null,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  color: live ? C.ink : C.rule2,
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.arrow_forward, size: 15, color: C.paper),
-                ),
+                onTap: () => _terminal.eraseDisplay(),
+                child: const Text('清屏', style: TextStyle(fontSize: 11, color: C.grey)),
               ),
             ],
           ),

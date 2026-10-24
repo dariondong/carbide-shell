@@ -24,23 +24,6 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Scaffold platform folders
-        run: |
-          flutter create --project-name carbide_shell --org top.theez \
-            --platforms=android,ios,linux,macos,windows /tmp/scaffold
-          cp -r /tmp/scaffold/android .
-          cp -r /tmp/scaffold/ios .
-
-      - name: App icons
-        run: |
-          set -e
-          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            folder="${pair%%:*}"
-            size="${pair##*:}"
-            cp "brand/icon_${size}.png" "android/app/src/main/res/mipmap-${folder}/ic_launcher.png"
-          done
-          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-
       - name: Build debug APK
         run: flutter build apk --debug
 
