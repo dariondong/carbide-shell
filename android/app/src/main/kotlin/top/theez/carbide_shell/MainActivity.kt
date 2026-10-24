@@ -31,6 +31,11 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "finish" -> {
+                        TaskService.finish(this, call.argument<String>("text").orEmpty())
+                        result.success(null)
+                    }
+
                     else -> result.notImplemented()
                 }
             }

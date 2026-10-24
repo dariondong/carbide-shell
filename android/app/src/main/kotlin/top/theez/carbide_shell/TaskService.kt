@@ -16,6 +16,7 @@ import android.os.IBinder
  *
  * 有这条通知在，切出去、锁屏也不会被系统当成后台进程掐掉，SSH 连接和模型的请求都能跑完。
  * 任务的进度由 Dart 那边每变一次就调一次 update，通知上那句「第几步」跟着走。
+ * 跑完时如果人不在这个应用里，收掉常驻通知，另留一条「跑完了」，点一下回到对话。
  */
 class TaskService : Service() {
 
@@ -40,7 +41,7 @@ class TaskService : Service() {
 
     /** 把自己挂成前台；失败返回 false。 */
     private fun declare(text: String): Boolean {
-        val note = build(text)
+        val note = ongoing(this, text)
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -58,30 +59,11 @@ class TaskService : Service() {
         }
     }
 
-    private fun build(text: String): Notification {
-        ensureChannel(this)
-        val open = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        val tap = PendingIntent.getActivity(this, 0, open, flags)
-        return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_carbide_stat)
-            .setContentTitle(getString(R.string.task_notification_title))
-            .setContentText(text)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setContentIntent(tap)
-            .build()
-    }
-
-    /** 只改那一行字。服务没在跑就什么都不做，任务本身不受影响。 */
+    /** 只改那一行字。 */
     private fun relabel(text: String) {
         try {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, build(text))
+            manager.notify(NOTIFICATION_ID, ongoing(this, text))
         } catch (error: Throwable) {
             // 通知被拒（安卓 13 没给权限）也不该打断任务。
         }
@@ -90,7 +72,9 @@ class TaskService : Service() {
     companion object {
         const val EXTRA_TEXT = "text"
         private const val CHANNEL_ID = "carbide_task"
+        private const val DONE_CHANNEL_ID = "carbide_done"
         private const val NOTIFICATION_ID = 0xCB01
+        private const val DONE_ID = 0xCB02
         private const val DEFAULT_TEXT = "正在执行"
 
         @Volatile
@@ -121,6 +105,22 @@ class TaskService : Service() {
             }
         }
 
+        /** 跑完了：收掉常驻通知，留一句结果，点一下回到对话。 */
+        fun finish(context: Context, text: String) {
+            stop(context)
+            try {
+                ensureChannel(
+                    context, DONE_CHANNEL_ID,
+                    R.string.task_done_channel_name, R.string.task_done_channel_desc,
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                )
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(DONE_ID, done(context, text))
+            } catch (error: Throwable) {
+                // 通知发不出去也就算了，任务本身已经跑完。
+            }
+        }
+
         fun stop(context: Context) {
             instance = null
             try {
@@ -128,20 +128,69 @@ class TaskService : Service() {
             } catch (error: Throwable) {
                 // ignore
             }
+            cancel(context, NOTIFICATION_ID)
+        }
+
+        private fun cancel(context: Context, id: Int) {
             try {
                 val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.cancel(NOTIFICATION_ID)
+                manager.cancel(id)
             } catch (error: Throwable) {
                 // ignore
             }
         }
 
-        private fun ensureChannel(context: Context) {
+        /** 点了通知回到那个对话。 */
+        private fun tap(context: Context): PendingIntent {
+            val open = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            return PendingIntent.getActivity(context, 0, open, flags)
+        }
+
+        private fun ongoing(context: Context, text: String): Notification {
+            ensureChannel(
+                context, CHANNEL_ID,
+                R.string.task_channel_name, R.string.task_channel_desc,
+                NotificationManager.IMPORTANCE_LOW,
+            )
+            return Notification.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_carbide_stat)
+                .setContentTitle(context.getString(R.string.task_notification_title))
+                .setContentText(text)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(false)
+                .setContentIntent(tap(context))
+                .build()
+        }
+
+        private fun done(context: Context, text: String): Notification {
+            val body = text.ifBlank { context.getString(R.string.task_done_title) }
+            return Notification.Builder(context, DONE_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_carbide_stat)
+                .setContentTitle(context.getString(R.string.task_done_title))
+                .setContentText(body)
+                .setStyle(Notification.BigTextStyle().bigText(body))
+                .setAutoCancel(true)
+                .setContentIntent(tap(context))
+                .build()
+        }
+
+        private fun ensureChannel(
+            context: Context,
+            id: String,
+            nameRes: Int,
+            descRes: Int,
+            importance: Int,
+        ) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-            val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.task_channel_name), NotificationManager.IMPORTANCE_LOW)
-            channel.description = context.getString(R.string.task_channel_desc)
+            if (manager.getNotificationChannel(id) != null) return
+            val channel = NotificationChannel(id, context.getString(nameRes), importance)
+            channel.description = context.getString(descRes)
             channel.setShowBadge(false)
             manager.createNotificationChannel(channel)
         }

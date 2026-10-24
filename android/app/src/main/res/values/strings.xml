@@ -3,4 +3,7 @@
     <string name="task_notification_title">Carbide Shell 正在执行</string>
     <string name="task_channel_name">任务进度</string>
     <string name="task_channel_desc">跑长任务时挂一条通知，切出去也不中断。</string>
+    <string name="task_done_title">任务跑完了</string>
+    <string name="task_done_channel_name">任务完成</string>
+    <string name="task_done_channel_desc">任务跑完时告诉你一句，点一下回到对话。</string>
 </resources>

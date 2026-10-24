@@ -143,7 +143,12 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       widget.conversation.tokensUsed = session.loop.tokens;
       await widget.services.persist(widget.conversation);
     } finally {
-      unawaited(ForegroundTask.end());
+      // 人还在看就把通知收掉；切到别处去了就留一句「跑完了」，点一下回到这里。
+      if (ForegroundTask.visible) {
+        unawaited(ForegroundTask.end());
+      } else {
+        unawaited(ForegroundTask.finish(_summary()));
+      }
       if (mounted) setState(() => _running = false);
     }
   }
@@ -163,6 +168,23 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       AgentPhase.idle => '收尾',
     };
     unawaited(ForegroundTask.update('第 ${loop.step}/${loop.maxSteps} 步 · $where'));
+  }
+
+  /// 跑完时通知上那句话：最后一条回答的第一行，太长就截。
+  String _summary() {
+    final List<LlmMessage> all = _messages;
+    for (int i = all.length - 1; i >= 0; i -= 1) {
+      final LlmMessage m = all[i];
+      if (m.role != LlmRole.assistant) continue;
+      final String text = m.text.trim();
+      if (text.isEmpty) continue;
+      final String first = text
+          .split('\n')
+          .firstWhere((String line) => line.trim().isNotEmpty, orElse: () => text)
+          .trim();
+      return first.length > 60 ? '${first.substring(0, 60)}…' : first;
+    }
+    return '';
   }
 
   Future<void> _pickFiles() async {
