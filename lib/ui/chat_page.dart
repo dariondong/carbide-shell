@@ -12,6 +12,7 @@ import '../core/models.dart';
 import '../data/foreground.dart';
 import '../services.dart';
 import 'components.dart';
+import 'md_text.dart';
 import 'theme.dart';
 
 /// One conversation. Its transcript lives on disk, so leaving and coming back
@@ -334,20 +335,9 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   }
 
   Widget _answer(String text, {bool streaming = false}) {
-    final TextStyle style = C.answer;
     return Padding(
       padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : 18),
-      child: streaming
-          ? Text.rich(
-              TextSpan(
-                children: <TextSpan>[
-                  TextSpan(text: text),
-                  const TextSpan(text: ' ▍', style: TextStyle(color: C.blue)),
-                ],
-              ),
-              style: style,
-            )
-          : Text(text, style: style),
+      child: MdText(text: text, streaming: streaming),
     );
   }
 
