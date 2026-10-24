@@ -9,6 +9,7 @@ import '../data/hosts.dart';
 import '../data/tasks.dart';
 import '../data/watch.dart';
 import 'components.dart';
+import 'task_log_page.dart';
 import 'theme.dart';
 
 /// 定时任务：清单、开关、跑一次的记录，都在这一页。
@@ -91,6 +92,22 @@ class _TasksPageState extends State<TasksPage> {
                   style: C.monoSmall),
               const Spacer(),
               GestureDetector(
+                onTap: _openLog,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: C.card,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                    border: Border.all(color: C.rule2),
+                  ),
+                  child: const Icon(Icons.receipt_long_outlined, size: 16, color: C.ink),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
                 onTap: _addSheet,
                 child: Container(
                   width: 32,
@@ -145,6 +162,13 @@ class _TasksPageState extends State<TasksPage> {
         ),
       ],
     );
+  }
+
+  /// 所有任务的运行记录摆在一起。
+  void _openLog() {
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (BuildContext ctx) => TaskLogPage(tasks: widget.tasks),
+    ));
   }
 
   Widget _card(ScheduledTask task) {
