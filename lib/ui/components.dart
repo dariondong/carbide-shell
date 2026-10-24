@@ -444,6 +444,7 @@ class RuleField extends StatelessWidget {
     this.keyboard = TextInputType.text,
     this.minLines = 1,
     this.maxLines = 1,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -453,6 +454,7 @@ class RuleField extends StatelessWidget {
   final TextInputType keyboard;
   final int minLines;
   final int maxLines;
+  final void Function(String text)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -475,6 +477,7 @@ class RuleField extends StatelessWidget {
             keyboardType: keyboard,
             minLines: obscure ? 1 : minLines,
             maxLines: lines,
+            onChanged: onChanged,
             style: C.mono.copyWith(fontSize: 13),
             decoration: InputDecoration(hintText: hint.isEmpty ? null : hint),
           ),

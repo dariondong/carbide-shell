@@ -70,6 +70,9 @@ class AgentLoop {
   final String Function()? environment;
   final int maxContextChars;
 
+  /// The user's own standing instructions, appended after the built-in prompt.
+  String extraSystem = '';
+
   /// The transcript. May be owned by a Conversation so it survives restarts.
   final List<LlmMessage> history;
 
@@ -130,8 +133,11 @@ class AgentLoop {
       LlmReply reply;
       try {
         final String extra = environment?.call() ?? '';
+        final String tail = <String>[extraSystem.trim(), extra.trim()]
+            .where((String s) => s.isNotEmpty)
+            .join('\n');
         reply = await llm.chat(
-          system: extra.isEmpty ? kSystemPrompt : '$kSystemPrompt\n$extra',
+          system: tail.isEmpty ? kSystemPrompt : '$kSystemPrompt\n$tail',
           messages: _window(),
           tools: registry.specs(),
           cancel: cancel,

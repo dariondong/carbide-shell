@@ -52,6 +52,7 @@ class _HomeShellState extends State<HomeShell> {
   /// Once a day, ask GitHub for a newer release. Offline is fine: a failed
   /// check says nothing and is retried tomorrow.
   Future<void> _maybeCheckUpdate() async {
+    if (!widget.services.settings.value.autoCheckUpdate) return;
     final DateTime? last = DateTime.tryParse(widget.services.settings.value.lastUpdateCheck);
     if (last != null && DateTime.now().difference(last) < const Duration(hours: 24)) return;
     final UpdateChecker checker = UpdateChecker();
@@ -149,6 +150,8 @@ class _HomeShellState extends State<HomeShell> {
               settings: s.settings,
               secrets: s.secrets,
               policy: s.policy,
+              conversations: s.conversations.all,
+              onConversationChanged: (Conversation c) => s.conversations.save(c),
               onOpenAbout: _openAbout,
             ),
           ],

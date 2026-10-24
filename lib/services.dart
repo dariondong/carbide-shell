@@ -63,9 +63,11 @@ class AppServices {
       journal: FileJournal(conversations.journalOf(c)),
       context: ToolContext(workspace: workspace, desktop: isDesktopPlatform),
       maxSteps: settings.value.maxSteps,
+      maxContextChars: settings.value.contextChars,
       messages: c.messages,
       environment: () => environmentText(hosts, workspace, memory, c),
     );
+    loop.extraSystem = settings.value.extraPrompt;
     return AgentSession(loop: loop, memory: store);
   }
 

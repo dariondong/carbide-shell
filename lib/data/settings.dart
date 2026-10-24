@@ -11,6 +11,11 @@ class AppSettings {
     this.approvalMode = 'autoRead',
     this.allowedDomains = const <String>[],
     this.lastUpdateCheck = '',
+    this.stream = true,
+    this.contextChars = 24000,
+    this.extraPrompt = '',
+    this.answerFont = 13.5,
+    this.autoCheckUpdate = true,
   });
 
   String baseUrl;
@@ -27,6 +32,21 @@ class AppSettings {
   /// ISO time of the last update check, so a launch does not hammer GitHub.
   String lastUpdateCheck;
 
+  /// Answer word by word as it arrives. Off means one block when it is done.
+  bool stream;
+
+  /// How much of the transcript goes to the model each turn.
+  int contextChars;
+
+  /// Extra instructions appended to the built-in system prompt.
+  String extraPrompt;
+
+  /// Transcript font size for answers.
+  double answerFont;
+
+  /// Ask GitHub for a newer release on launch.
+  bool autoCheckUpdate;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'baseUrl': baseUrl,
         'model': model,
@@ -35,6 +55,11 @@ class AppSettings {
         'approvalMode': approvalMode,
         'allowedDomains': allowedDomains,
         'lastUpdateCheck': lastUpdateCheck,
+        'stream': stream,
+        'contextChars': contextChars,
+        'extraPrompt': extraPrompt,
+        'answerFont': answerFont,
+        'autoCheckUpdate': autoCheckUpdate,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -46,6 +71,11 @@ class AppSettings {
       maxSteps: (json['maxSteps'] as num?)?.toInt() ?? 12,
       approvalMode: '${json['approvalMode'] ?? 'autoRead'}',
       lastUpdateCheck: '${json['lastUpdateCheck'] ?? ''}',
+      stream: json['stream'] != false,
+      contextChars: (json['contextChars'] as num?)?.toInt() ?? 24000,
+      extraPrompt: '${json['extraPrompt'] ?? ''}',
+      answerFont: (json['answerFont'] as num?)?.toDouble() ?? 13.5,
+      autoCheckUpdate: json['autoCheckUpdate'] != false,
       allowedDomains: domains is List
           ? domains.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],

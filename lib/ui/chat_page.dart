@@ -139,6 +139,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     unawaited(ForegroundTask.begin('第 1 步'));
     try {
       session.loop.maxSteps = widget.services.settings.value.maxSteps;
+      session.loop.extraSystem = widget.services.settings.value.extraPrompt;
       final List<String> images = List<String>.of(_images);
       _images.clear();
       _attachNames.clear();
@@ -342,7 +343,11 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   Widget _answer(String text, {bool streaming = false}) {
     return Padding(
       padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : 18),
-      child: MdText(text: text, streaming: streaming),
+      child: MdText(
+        text: text,
+        streaming: streaming,
+        base: C.answer.copyWith(fontSize: widget.services.settings.value.answerFont),
+      ),
     );
   }
 

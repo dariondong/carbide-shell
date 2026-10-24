@@ -41,7 +41,8 @@ class SettingsLlmProvider implements LlmProvider {
         messages: messages,
         tools: tools,
         cancel: cancel,
-        onText: onText,
+        // 关掉逐字显示就不传 onText：服务端一次性回，界面等整段。
+        onText: settings.value.stream ? onText : null,
       );
     } finally {
       provider.close();
