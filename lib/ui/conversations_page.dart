@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/conversation.dart';
 import '../data/hosts.dart';
+import '../data/hub.dart';
 import '../services.dart';
 import 'components.dart';
 import 'theme.dart';
@@ -11,11 +12,13 @@ class ConversationsPage extends StatefulWidget {
   const ConversationsPage({
     super.key,
     required this.services,
+    required this.hub,
     required this.onOpen,
     required this.onChanged,
   });
 
   final AppServices services;
+  final SessionHub hub;
   final void Function(Conversation) onOpen;
   final VoidCallback onChanged;
 
@@ -101,6 +104,8 @@ class _ConversationsPageState extends State<ConversationsPage> {
         ? '全部主机'
         : (host == null ? '主机已删除' : '${host.name} · ${host.address}');
     final String meta = '${c.turns} 轮 · ${_tokens(c.tokensUsed)} tok · ${_ago(c.updatedAt)}';
+    final bool waiting = widget.hub.isWaiting(c.id);
+    final bool busy = widget.hub.isRunning(c.id);
     return InkWell(
       onTap: () => widget.onOpen(c),
       borderRadius: BorderRadius.circular(C.radius),
@@ -112,10 +117,23 @@ class _ConversationsPageState extends State<ConversationsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(c.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(c.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                      ),
+                      if (waiting) ...<Widget>[
+                        const SizedBox(width: 7),
+                        _tag('等你确认', C.blue, C.blueSoft),
+                      ] else if (busy) ...<Widget>[
+                        const SizedBox(width: 7),
+                        _tag('在跑', C.blue, C.blueSoft),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 5),
                   Text(scope, maxLines: 1, overflow: TextOverflow.ellipsis, style: C.monoSmall),
                   const SizedBox(height: 3),
@@ -137,6 +155,15 @@ class _ConversationsPageState extends State<ConversationsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _tag(String text, Color fg, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(text,
+          style: C.monoSmall.copyWith(fontSize: 9.5, color: fg, height: 1.4)),
     );
   }
 
@@ -175,6 +202,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
     );
     if (ok != true) return;
     await widget.services.conversations.remove(c.id);
+    widget.hub.forget(c.id);
     if (!mounted) return;
     setState(() {});
     widget.onChanged();

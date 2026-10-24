@@ -6,7 +6,7 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/schedule.dart';
 import '../services.dart';
-import 'foreground.dart';
+import 'activity.dart';
 
 /// 定时任务清单，一个 JSON 文件，和主机、设置放在一起。
 class TaskStore {
@@ -94,11 +94,15 @@ class TaskScheduler {
   TaskScheduler({
     required this.services,
     required this.tasks,
+    required this.board,
     this.onChanged,
   });
 
   final AppServices services;
   final TaskStore tasks;
+
+  /// 现在在忙什么由它统一写通知，和对话共用一条。
+  final ActivityBoard board;
 
   /// 清单有变化（跑了、失败了、排到下一次了）就通知界面重画。
   void Function()? onChanged;
@@ -181,7 +185,7 @@ class TaskScheduler {
   Future<void> _run(ScheduledTask task, DateTime scheduled, {required bool late}) async {
     _running.add(task.id);
     onChanged?.call();
-    unawaited(ForegroundTask.begin('定时任务 · ${task.title}'));
+    board.note('t:${task.id}', '${task.title} · 开跑');
     // 每次开跑都从干净的通知节流开始，上一次跑剩下的那句话不带到这一次。
     _lastNotice = DateTime.fromMillisecondsSinceEpoch(0);
     _lastNoticeText = '';
@@ -226,9 +230,7 @@ class TaskScheduler {
       ));
       await tasks.save();
       final String done = ok ? '跑完了' : '失败了';
-      unawaited(ForegroundTask.visible
-          ? ForegroundTask.end()
-          : ForegroundTask.finish('${task.title} · $done'));
+      board.done('t:${task.id}', summary: '${task.title} · $done');
       onChanged?.call();
     }
   }
@@ -247,6 +249,6 @@ class TaskScheduler {
     final String text = '${task.title} · 第 ${loop.step}/${loop.maxSteps} 步 · $where';
     if (text == _lastNoticeText) return;
     _lastNoticeText = text;
-    unawaited(ForegroundTask.update(text));
+    board.note('t:${task.id}', text);
   }
 }

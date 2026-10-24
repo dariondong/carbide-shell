@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'core/conversation.dart';
 import 'data/hosts.dart';
+import 'data/hub.dart';
 import 'data/tasks.dart';
 import 'data/update.dart';
 import 'services.dart';
@@ -21,11 +22,13 @@ class CarbideApp extends StatelessWidget {
     super.key,
     required this.services,
     required this.tasks,
+    required this.hub,
     required this.scheduler,
   });
 
   final AppServices services;
   final TaskStore tasks;
+  final SessionHub hub;
   final TaskScheduler scheduler;
 
   @override
@@ -34,7 +37,12 @@ class CarbideApp extends StatelessWidget {
       title: 'Carbide Shell',
       debugShowCheckedModeBanner: false,
       theme: C.theme(),
-      home: HomeShell(services: services, tasks: tasks, scheduler: scheduler),
+      home: HomeShell(
+        services: services,
+        tasks: tasks,
+        hub: hub,
+        scheduler: scheduler,
+      ),
     );
   }
 }
@@ -44,11 +52,13 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.services,
     required this.tasks,
+    required this.hub,
     required this.scheduler,
   });
 
   final AppServices services;
   final TaskStore tasks;
+  final SessionHub hub;
   final TaskScheduler scheduler;
 
   @override
@@ -64,12 +74,15 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     widget.scheduler.onChanged = _refresh;
     widget.scheduler.start();
+    // 有几个对话在跑、在等确认，列表要跟着变；正文的增量不重画整个外壳。
+    widget.hub.addListener(_onHub);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
   }
 
   @override
   void dispose() {
     widget.scheduler.stop();
+    widget.hub.removeListener(_onHub);
     super.dispose();
   }
 
@@ -133,6 +146,16 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted) setState(() {});
   }
 
+  String _busy = '';
+
+  /// 只在「谁在跑、谁在等」变了的时候重画外壳。
+  void _onHub() {
+    final String now = widget.hub.signature;
+    if (now == _busy) return;
+    _busy = now;
+    _refresh();
+  }
+
   String _subtitle(Conversation c) {
     if (c.multiHost) return '全部主机';
     final HostEntry? h = widget.services.hosts.byId(c.hostId);
@@ -147,12 +170,14 @@ class _HomeShellState extends State<HomeShell> {
     final Widget chatTab = open == null
         ? ConversationsPage(
             services: s,
+            hub: widget.hub,
             onOpen: (Conversation c) => setState(() => _open = c),
             onChanged: _refresh,
           )
         : ChatPage(
             key: ValueKey<String>(open.id),
             services: s,
+            hub: widget.hub,
             conversation: open,
             subtitle: _subtitle(open),
             onBack: () {

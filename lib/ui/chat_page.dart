@@ -7,9 +7,8 @@ import 'package:flutter/material.dart';
 import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/docx.dart';
-import '../core/llm_base.dart';
 import '../core/models.dart';
-import '../data/foreground.dart';
+import '../data/hub.dart';
 import '../services.dart';
 import 'components.dart';
 import 'md_text.dart';
@@ -21,12 +20,14 @@ class ChatPage extends StatefulWidget {
   const ChatPage({
     super.key,
     required this.services,
+    required this.hub,
     required this.conversation,
     required this.subtitle,
     required this.onBack,
   });
 
   final AppServices services;
+  final SessionHub hub;
   final Conversation conversation;
   final String subtitle;
   final VoidCallback onBack;
@@ -35,51 +36,55 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> implements Approver {
+class _ChatPageState extends State<ChatPage> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  AgentSession? _session;
-  ApprovalRequest? _pending;
-  String _kind = '';
-  Completer<bool>? _waiter;
-  CancelToken? _cancel;
-  bool _running = false;
-  DateTime _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
-  String _lastNoteText = '';
+  LiveSession? _live;
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
 
   List<LlmMessage> get _messages => widget.conversation.messages;
 
+  /// 这一轮是不是在跑，看托管处，不看页面自己。
+  bool get _running => _live?.running ?? false;
+
+  AgentLoop? get _loop => _live?.loop;
+
+  ApprovalRequest? get _pending => _live?.pending;
+
+  String get _kind => _live?.pendingKind ?? '';
+
   @override
   void initState() {
     super.initState();
+    widget.hub.addListener(_refresh);
     _attach();
   }
 
+  /// 拿到这个对话的活会话。已经有一个在跑就用那一个，不另起一份。
   Future<void> _attach() async {
-    final AgentSession session = await widget.services.sessionFor(widget.conversation);
-    session.loop.approver = this;
-    session.loop.onChanged = _refresh;
-    session.loop.tokens = widget.conversation.tokensUsed;
+    final LiveSession live = await widget.hub.open(widget.conversation);
     if (!mounted) return;
-    setState(() => _session = session);
+    setState(() => _live = live);
+    _followTail();
   }
 
   @override
   void dispose() {
-    _session?.loop.onChanged = null;
+    widget.hub.removeListener(_refresh);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  /// Follow the tail while it grows, but leave the view alone once the reader
-  /// has scrolled up to re-read something.
   void _refresh() {
     if (!mounted) return;
     setState(() {});
-    _noteProgress();
+    _followTail();
+  }
+
+  /// 跟着尾巴走，但读者往上翻看旧内容时不要把他拽回来。
+  void _followTail() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       final ScrollPosition p = _scroll.position;
@@ -88,110 +93,43 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     });
   }
 
-  @override
-  Future<bool> confirm(ApprovalRequest request) async {
-    final String kind = approvalKind(request.call);
-    if (widget.conversation.allowsKind(kind)) return true;
-    final Completer<bool> waiter = Completer<bool>();
-    setState(() {
-      _pending = request;
-      _kind = kind;
-      _waiter = waiter;
-    });
-    return waiter.future;
-  }
-
   Future<void> _allowKind() async {
-    final String kind = _kind;
+    final LiveSession? live = _live;
+    if (live == null) return;
+    final String kind = live.pendingKind;
     if (kind.isNotEmpty && !widget.conversation.kindApprovals.contains(kind)) {
       widget.conversation.kindApprovals.add(kind);
       await widget.services.persist(widget.conversation);
     }
-    _decide(true);
+    live.decide(true);
   }
 
   Future<void> _allowAll() async {
     widget.conversation.autoApproveAll = true;
     await widget.services.persist(widget.conversation);
-    _decide(true);
+    _live?.decide(true);
   }
 
-  void _decide(bool allowed) {
-    final Completer<bool>? waiter = _waiter;
-    setState(() {
-      _pending = null;
-      _waiter = null;
-    });
-    if (waiter != null && !waiter.isCompleted) waiter.complete(allowed);
-  }
+  void _decide(bool allowed) => _live?.decide(allowed);
 
   Future<void> _send() async {
-    final AgentSession? session = _session;
+    final LiveSession? live = _live;
     final String text = _input.text.trim();
-    if (session == null || text.isEmpty || _running) return;
+    if (live == null || text.isEmpty || live.running) return;
     _input.clear();
-    setState(() => _running = true);
-    _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
-    _lastNoteText = '';
-    final CancelToken token = CancelToken();
-    _cancel = token;
-    // 手机上挂一条前台通知：切出去看别的、锁屏，这一轮也不会被系统掐掉。
-    unawaited(ForegroundTask.begin('第 1 步'));
-    try {
-      session.loop.maxSteps = widget.services.settings.value.maxSteps;
-      session.loop.extraSystem = widget.services.settings.value.extraPrompt;
-      final List<String> images = List<String>.of(_images);
-      _images.clear();
-      _attachNames.clear();
-      await session.loop.send(text, cancel: token, images: images);
-      widget.conversation.tokensUsed = session.loop.tokens;
-      await widget.services.persist(widget.conversation);
-    } finally {
-      // 人还在看就把通知收掉；切到别处去了就留一句「跑完了」，点一下回到这里。
-      if (ForegroundTask.visible) {
-        unawaited(ForegroundTask.end());
-      } else {
-        unawaited(ForegroundTask.finish(_summary()));
-      }
-      if (mounted) setState(() => _running = false);
-    }
+    final List<String> images = List<String>.of(_images);
+    _images.clear();
+    _attachNames.clear();
+    setState(() {});
+    // 交给托管处跑：切到别的对话、回到列表，这一轮都还在。
+    await widget.hub.send(live, text, images: images);
+    if (!mounted) return;
+    setState(() {});
   }
 
-  /// 通知上那句进度：走到第几步、在等什么。不用每 60 毫秒改一次。
-  void _noteProgress() {
-    if (!_running) return;
-    final AgentLoop? loop = _session?.loop;
-    if (loop == null) return;
-    final DateTime now = DateTime.now();
-    if (now.difference(_lastNote).inMilliseconds < 1200) return;
-    _lastNote = now;
-    final String where = switch (loop.phase) {
-      AgentPhase.thinking => '等模型回话',
-      AgentPhase.acting => '执行命令',
-      AgentPhase.waiting => '等你确认',
-      AgentPhase.idle => '收尾',
-    };
-    final String text = '第 ${loop.step}/${loop.maxSteps} 步 · $where';
-    if (text == _lastNoteText) return; // 字没变就不重发通知
-    _lastNoteText = text;
-    unawaited(ForegroundTask.update(text));
-  }
-
-  /// 跑完时通知上那句话：最后一条回答的第一行，太长就截。
-  String _summary() {
-    final List<LlmMessage> all = _messages;
-    for (int i = all.length - 1; i >= 0; i -= 1) {
-      final LlmMessage m = all[i];
-      if (m.role != LlmRole.assistant) continue;
-      final String text = m.text.trim();
-      if (text.isEmpty) continue;
-      final String first = text
-          .split('\n')
-          .firstWhere((String line) => line.trim().isNotEmpty, orElse: () => text)
-          .trim();
-      return first.length > 60 ? '${first.substring(0, 60)}…' : first;
-    }
-    return '';
+  void _stop() {
+    final LiveSession? live = _live;
+    if (live != null) widget.hub.stop(live);
   }
 
   Future<void> _pickFiles() async {
@@ -270,11 +208,6 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  void _stop() {
-    _cancel?.cancel();
-    _decide(false);
-  }
-
   Map<String, String> _outputs() {
     final Map<String, String> out = <String, String>{};
     for (final LlmMessage m in _messages) {
@@ -306,10 +239,10 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         if (m.calls.isNotEmpty) out.add(_toolTurn(m.calls, outputs, runningId));
       }
     }
-    final String partial = _session?.loop.partial ?? '';
+    final String partial = _loop?.partial ?? '';
     if (partial.isNotEmpty) out.add(_answer(partial, streaming: true));
     if (_running && partial.isEmpty) {
-      out.add(_ThinkingRow(phase: _session?.loop.phase ?? AgentPhase.thinking));
+      out.add(_ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking));
     }
     if (out.isEmpty) out.add(_empty());
     return out;
@@ -396,8 +329,8 @@ class _ChatPageState extends State<ChatPage> implements Approver {
 
   /// While a turn is running the header answers 「它还在跑吗」; when idle it
   /// shows what the conversation has spent.
-  Widget _usage(AgentSession? session) {
-    if (session == null) return const SizedBox.shrink();
+  Widget _usage(AgentLoop? loop) {
+    if (loop == null) return const SizedBox.shrink();
     if (_running) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -408,21 +341,21 @@ class _ChatPageState extends State<ChatPage> implements Approver {
             child: CircularProgressIndicator(strokeWidth: 1.6, color: C.blue),
           ),
           const SizedBox(width: 7),
-          Text('第 ${session.loop.step}/${session.loop.maxSteps} 步',
+          Text('第 ${loop.step}/${loop.maxSteps} 步',
               style: C.monoSmall.copyWith(color: C.blue)),
         ],
       );
     }
-    final double hit = session.loop.cacheHitRate;
+    final double hit = loop.cacheHitRate;
     return Text(
-      '${_fmtTokens(session.loop.tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
+      '${_fmtTokens(loop.tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
       style: C.monoSmall.copyWith(color: hit > 0 ? C.blue : C.grey2),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final AgentSession? session = _session;
+    final AgentLoop? loop = _loop;
     return Column(
       children: <Widget>[
         Container(
@@ -464,7 +397,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                 ),
               ),
               const SizedBox(width: 10),
-              Flexible(child: _usage(session)),
+              Flexible(child: _usage(loop)),
               const SizedBox(width: 10),
               if (_running)
                 GestureDetector(
@@ -573,7 +506,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                 Expanded(
                   child: TextField(
                     controller: _input,
-                    enabled: !_running && session != null,
+                    enabled: !_running && loop != null,
                     style: const TextStyle(fontSize: 14.5, height: 1.5),
                     minLines: 1,
                     maxLines: 4,
@@ -587,12 +520,12 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: (_running || session == null) ? null : _send,
+                  onTap: (_running || loop == null) ? null : _send,
                   child: Container(
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: (_running || session == null) ? C.rule2 : C.blue,
+                      color: (_running || loop == null) ? C.rule2 : C.blue,
                       borderRadius: BorderRadius.circular(C.radiusSmall),
                     ),
                     alignment: Alignment.center,
