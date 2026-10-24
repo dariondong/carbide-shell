@@ -69,11 +69,16 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     super.dispose();
   }
 
+  /// Follow the tail while it grows, but leave the view alone once the reader
+  /// has scrolled up to re-read something.
   void _refresh() {
     if (!mounted) return;
     setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      if (!_scroll.hasClients) return;
+      final ScrollPosition p = _scroll.position;
+      if (p.maxScrollExtent - p.pixels > 180) return;
+      _scroll.jumpTo(p.maxScrollExtent);
     });
   }
 
@@ -228,60 +233,85 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     final String runningId = _runningId();
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
-        out.add(Padding(
-          padding: const EdgeInsets.only(bottom: 14, top: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('❯', style: TextStyle(fontSize: 15, color: C.blue, height: 1.6)),
-              const SizedBox(width: 10),
-              Expanded(child: Text(m.text, style: C.ask)),
-            ],
-          ),
-        ));
+        out.add(_userTurn(m.text));
       } else if (m.role == LlmRole.assistant) {
-        if (m.text.trim().isNotEmpty) {
-          out.add(Padding(
-            padding: const EdgeInsets.only(bottom: 12, left: 22),
-            child: Text(m.text, style: C.answer),
-          ));
-        }
-        if (m.calls.isNotEmpty) {
-          out.add(Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: ToolRunGroup(
-              calls: m.calls,
-              outputs: outputs,
-              runningId: runningId,
-            ),
-          ));
-        }
+        if (m.text.trim().isNotEmpty) out.add(_answer(m.text));
+        if (m.calls.isNotEmpty) out.add(_toolTurn(m.calls, outputs, runningId));
       }
     }
     final String partial = _session?.loop.partial ?? '';
-    if (partial.isNotEmpty) {
-      out.add(Padding(
-        padding: const EdgeInsets.only(bottom: 12, left: 22),
-        child: Text(partial, style: C.answer),
-      ));
+    if (partial.isNotEmpty) out.add(_answer(partial, streaming: true));
+    if (_running && partial.isEmpty) {
+      out.add(_ThinkingRow(phase: _session?.loop.phase ?? AgentPhase.thinking));
     }
     if (out.isEmpty) out.add(_empty());
     return out;
   }
 
+  Widget _userTurn(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(top: 2),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: C.blueSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('❯',
+                style: TextStyle(fontSize: 12, color: C.blue, height: 1.1)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: C.ask)),
+        ],
+      ),
+    );
+  }
+
+  Widget _answer(String text, {bool streaming = false}) {
+    final TextStyle style = C.answer;
+    return Padding(
+      padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : 18),
+      child: streaming
+          ? Text.rich(
+              TextSpan(
+                children: <TextSpan>[
+                  TextSpan(text: text),
+                  const TextSpan(text: ' ▍', style: TextStyle(color: C.blue)),
+                ],
+              ),
+              style: style,
+            )
+          : Text(text, style: style),
+    );
+  }
+
+  Widget _toolTurn(List<LlmToolCall> calls, Map<String, String> outputs, String runningId) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 34, bottom: 18),
+      child: ToolRunGroup(calls: calls, outputs: outputs, runningId: runningId),
+    );
+  }
+
   Widget _empty() {
     return Padding(
-      padding: const EdgeInsets.only(top: 30),
+      padding: const EdgeInsets.only(top: 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const Text('说说要做什么',
-              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),
-          const SizedBox(height: 8),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4)),
+          const SizedBox(height: 10),
           const Text('比如：看看磁盘，把 nginx 的老日志清一下。', style: C.answer),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
               color: C.paper2,
               borderRadius: BorderRadius.circular(C.radiusSmall),
@@ -304,21 +334,29 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     return '${k.toStringAsFixed(k < 10 ? 1 : 0)}k';
   }
 
+  /// While a turn is running the header answers 「它还在跑吗」; when idle it
+  /// shows what the conversation has spent.
   Widget _usage(AgentSession? session) {
     if (session == null) return const SizedBox.shrink();
-    final int tokens = session.loop.liveTokens;
+    if (_running) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const SizedBox(
+            width: 11,
+            height: 11,
+            child: CircularProgressIndicator(strokeWidth: 1.6, color: C.blue),
+          ),
+          const SizedBox(width: 7),
+          Text('第 ${session.loop.step}/${session.loop.maxSteps} 步',
+              style: C.monoSmall.copyWith(color: C.blue)),
+        ],
+      );
+    }
     final double hit = session.loop.cacheHitRate;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        Text('${session.loop.step}/${session.loop.maxSteps}', style: C.monoSmall),
-        const SizedBox(height: 2),
-        Text(
-          '${_fmtTokens(tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
-          style: C.monoSmall.copyWith(color: hit > 0 ? C.blue : C.grey2, fontSize: 9.5),
-        ),
-      ],
+    return Text(
+      '${_fmtTokens(session.loop.tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
+      style: C.monoSmall.copyWith(color: hit > 0 ? C.blue : C.grey2),
     );
   }
 
@@ -329,19 +367,21 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       children: <Widget>[
         Container(
           height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: const BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
           child: Row(
             children: <Widget>[
-              IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
-                splashRadius: 20,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              GestureDetector(
+                onTap: widget.onBack,
+                behavior: HitTestBehavior.opaque,
+                child: const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Icon(Icons.arrow_back, size: 19, color: C.ink),
+                ),
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -353,8 +393,9 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                       widget.conversation.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                     ),
+                    const SizedBox(height: 2),
                     Text(widget.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -362,32 +403,33 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                   ],
                 ),
               ),
-              _usage(session),
+              const SizedBox(width: 10),
+              Flexible(child: _usage(session)),
               const SizedBox(width: 10),
               if (_running)
                 GestureDetector(
                   onTap: _stop,
                   child: Container(
-                    width: 30,
-                    height: 30,
+                    width: 32,
+                    height: 32,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: C.card,
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(C.radiusSmall),
                       border: Border.all(color: C.rule2),
                     ),
                     child: Container(width: 9, height: 9, color: C.body),
                   ),
                 )
               else
-                const SizedBox(width: 30),
+                const SizedBox(width: 32),
             ],
           ),
         ),
         Expanded(
           child: SingleChildScrollView(
             controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: _thread(),
@@ -396,7 +438,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         ),
         if (_pending != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
             child: ApprovalCard(
               request: _pending!,
               onDecide: _decide,
@@ -408,7 +450,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         if (_attachNames.isNotEmpty)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -442,9 +484,9 @@ class _ChatPageState extends State<ChatPage> implements Approver {
             ),
           ),
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
             decoration: BoxDecoration(
               color: C.card,
               borderRadius: BorderRadius.circular(C.radius),
@@ -452,37 +494,49 @@ class _ChatPageState extends State<ChatPage> implements Approver {
               boxShadow: C.softShadow,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 GestureDetector(
                   onTap: _running ? null : _pickFiles,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(Icons.add_circle_outline, size: 20, color: C.grey),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8, right: 6, left: 2),
+                    child: Icon(Icons.add_circle_outline,
+                        size: 21, color: _running ? C.rule2 : C.grey),
                   ),
                 ),
-                const SizedBox(width: 7),
-                const Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 9),
+                  child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: TextField(
                     controller: _input,
                     enabled: !_running && session != null,
-                    style: const TextStyle(fontSize: 14),
+                    style: const TextStyle(fontSize: 14.5, height: 1.5),
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(hintText: '接着说，或者让它停'),
+                    decoration: const InputDecoration(
+                      hintText: '交给它一件事',
+                      contentPadding: EdgeInsets.symmetric(vertical: 9),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: (_running || session == null) ? null : _send,
                   child: Container(
-                    width: 34,
-                    height: 34,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: (_running || session == null) ? C.rule2 : C.blue,
                       borderRadius: BorderRadius.circular(C.radiusSmall),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(Icons.arrow_upward, size: 18, color: Colors.white),
+                    child: const Icon(Icons.arrow_upward, size: 19, color: Colors.white),
                   ),
                 ),
               ],
@@ -491,5 +545,94 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         ),
       ],
     );
+  }
+}
+
+/// The live line at the tail of the transcript: three breathing dots, what the
+/// loop is doing, and how long it has been doing it.
+class _ThinkingRow extends StatefulWidget {
+  const _ThinkingRow({required this.phase});
+
+  final AgentPhase phase;
+
+  @override
+  State<_ThinkingRow> createState() => _ThinkingRowState();
+}
+
+class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+  Timer? _tick;
+  int _seconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _seconds += 1);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  String get _label {
+    switch (widget.phase) {
+      case AgentPhase.thinking:
+        return '正在想';
+      case AgentPhase.acting:
+        return '正在执行';
+      case AgentPhase.waiting:
+        return '等你批准';
+      case AgentPhase.idle:
+        return '正在收尾';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 34, bottom: 14),
+      child: Row(
+        children: <Widget>[
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (BuildContext context, Widget? child) {
+              return Row(
+                children: <Widget>[
+                  for (int i = 0; i < 3; i += 1)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Opacity(
+                        opacity: _fade(i),
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: const BoxDecoration(color: C.blue, shape: BoxShape.circle),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+          Text('$_label · $_seconds 秒',
+              style: C.monoSmall.copyWith(color: C.grey, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  double _fade(int i) {
+    final double p = (_pulse.value + i / 3) % 1;
+    final double wave = p < 0.5 ? p * 2 : (1 - p) * 2;
+    return 0.25 + 0.75 * wave;
   }
 }
