@@ -43,13 +43,7 @@ class _HostsPageState extends State<HostsPage> {
               const Text('主机', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               const Spacer(),
               Text('${list.length} 台', style: C.monoSmall),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: list.isEmpty ? null : _monitor,
-                icon: Icon(Icons.monitor_heart_outlined,
-                    size: 18, color: list.isEmpty ? C.grey2 : C.grey),
-                tooltip: '资源监看',
-              ),
+              const SizedBox(width: 12),
               GestureDetector(
                 onTap: () => _edit(),
                 child: Container(
@@ -77,11 +71,17 @@ class _HostsPageState extends State<HostsPage> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  itemCount: list.length,
-                  itemBuilder: (BuildContext context, int i) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _row(list[i], i),
-                  ),
+                  itemCount: list.length + 1,
+                  itemBuilder: (BuildContext context, int i) {
+                    if (i == 0) return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _monitorRow(list.length),
+                        );
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _row(list[i - 1], i - 1),
+                    );
+                  },
                 ),
         ),
         Container(
@@ -93,6 +93,47 @@ class _HostsPageState extends State<HostsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 资源监看的入口。放在列表最上面一行，不去挤标题栏。
+  Widget _monitorRow(int count) {
+    return InkWell(
+      onTap: _monitor,
+      borderRadius: BorderRadius.circular(C.radius),
+      child: CardBox(
+        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: C.blueSoft,
+                borderRadius: BorderRadius.circular(C.radiusSmall),
+              ),
+              child: const Icon(Icons.monitor_heart_outlined, size: 18, color: C.blue),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('资源监看',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text('$count 台的 CPU、内存、磁盘、网络',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: C.monoSmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+          ],
+        ),
+      ),
     );
   }
 
