@@ -138,6 +138,8 @@ class SessionHub extends ChangeNotifier {
     live.lastNoteText = '';
     loop.maxSteps = services.settings.value.maxSteps;
     loop.extraSystem = services.settings.value.extraPrompt;
+    // 设置里的提示词改了，下一轮就用新的；对话自己那份照旧优先。
+    loop.systemPrompt = promptFor(services.settings, live.conversation);
     changed();
     board.note('c:${live.conversation.id}', '${live.conversation.title} · 开跑');
     try {
