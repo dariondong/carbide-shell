@@ -1,4 +1,5 @@
 import 'core/agent.dart';
+import 'core/memory.dart';
 import 'core/policy.dart';
 import 'data/hosts.dart';
 import 'data/secrets.dart';
@@ -14,6 +15,7 @@ class AppServices {
     required this.policy,
     required this.agent,
     required this.pool,
+    required this.memory,
   });
 
   final HostStore hosts;
@@ -22,4 +24,5 @@ class AppServices {
   final ApprovalPolicy policy;
   final AgentLoop agent;
   final SshPool pool;
+  final MemoryStore memory;
 }

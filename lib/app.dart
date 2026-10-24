@@ -4,6 +4,7 @@ import 'data/hosts.dart';
 import 'services.dart';
 import 'ui/chat_page.dart';
 import 'ui/hosts_page.dart';
+import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
@@ -61,6 +62,7 @@ class _HomeShellState extends State<HomeShell> {
             ),
             HostsPage(hosts: s.hosts, secrets: s.secrets, onChanged: _refresh),
             TerminalPage(hosts: s.hosts, pool: s.pool),
+            MemoryPage(memory: s.memory, onChanged: _refresh),
             SettingsPage(
               settings: s.settings,
               secrets: s.secrets,
@@ -80,7 +82,8 @@ class _HomeShellState extends State<HomeShell> {
             _nav(0, Icons.forum_outlined, '会话'),
             _nav(1, Icons.dns_outlined, '主机'),
             _nav(2, Icons.terminal, '终端'),
-            _nav(3, Icons.settings_outlined, '设置'),
+            _nav(3, Icons.bookmarks_outlined, '记忆'),
+            _nav(4, Icons.settings_outlined, '设置'),
           ],
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/agent.dart';
 import '../core/models.dart';
 import '../core/policy.dart';
+import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
 import 'components.dart';
@@ -33,6 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _steps;
   late final TextEditingController _domains;
   String _mode = 'autoRead';
+  String _picked = '';
   String _saved = '';
 
   @override
@@ -104,6 +106,20 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              SectionLabel('从列表选'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kLlmPresets
+                    .map((LlmPreset p) => _presetChip(p))
+                    .toList(),
+              ),
+              if (_picked.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(_picked, style: const TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
+              ],
+              const SizedBox(height: 20),
               RuleField(controller: _base, label: '模型地址', hint: 'https://api.example.com/v1'),
               RuleField(controller: _model, label: '模型名', hint: '随便一个支持 tools 的模型'),
               RuleField(controller: _key, label: '接口密钥', obscure: true),
@@ -149,6 +165,23 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _presetChip(LlmPreset p) {
+    return GestureDetector(
+      onTap: () {
+        _base.text = p.baseUrl;
+        if (p.models.isNotEmpty) _model.text = p.models.first;
+        setState(() => _picked = p.note.isEmpty
+            ? '已填 ${p.name} 的地址，模型名可以改成 ${p.models.join(' / ')}'
+            : '${p.name}：${p.note}');
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(border: Border.all(color: C.rule2)),
+        child: Text(p.name, style: const TextStyle(fontSize: 12, color: C.ink)),
+      ),
     );
   }
 

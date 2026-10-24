@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app.dart';
 import 'core/agent.dart';
 import 'core/journal.dart';
+import 'core/memory.dart';
 import 'core/models.dart';
 import 'core/policy.dart';
 import 'core/tools.dart';
@@ -29,6 +30,9 @@ Future<void> main() async {
   final SettingsStore settings = SettingsStore(File('${dir.path}/settings.json'));
   await settings.load();
 
+  final MemoryStore memory = MemoryStore(File('${dir.path}/memory.json'));
+  await memory.load();
+
   const SecretStore secrets = SecureSecretStore();
   final SshPool pool = SshPool(hosts: hosts, secrets: secrets);
 
@@ -37,7 +41,7 @@ Future<void> main() async {
     ..register(SshSftpTool(pool, hosts))
     ..register(HttpTool(settings))
     ..register(FileTool())
-    ..register(RememberTool());
+    ..register(RememberTool(memory));
   if (isDesktopPlatform) {
     registry.register(LocalExecTool());
   }
@@ -50,7 +54,7 @@ Future<void> main() async {
     journal: FileJournal(File('${dir.path}/journal.jsonl')),
     context: ToolContext(workspace: workspace.path, desktop: isDesktopPlatform),
     maxSteps: settings.value.maxSteps,
-    environment: () => _environment(hosts, workspace),
+    environment: () => _environment(hosts, workspace, memory),
   );
 
   runApp(CarbideApp(
@@ -61,11 +65,12 @@ Future<void> main() async {
       policy: policy,
       agent: agent,
       pool: pool,
+      memory: memory,
     ),
   ));
 }
 
-String _environment(HostStore hosts, Directory workspace) {
+String _environment(HostStore hosts, Directory workspace, MemoryStore memory) {
   final StringBuffer b = StringBuffer('\n当前环境\n');
   b.writeln('- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
   b.writeln('- 工作目录：${workspace.path}');
@@ -76,6 +81,11 @@ String _environment(HostStore hosts, Directory workspace) {
     for (final HostEntry h in hosts.hosts) {
       b.writeln('  ${h.name} = ${h.address}');
     }
+  }
+  final String known = memory.renderForPrompt();
+  if (known.isNotEmpty) {
+    b.write('\n');
+    b.write(known);
   }
   return b.toString();
 }

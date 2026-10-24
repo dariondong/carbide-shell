@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../core/memory.dart';
 import '../core/models.dart';
 import '../core/tools.dart';
 
@@ -113,19 +114,27 @@ class FileTool extends Tool {
   }
 }
 
-/// A small notebook the agent keeps between turns.
+/// Writes one line into the long-term memory list.
 class RememberTool extends Tool {
+  RememberTool(this.memory);
+
+  final MemoryStore memory;
+
   @override
   String get name => 'remember';
 
   @override
-  String get description => '往本地笔记里写一行，下次还能读到。';
+  String get description => '把一件事记进长期记忆，下次开软件还在，也会出现在你的系统提示里。';
 
   @override
   Map<String, Object?> get schema => <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
-          'note': <String, Object?>{'type': 'string'},
+          'note': <String, Object?>{'type': 'string', 'description': '要记住的一句话'},
+          'tag': <String, Object?>{
+            'type': 'string',
+            'description': '可选分类：偏好 / 主机 / 规则',
+          },
         },
         'required': <String>['note'],
       };
@@ -140,16 +149,11 @@ class RememberTool extends Tool {
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
     final String note = readString(args, 'note').trim();
     if (note.isEmpty) return const ToolOutcome.failure('内容是空的。');
-    final File file = File('${context.workspace}/notes.md');
-    try {
-      await file.parent.create(recursive: true);
-      final String stamp = DateTime.now().toIso8601String().substring(0, 16);
-      await file.writeAsString('- $stamp $note\n', mode: FileMode.append);
-      final List<String> lines = await file.readAsLines();
-      final List<String> tail = lines.length <= 10 ? lines : lines.sublist(lines.length - 10);
-      return ToolOutcome.success(stdout: tail.join('\n'));
-    } catch (e) {
-      return ToolOutcome.failure('$e');
+    await memory.add(note, tag: readString(args, 'tag'));
+    final StringBuffer b = StringBuffer('记下了。现在一共有 ${memory.length} 条：\n');
+    for (final MemoryEntry e in memory.entries.take(5)) {
+      b.writeln('- ${e.tag.isEmpty ? '' : '[${e.tag}] '}${e.text}');
     }
+    return ToolOutcome.success(stdout: b.toString());
   }
 }
