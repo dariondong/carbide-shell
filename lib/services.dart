@@ -68,11 +68,20 @@ class AppServices {
       environment: () => environmentText(hosts, workspace, memory, c),
     );
     loop.extraSystem = settings.value.extraPrompt;
+    loop.systemPrompt = promptFor(settings, c);
     return AgentSession(loop: loop, memory: store);
   }
 
   /// Rebuild the transcript on disk. Called after every turn.
   Future<void> persist(Conversation c) => conversations.save(c);
+}
+
+/// 这个对话该用哪份系统提示词：对话自己的优先，然后是设置里的，都没有就用内置那份。
+String promptFor(SettingsStore settings, Conversation c) {
+  final String own = c.systemPrompt.trim();
+  if (own.isNotEmpty) return own;
+  final String shared = settings.value.systemPrompt.trim();
+  return shared.isEmpty ? kSystemPrompt : shared;
 }
 
 String environmentText(

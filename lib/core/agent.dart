@@ -73,6 +73,9 @@ class AgentLoop {
   /// The user's own standing instructions, appended after the built-in prompt.
   String extraSystem = '';
 
+  /// 这一轮用的系统提示词。默认是内置那份，用户可以在设置里或对话里换掉。
+  String systemPrompt = kSystemPrompt;
+
   /// The transcript. May be owned by a Conversation so it survives restarts.
   final List<LlmMessage> history;
 
@@ -137,7 +140,7 @@ class AgentLoop {
             .where((String s) => s.isNotEmpty)
             .join('\n');
         reply = await llm.chat(
-          system: tail.isEmpty ? kSystemPrompt : '$kSystemPrompt\n$tail',
+          system: systemText(tail),
           messages: _window(),
           tools: registry.specs(),
           cancel: cancel,
@@ -298,6 +301,12 @@ class AgentLoop {
       kept.removeAt(0);
     }
     return kept;
+  }
+
+  /// 基础提示词 + 用户附加的指示 + 当前环境。空着就用内置那份。
+  String systemText(String tail) {
+    final String base = systemPrompt.trim().isEmpty ? kSystemPrompt : systemPrompt.trim();
+    return tail.isEmpty ? base : '$base\n$tail';
   }
 
   void _notify() {

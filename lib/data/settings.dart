@@ -14,6 +14,7 @@ class AppSettings {
     this.stream = true,
     this.contextChars = 24000,
     this.extraPrompt = '',
+    this.systemPrompt = '',
     this.answerFont = 13.5,
     this.autoCheckUpdate = true,
   });
@@ -41,6 +42,9 @@ class AppSettings {
   /// Extra instructions appended to the built-in system prompt.
   String extraPrompt;
 
+  /// 整个换掉的系统提示词。空着表示用内置那份。
+  String systemPrompt;
+
   /// Transcript font size for answers.
   double answerFont;
 
@@ -58,6 +62,7 @@ class AppSettings {
         'stream': stream,
         'contextChars': contextChars,
         'extraPrompt': extraPrompt,
+        'systemPrompt': systemPrompt,
         'answerFont': answerFont,
         'autoCheckUpdate': autoCheckUpdate,
       };
@@ -74,6 +79,7 @@ class AppSettings {
       stream: json['stream'] != false,
       contextChars: (json['contextChars'] as num?)?.toInt() ?? 24000,
       extraPrompt: '${json['extraPrompt'] ?? ''}',
+      systemPrompt: '${json['systemPrompt'] ?? ''}',
       answerFont: (json['answerFont'] as num?)?.toDouble() ?? 13.5,
       autoCheckUpdate: json['autoCheckUpdate'] != false,
       allowedDomains: domains is List

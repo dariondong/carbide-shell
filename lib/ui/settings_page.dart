@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/policy.dart';
@@ -47,6 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _key;
   late final TextEditingController _steps;
   late final TextEditingController _prompt;
+  late final TextEditingController _sys;
   late final TextEditingController _domains;
 
   String _mode = 'autoRead';
@@ -71,6 +73,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _key = TextEditingController();
     _steps = TextEditingController(text: '${s.maxSteps}');
     _prompt = TextEditingController(text: s.extraPrompt);
+    _sys = TextEditingController(text: s.systemPrompt);
     _domains = TextEditingController(text: s.allowedDomains.join('\n'));
     _mode = s.approvalMode;
     _temperature = s.temperature;
@@ -91,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _key.dispose();
     _steps.dispose();
     _prompt.dispose();
+    _sys.dispose();
     _domains.dispose();
     super.dispose();
   }
@@ -112,6 +116,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ..stream = _stream
       ..contextChars = _context
       ..extraPrompt = _prompt.text.trim()
+      ..systemPrompt = _sys.text.trim()
       ..answerFont = _font
       ..autoCheckUpdate = _autoUpdate
       ..allowedDomains = _domains.text
@@ -155,6 +160,35 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (!mounted) return;
     setState(() => _saved = touched == 0 ? '本来就没有批准的记录' : '清掉了 $touched 个对话的批准');
+  }
+
+  /// 内置那份长什么样，让用户看得见再决定要不要换。
+  Future<void> _showBuiltinPrompt() async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('内置提示词', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: SelectableText(kSystemPrompt,
+                style: C.mono.copyWith(fontSize: 12, height: 1.7)),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restoreBuiltinPrompt() async {
+    if (_sys.text.trim().isEmpty) return;
+    setState(() => _sys.text = '');
+    await _persist();
   }
 
   Future<void> _checkNow() async {
@@ -300,6 +334,36 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               const SizedBox(height: 22),
+              SectionLabel('提示词'),
+              const SizedBox(height: 8),
+              CardBox(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    RuleField(
+                      controller: _sys,
+                      label: '系统提示词',
+                      hint: '留空就是用内置那份。写了就整份替换掉。',
+                      minLines: 6,
+                      maxLines: 14,
+                      onChanged: (_) => _touch(),
+                    ),
+                    RuleField(
+                      controller: _prompt,
+                      label: '附加指示',
+                      hint: '拼在系统提示词后面，比如：回答短一点',
+                      minLines: 2,
+                      maxLines: 4,
+                      onChanged: (_) => _touch(),
+                    ),
+                    _action('看看内置提示词', '只读', _showBuiltinPrompt),
+                    _action('恢复内置提示词', _sys.text.trim().isEmpty ? '现在就是内置的' : '清掉上面那份',
+                        _restoreBuiltinPrompt),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
               SectionLabel('对话'),
               const SizedBox(height: 8),
               CardBox(
@@ -330,14 +394,6 @@ class _SettingsPageState extends State<SettingsPage> {
                               ? '标准'
                               : '大',
                       (double v) => _apply(() => _font = v),
-                    ),
-                    RuleField(
-                      controller: _prompt,
-                      label: '附加指示',
-                      hint: '每轮都拼在系统提示后面，比如：回答短一点',
-                      minLines: 2,
-                      maxLines: 4,
-                      onChanged: (_) => _touch(),
                     ),
                   ],
                 ),

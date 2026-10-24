@@ -132,6 +132,104 @@ class _ChatPageState extends State<ChatPage> {
     if (live != null) widget.hub.stop(live);
   }
 
+  /// 只换这个对话的提示词：写了就自己用一份，留空就回到设置里那份。
+  Future<void> _editPrompt() async {
+    final Conversation c = widget.conversation;
+    final TextEditingController ctrl = TextEditingController(text: c.systemPrompt);
+    final bool follows = c.systemPrompt.trim().isEmpty;
+    final String? saved = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0x00000000),
+      builder: (BuildContext ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: C.paper,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Text('这个对话的提示词',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.grey,
+                      minimumSize: const Size(0, 34),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                follows ? '现在跟设置里的那份走。在这里写就是只换这个对话。' : '这个对话用自己的一份，不跟设置走。',
+                style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: C.card,
+                  borderRadius: BorderRadius.circular(C.radiusSmall),
+                  border: Border.all(color: C.rule),
+                ),
+                child: TextField(
+                  controller: ctrl,
+                  minLines: 6,
+                  maxLines: 14,
+                  style: C.mono.copyWith(fontSize: 12.5),
+                  decoration: const InputDecoration(hintText: '留空就是用设置里那份'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: SquareButton(
+                      label: '跟设置走',
+                      tone: 'ink',
+                      onPressed: () => Navigator.of(ctx).pop(''),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SquareButton(
+                      label: '存到这个对话',
+                      filled: true,
+                      onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    ctrl.dispose();
+    if (saved == null || !mounted) return;
+    c.systemPrompt = saved.trim();
+    await widget.services.persist(c);
+    final LiveSession? live = _live;
+    if (live != null) {
+      live.loop.systemPrompt = promptFor(widget.services.settings, c);
+    }
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(saved.trim().isEmpty ? '这个对话改回跟设置走。' : '这个对话换成了自己的一份。')),
+    );
+  }
+
   Future<void> _pickFiles() async {
     final FilePickerResult? picked = await FilePicker.platform.pickFiles(
       allowMultiple: true,
@@ -396,7 +494,17 @@ class _ChatPageState extends State<ChatPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _editPrompt,
+                behavior: HitTestBehavior.opaque,
+                child: const SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: Icon(Icons.tune, size: 17, color: C.grey),
+                ),
+              ),
+              const SizedBox(width: 4),
               Flexible(child: _usage(loop)),
               const SizedBox(width: 10),
               if (_running)

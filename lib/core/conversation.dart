@@ -13,6 +13,7 @@ class Conversation {
     DateTime? updatedAt,
     this.autoApproveAll = false,
     this.tokensUsed = 0,
+    this.systemPrompt = '',
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -33,6 +34,9 @@ class Conversation {
   /// Tokens spent across every turn of this conversation.
   int tokensUsed;
 
+  /// 这个对话自己的系统提示词。空着表示跟设置走。
+  String systemPrompt;
+
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
 
@@ -52,6 +56,7 @@ class Conversation {
         'updatedAt': updatedAt.toIso8601String(),
         'autoApproveAll': autoApproveAll,
         'tokensUsed': tokensUsed,
+        if (systemPrompt.trim().isNotEmpty) 'systemPrompt': systemPrompt,
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -74,6 +79,7 @@ class Conversation {
       updatedAt: DateTime.tryParse('${json['updatedAt'] ?? ''}') ?? DateTime.now(),
       autoApproveAll: json['autoApproveAll'] == true,
       tokensUsed: (json['tokensUsed'] as num?)?.toInt() ?? 0,
+      systemPrompt: '${json['systemPrompt'] ?? ''}',
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],
