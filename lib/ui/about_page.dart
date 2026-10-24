@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/usage.dart';
 import '../data/update.dart';
+import '../data/usage.dart';
 import '../version.dart';
 import 'components.dart';
 import 'motion.dart';
