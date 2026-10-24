@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Scaffold platform folders
+        run: |
+          flutter create --project-name carbide_shell --org top.theez \
+            --platforms=android,ios,linux,macos,windows /tmp/scaffold
+          cp -r /tmp/scaffold/android .
+          cp -r /tmp/scaffold/ios .
+
+      - name: Build debug APK
+        run: flutter build apk --debug
