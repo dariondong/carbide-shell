@@ -3,6 +3,25 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+/// 这台机器现在能不能弹通知：系统总开关，加上安卓 13 起的那个权限。
+class NotifyState {
+  const NotifyState({this.allowed = true, this.granted = true});
+
+  /// 系统设置里允许这个应用发通知。
+  final bool allowed;
+
+  /// 安卓 13 起要单独允许的 POST_NOTIFICATIONS。
+  final bool granted;
+
+  bool get ready => allowed && granted;
+
+  String get text {
+    if (ready) return '开着';
+    if (!allowed) return '系统里被关掉了';
+    return '还没允许';
+  }
+}
+
 /// 跑长任务时挂一条前台通知，切出去、锁屏都还在跑。
 ///
 /// 只有 Android 有这一套；别的平台这几个方法什么都不做，调用点不用分支。
@@ -34,6 +53,45 @@ class ForegroundTask {
 
   /// 系统的省电与后台限制那一页。有的系统会连服务一起清掉，这一项让用户自己放开。
   static Future<void> openBatterySettings() => _call('battery', '');
+
+  /// 通知渠道建出来，顺带拿一眼现在能不能发。
+  static Future<NotifyState> prepare() async => supported ? await state() : const NotifyState();
+
+  /// 现在能不能发通知。桌面和测试环境当作能。
+  static Future<NotifyState> state() async {
+    if (!supported) return const NotifyState();
+    final Map<Object?, Object?>? map = await _ask('notifyState');
+    if (map == null) return const NotifyState();
+    return NotifyState(
+      allowed: map['allowed'] != false,
+      granted: map['granted'] != false,
+    );
+  }
+
+  /// 主动要一次通知权限。
+  static Future<NotifyState> request() async {
+    if (!supported) return const NotifyState();
+    final Map<Object?, Object?>? map = await _ask('request');
+    if (map == null) return const NotifyState();
+    return NotifyState(
+      allowed: map['allowed'] != false,
+      granted: map['granted'] != false,
+    );
+  }
+
+  /// 系统的通知设置页。权限拒过之后只能在这里打开。
+  static Future<void> openNotificationSettings() => _call('notifSettings', '');
+
+  /// 问原生要一个 map，原生那段不在就当没有。
+  static Future<Map<Object?, Object?>?> _ask(String method) async {
+    try {
+      return await _channel.invokeMapMethod<Object?, Object?>(method);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
 
   /// 应用现在是不是在前台。取不到生命周期就当作在前台。
   static bool get visible {

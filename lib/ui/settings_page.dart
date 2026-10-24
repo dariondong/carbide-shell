@@ -6,8 +6,10 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/policy.dart';
+import '../core/smtp.dart';
 import '../core/usage.dart';
 import '../data/foreground.dart';
+import '../data/mail.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
@@ -32,6 +34,7 @@ class SettingsPage extends StatefulWidget {
     required this.onOpenAbout,
     required this.onOpenUsage,
     required this.usage,
+    required this.mail,
   });
 
   final SettingsStore settings;
@@ -44,6 +47,9 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onOpenAbout;
   final VoidCallback onOpenUsage;
   final UsageStore usage;
+
+  /// 邮件通知的设置。
+  final MailStore mail;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -71,6 +77,19 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _checking = false;
   Timer? _debounce;
 
+  /// 现在能不能弹通知，进页时问一次原生。
+  NotifyState _notify = const NotifyState();
+
+  late final TextEditingController _mailHost;
+  late final TextEditingController _mailPort;
+  late final TextEditingController _mailUser;
+  late final TextEditingController _mailPass;
+  late final TextEditingController _mailFrom;
+  late final TextEditingController _mailTo;
+  bool _mailOn = false;
+  bool _mailSecure = true;
+  String _mailNote = '';
+
   /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
   final ValueNotifier<int> _tick = ValueNotifier<int>(0);
 
@@ -85,6 +104,15 @@ class _SettingsPageState extends State<SettingsPage> {
     _prompt = TextEditingController(text: s.extraPrompt);
     _sys = TextEditingController(text: s.systemPrompt);
     _domains = TextEditingController(text: s.allowedDomains.join('\n'));
+    final SmtpConfig m = widget.mail.value;
+    _mailHost = TextEditingController(text: m.host);
+    _mailPort = TextEditingController(text: '${m.port}');
+    _mailUser = TextEditingController(text: m.user);
+    _mailPass = TextEditingController();
+    _mailFrom = TextEditingController(text: m.from);
+    _mailTo = TextEditingController(text: m.to);
+    _mailOn = m.enabled;
+    _mailSecure = m.secure;
     _mode = s.approvalMode;
     _temperature = s.temperature;
     _font = s.answerFont;
@@ -94,6 +122,26 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.secrets.read(modelSecretKey()).then((String key) {
       if (mounted && key.isNotEmpty) setState(() => _key.text = key);
     });
+    _readNotify();
+    widget.mail.password().then((String p) {
+      if (mounted && p.isNotEmpty) setState(() => _mailPass.text = p);
+    });
+  }
+
+  Future<void> _readNotify() async {
+    final NotifyState state = await ForegroundTask.state();
+    if (mounted) setState(() => _notify = state);
+  }
+
+  /// 要一次通知权限；系统已经不再弹框的话，把人送去通知设置页。
+  Future<void> _askNotify() async {
+    final NotifyState before = _notify;
+    final NotifyState after = await ForegroundTask.request();
+    if (!mounted) return;
+    setState(() => _notify = after);
+    if (!after.granted && before.granted == after.granted) {
+      await ForegroundTask.openNotificationSettings();
+    }
   }
 
   @override
@@ -107,6 +155,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _prompt.dispose();
     _sys.dispose();
     _domains.dispose();
+    _mailHost.dispose();
+    _mailPort.dispose();
+    _mailUser.dispose();
+    _mailPass.dispose();
+    _mailFrom.dispose();
+    _mailTo.dispose();
     super.dispose();
   }
 
@@ -147,6 +201,17 @@ class _SettingsPageState extends State<SettingsPage> {
           .toList();
     await widget.settings.save();
     await widget.secrets.write(modelSecretKey(), _key.text.trim());
+    widget.mail.value = SmtpConfig(
+      enabled: _mailOn,
+      host: _mailHost.text.trim(),
+      port: _intOf(_mailPort.text, 465, 1, 65535),
+      secure: _mailSecure,
+      user: _mailUser.text.trim(),
+      from: _mailFrom.text.trim(),
+      to: _mailTo.text.trim(),
+    );
+    await widget.mail.save();
+    await widget.mail.setPassword(_mailPass.text.trim());
     widget.policy.mode = _mode == 'autoAll'
         ? ApprovalMode.autoAll
         : _mode == 'askAll'
@@ -415,6 +480,9 @@ class _SettingsPageState extends State<SettingsPage> {
             .where((String d) => d.trim().isNotEmpty)
             .length;
         return n == 0 ? '一个都不许' : '$n 个域名';
+      case 'mail':
+        if (!_mailOn) return '没开';
+        return _mailTo.text.trim().isEmpty ? '没填收件人' : '开着';
       case 'update':
         return _autoUpdate ? '启动时查' : '不自动查';
       case 'power':
@@ -636,11 +704,91 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ];
+      case 'mail':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _toggle(
+                  '发邮件通知',
+                  _mailOn,
+                  '任务跑完、监听过线时发一封到邮箱',
+                  (bool v) => _apply(() => _mailOn = v),
+                ),
+                const RuleLine(),
+                const SizedBox(height: 12),
+                RuleField(
+                  controller: _mailHost,
+                  label: 'SMTP 服务器',
+                  hint: 'smtp.qq.com',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailPort,
+                  label: '端口',
+                  hint: '465',
+                  keyboard: TextInputType.number,
+                  onChanged: (_) => _touch(),
+                ),
+                _toggle(
+                  '直连加密',
+                  _mailSecure,
+                  _mailSecure ? '465 一般都要开' : '明文，只适合内网中转',
+                  (bool v) => _apply(() => _mailSecure = v),
+                ),
+                RuleField(
+                  controller: _mailUser,
+                  label: '账号',
+                  hint: 'somebody@qq.com',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailPass,
+                  label: '密码或授权码',
+                  hint: '留空表示不登录',
+                  obscure: true,
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailFrom,
+                  label: '发件人',
+                  hint: 'somebody@qq.com',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailTo,
+                  label: '收件人',
+                  hint: '多个用逗号分开',
+                  onChanged: (_) => _touch(),
+                ),
+                const RuleLine(),
+                _action('发一封试试', _mailNote.isEmpty ? '按上面的设置发' : _mailNote, _testMail),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '发不出去只影响这一封，任务照常跑完。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
       case 'power':
         return <Widget>[
           CardBox(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-            child: _action('系统省电设置', '允许后台运行', ForegroundTask.openBatterySettings),
+            child: Column(
+              children: <Widget>[
+                _action(
+                  '系统通知',
+                  _notify.ready ? '开着' : '${_notify.text}，点一下打开',
+                  _notify.ready ? ForegroundTask.openNotificationSettings : _askNotify,
+                ),
+                const RuleLine(),
+                _action('系统省电设置', '允许后台运行', ForegroundTask.openBatterySettings),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           const Text(
@@ -718,6 +866,23 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// 发一封试试：按输入框里现在的设置发，不等那 600 毫秒。
+  Future<void> _testMail() async {
+    setState(() => _mailNote = '正在发…');
+    await _persist();
+    final Mailer mailer = Mailer(widget.mail);
+    if (!mailer.ready) {
+      if (mounted) setState(() => _mailNote = widget.mail.value.missing);
+      return;
+    }
+    final SmtpResult result = await mailer.send(
+      'Carbide Shell · 测试邮件',
+      mailBody(line: '这是一封测试邮件，能收到就说明邮件的设置对了。'),
+    );
+    if (!mounted) return;
+    setState(() => _mailNote = result.ok ? '发出去了' : '没发出去：${result.error}');
+  }
+
   Widget _toggle(String label, bool value, String note, void Function(bool) onChanged) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -784,6 +949,7 @@ const List<_Module> kSettingsModules = <_Module>[
   _Module('talk', '对话'),
   _Module('net', '网络'),
   _Module('update', '更新'),
+  _Module('mail', '邮件'),
   _Module('power', '后台'),
 ];
 

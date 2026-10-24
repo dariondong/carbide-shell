@@ -7,6 +7,7 @@ import 'core/policy.dart';
 import 'core/tools.dart';
 import 'data/hosts.dart';
 import 'data/llm_settings.dart';
+import 'data/mail.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
@@ -41,6 +42,7 @@ class AppServices {
     required this.tasks,
     required this.watches,
     required this.usage,
+    required this.mail,
     required this.workspace,
   });
 
@@ -58,6 +60,9 @@ class AppServices {
 
   /// 模型用量账本。
   final UsageStore usage;
+
+  /// 邮箱通知：定时任务跑完、监听过线时顺手发一封。
+  final MailStore mail;
   final String workspace;
 
   /// Tools are per session: `remember` must write into this conversation's

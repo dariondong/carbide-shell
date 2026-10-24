@@ -217,6 +217,7 @@ class _HomeShellState extends State<HomeShell> {
               onOpenAbout: _openAbout,
               onOpenUsage: _openUsage,
               usage: s.usage,
+              mail: s.mail,
             ),
           ],
         ),

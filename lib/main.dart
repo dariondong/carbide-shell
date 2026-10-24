@@ -12,6 +12,7 @@ import 'data/activity.dart';
 import 'data/hosts.dart';
 import 'data/hub.dart';
 import 'data/llm_settings.dart';
+import 'data/mail.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
@@ -44,6 +45,8 @@ Future<void> main() async {
   await watches.load();
   final UsageStore usage = UsageStore(File('${dir.path}/usage.json'));
   await usage.load();
+  final MailStore mail = MailStore(File('${dir.path}/mail.json'), secrets);
+  await mail.load();
 
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard();
@@ -59,6 +62,7 @@ Future<void> main() async {
     tasks: tasks,
     watches: watches,
     usage: usage,
+    mail: mail,
     workspace: workspace.path,
   );
 

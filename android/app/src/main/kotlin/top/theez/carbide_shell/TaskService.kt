@@ -1,5 +1,6 @@
 package top.theez.carbide_shell
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -113,6 +115,26 @@ class TaskService : Service() {
         @Volatile
         private var instance: TaskService? = null
 
+        /** 三条通知渠道建好。启动时调一次，第一条通知就不会因为渠道不存在被系统丢掉。 */
+        fun ensureChannels(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            ensureChannel(
+                context, CHANNEL_ID,
+                R.string.task_channel_name, R.string.task_channel_desc,
+                NotificationManager.IMPORTANCE_LOW,
+            )
+            ensureChannel(
+                context, DONE_CHANNEL_ID,
+                R.string.task_done_channel_name, R.string.task_done_channel_desc,
+                NotificationManager.IMPORTANCE_DEFAULT,
+            )
+            ensureChannel(
+                context, ALERT_CHANNEL_ID,
+                R.string.alert_channel_name, R.string.alert_channel_desc,
+                NotificationManager.IMPORTANCE_DEFAULT,
+            )
+        }
+
         /** 起服务（或更新已在跑的那条通知）。 */
         fun start(context: Context, text: String) {
             val intent = Intent(context, TaskService::class.java).putExtra(EXTRA_TEXT, text)
@@ -136,6 +158,29 @@ class TaskService : Service() {
             } else {
                 live.relabel(text)
             }
+        }
+
+        /** 现在能发通知吗：系统总开关和安卓 13 起那个权限。 */
+        fun state(context: Context): Map<String, Any> {
+            val allowed = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    val manager =
+                        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.areNotificationsEnabled()
+                } else {
+                    true
+                }
+            } catch (error: Throwable) {
+                true
+            }
+            val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            return mapOf(
+                "allowed" to allowed,
+                "granted" to granted,
+                "sdk" to Build.VERSION.SDK_INT,
+            )
         }
 
         /** 跑完了：收掉常驻通知，留一句结果，点一下回到对话。 */

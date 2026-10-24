@@ -13,8 +13,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var askedNotifications = false
 
+    /// 设置页问权限时先挂在这里，回调里再回话。
+    private var pendingNotification: MethodChannel.Result? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // 三条通知渠道建好，第一条通知就不会因为渠道不存在被系统静默丢掉。
+        TaskService.ensureChannels(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -54,6 +59,20 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "prepare" -> {
+                        TaskService.ensureChannels(this)
+                        result.success(TaskService.state(this))
+                    }
+
+                    "notifyState" -> result.success(TaskService.state(this))
+
+                    "request" -> requestNotifications(result)
+
+                    "notifSettings" -> {
+                        openNotificationSettings()
+                        result.success(null)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -81,8 +100,29 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
+     * 系统的通知设置页：权限拒了之后不再弹框，得由用户自己去打开。
+     */
+    private fun openNotificationSettings() {
+        val tries = listOf(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:$packageName")),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+        for (intent in tries) {
+            try {
+                startActivity(intent)
+                return
+            } catch (error: Throwable) {
+                // 这一层没有就试下一层
+            }
+        }
+    }
+
+    /**
      * 安卓 13 起没有通知权限时，前台服务照样跑，但那条通知看不见。
-     * 只在第一次跑任务时问一次，拒了就不再烦人。
+     * 第一次跑任务时问一次，设置里也能主动再问。
      */
     private fun askNotifications() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -93,10 +133,36 @@ class MainActivity : FlutterActivity() {
         ) {
             return
         }
-        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0xCB02)
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
+    }
+
+    /** 设置页点的那一下：把结果回给 Dart，界面照着刷新。 */
+    private fun requestNotifications(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(TaskService.state(this))
+            return
+        }
+        pendingNotification = result
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_NOTIFICATIONS) {
+            pendingNotification?.success(TaskService.state(this))
+            pendingNotification = null
+        }
     }
 
     private companion object {
         const val CHANNEL = "top.theez.carbide_shell/foreground"
+        const val REQ_NOTIFICATIONS = 0xCB02
     }
 }

@@ -14,6 +14,7 @@ import '../services.dart';
 import 'activity.dart';
 import 'foreground.dart';
 import 'hosts.dart';
+import 'mail.dart';
 import 'monitor.dart';
 import 'watch.dart';
 
@@ -304,6 +305,7 @@ class TaskScheduler {
             watch.title.isEmpty ? host.name : watch.title,
             watch.alertBody(host.name, reading.value, extra: reading.extra),
           ));
+          _mailWatch(watch, host, reading);
         }
       } catch (e) {
         watch.addHit(WatchHit(at: at, error: '$e'.replaceFirst('Exception: ', '')));
@@ -430,8 +432,31 @@ class TaskScheduler {
       await tasks.save();
       final String done = ok ? '跑完了' : '失败了';
       board.done('t:${task.id}', summary: '${task.title} · $done');
+      _mailRun(task, ok: ok, note: note, answer: answer);
       onChanged?.call();
     }
+  }
+
+  /// 定时任务跑完顺手发一封邮件。没开或者发不出去就算了，不影响任务本身。
+  void _mailRun(ScheduledTask task, {
+    required bool ok,
+    required String note,
+    required String answer,
+  }) {
+    final Mailer mailer = Mailer(services.mail);
+    if (!mailer.ready) return;
+    final String line = '${task.title} · ${ok ? '跑完了' : '失败了'}'
+        '${note.isEmpty ? '' : '：$note'}';
+    unawaited(mailer.send('Carbide Shell · $line', mailBody(line: line, detail: answer)));
+  }
+
+  /// 监听过线也发一封。
+  void _mailWatch(WatchTask watch, HostEntry host, WatchReading reading) {
+    final Mailer mailer = Mailer(services.mail);
+    if (!mailer.ready) return;
+    final String line = watch.alertBody(host.name, reading.value, extra: reading.extra);
+    unawaited(mailer.send('Carbide Shell · ${watch.title.isEmpty ? host.name : watch.title}',
+        mailBody(line: line)));
   }
 
   /// 通知上那句进度：走到第几步、在等什么。1.2 秒一次，文字没变就不重发。
