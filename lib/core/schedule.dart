@@ -4,6 +4,8 @@
 /// 「下一次什么时候」只按本机本地时间算，跨时区不特殊照顾。
 library;
 
+import 'rules.dart';
+
 /// 四种排法。日记时、按星期、按间隔、只跑一次。
 enum ScheduleKind { daily, weekly, interval, once }
 
@@ -74,6 +76,8 @@ class TaskRun {
     this.tokens = 0,
     this.late = false,
     this.missed = false,
+    this.skipped = false,
+    this.gate = '',
   });
 
   /// 原定的时刻。错过的那一条记的是原定时刻，不是发现它的时刻。
@@ -94,6 +98,12 @@ class TaskRun {
   /// 错过了，没有跑。
   final bool missed;
 
+  /// 到点了但条件没满足，没叫模型。
+  final bool skipped;
+
+  /// 开跑时那些条件的读数，比如「磁盘 92%、负载 1.2」。
+  final String gate;
+
   String get stamp => stampText(at);
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -105,6 +115,8 @@ class TaskRun {
         if (tokens > 0) 'tokens': tokens,
         if (late) 'late': true,
         if (missed) 'missed': true,
+        if (skipped) 'skipped': true,
+        if (gate.isNotEmpty) 'gate': gate,
       };
 
   static TaskRun fromJson(Map<String, Object?> json) => TaskRun(
@@ -116,6 +128,8 @@ class TaskRun {
         tokens: (json['tokens'] as num?)?.toInt() ?? 0,
         late: json['late'] == true,
         missed: json['missed'] == true,
+        skipped: json['skipped'] == true,
+        gate: '${json['gate'] ?? ''}',
       );
 }
 
@@ -134,9 +148,15 @@ class ScheduledTask {
     this.onceAt,
     DateTime? createdAt,
     this.nextAt,
+    List<TaskRule>? rules,
+    this.rulesAll = true,
+    this.gateRetryMinutes = 5,
+    this.gateWindowMinutes = 60,
+    this.gateAt,
     List<TaskRun>? runs,
   })  : weekdays = weekdays ?? <int>[1],
         createdAt = createdAt ?? DateTime.now(),
+        rules = rules ?? <TaskRule>[],
         runs = runs ?? <TaskRun>[];
 
   final String id;
@@ -162,6 +182,21 @@ class ScheduledTask {
   /// 下一次该跑的时刻。null 表示不会再有下一次。
   DateTime? nextAt;
 
+  /// 到点先判断这几条，全过了才叫模型。空表示到点就跑。
+  final List<TaskRule> rules;
+
+  /// true 全要满足（且），false 满足一条就够（或）。
+  bool rulesAll;
+
+  /// 条件还没满足时，隔多少分钟再看一次。
+  int gateRetryMinutes;
+
+  /// 到点之后最多等多少分钟，过了这一轮就作罢。0 表示只在到点那一刻看一眼。
+  int gateWindowMinutes;
+
+  /// 正在等条件的下一次判断时刻。null 表示没在等。
+  DateTime? gateAt;
+
   /// 最新的在最前面。
   final List<TaskRun> runs;
 
@@ -171,6 +206,22 @@ class ScheduledTask {
   bool get finished => kind == ScheduleKind.once && !enabled;
 
   int get intervalStep => intervalMinutes < 5 ? 5 : intervalMinutes;
+
+  /// 等条件的间隔，最小 1 分钟。
+  int get gateRetryStep => gateRetryMinutes < 1 ? 1 : gateRetryMinutes;
+
+  /// 等条件的窗口，0 到 1440 分钟。
+  int get gateWindowStep => gateWindowMinutes < 0
+      ? 0
+      : (gateWindowMinutes > 1440 ? 1440 : gateWindowMinutes);
+
+  bool get gated => rules.isNotEmpty;
+
+  /// 正在等条件（到点了，但条件还没满足）。
+  bool get waitingGate => gateAt != null;
+
+  /// `磁盘 > 90 且 CPU > 80`。没有条件就是空串。
+  String get conditionText => rulesText(rules, all: rulesAll);
 
   /// 按间隔排的时候，间隔写成「2 小时」比「120 分钟」好读。
   String get intervalText {
@@ -273,12 +324,25 @@ class ScheduledTask {
         if (onceAt != null) 'onceAt': onceAt!.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         if (nextAt != null) 'nextAt': nextAt!.toIso8601String(),
+        if (rules.isNotEmpty) 'rules': rules.map((TaskRule r) => r.toJson()).toList(),
+        if (rules.isNotEmpty) 'rulesAll': rulesAll,
+        if (rules.isNotEmpty) 'gateRetryMinutes': gateRetryStep,
+        if (rules.isNotEmpty) 'gateWindowMinutes': gateWindowStep,
+        if (gateAt != null) 'gateAt': gateAt!.toIso8601String(),
         'runs': runs.map((TaskRun r) => r.toJson()).toList(),
       };
 
   static ScheduledTask fromJson(Map<String, Object?> json) {
     final Object? rawDays = json['weekdays'];
     final Object? rawRuns = json['runs'];
+    final Object? rawRules = json['rules'];
+    final List<TaskRule> rules = <TaskRule>[];
+    if (rawRules is List) {
+      for (final Object? raw in rawRules) {
+        final TaskRule? rule = TaskRule.fromJson(raw);
+        if (rule != null) rules.add(rule);
+      }
+    }
     final List<TaskRun> runs = <TaskRun>[];
     if (rawRuns is List) {
       for (final Object? raw in rawRuns) {
@@ -303,6 +367,11 @@ class ScheduledTask {
       onceAt: DateTime.tryParse('${json['onceAt'] ?? ''}'),
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
       nextAt: DateTime.tryParse('${json['nextAt'] ?? ''}'),
+      rules: rules,
+      rulesAll: json['rulesAll'] != false,
+      gateRetryMinutes: (json['gateRetryMinutes'] as num?)?.toInt() ?? 5,
+      gateWindowMinutes: (json['gateWindowMinutes'] as num?)?.toInt() ?? 60,
+      gateAt: DateTime.tryParse('${json['gateAt'] ?? ''}'),
       runs: runs,
     );
   }
@@ -316,6 +385,7 @@ class ScheduledTask {
 
   /// 编辑完把下次时刻重排一次，顺手清掉不可能的过去时刻。
   void reschedule(DateTime now) {
+    gateAt = null;
     if (!enabled) {
       nextAt = null;
       return;

@@ -5,6 +5,7 @@ import 'dart:io';
 import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/monitor.dart';
+import '../core/rules.dart';
 import '../core/schedule.dart';
 import 'package:dartssh2/dartssh2.dart';
 
@@ -166,13 +167,14 @@ class TaskScheduler {
         final DueAction action = dueAction(task, at);
         if (action == DueAction.none) continue;
         final DateTime scheduled = task.nextAt!;
-        // 先把下一次排好再跑：跑的时候进程被杀，重启也不会把同一次再跑一遍。
-        if (task.kind == ScheduleKind.once) {
-          task.enabled = false;
-          task.nextAt = null;
-        } else {
-          task.scheduleFrom(at);
+        // 有条件的那一条：先读数字，符合了才叫模型。
+        if (task.gated) {
+          final bool touched = await _gateTick(task, at, action);
+          if (touched) changed = true;
+          continue;
         }
+        // 先把下一次排好再跑：跑的时候进程被杀，重启也不会把同一次再跑一遍。
+        _settle(task, at);
         await tasks.save();
         changed = true;
 
@@ -193,6 +195,85 @@ class TaskScheduler {
     } finally {
       _busy = false;
     }
+  }
+
+  /// 这一轮用掉了：一次性的收掉，其余的排下一次。
+  void _settle(ScheduledTask task, DateTime at) {
+    task.gateAt = null;
+    if (task.kind == ScheduleKind.once) {
+      task.enabled = false;
+      task.nextAt = null;
+    } else {
+      task.scheduleFrom(at);
+    }
+  }
+
+  /// 有条件的那一条：到点开窗，读一次数字，符合就跑，不符合就在窗口里再看几次。
+  /// 返回 true 表示清单被改过。
+  Future<bool> _gateTick(ScheduledTask task, DateTime at, DueAction action) async {
+    final DateTime? waiting = task.gateAt;
+    if (waiting == null) {
+      if (action == DueAction.skip) {
+        final DateTime scheduled = task.nextAt!;
+        _settle(task, at);
+        task.addRun(TaskRun(
+          at: scheduled,
+          missed: true,
+          note: '错过了 ${untilText(scheduled, at).replaceFirst('已过 ', '')}，没有补跑',
+        ));
+        await tasks.save();
+        onChanged?.call();
+        return true;
+      }
+      // 开窗：先看一眼条件。
+      task.gateAt = at;
+      await tasks.save();
+    } else if (at.isBefore(waiting)) {
+      return false;
+    }
+    if (_running.contains(task.id)) return false;
+
+    final DateTime scheduled = task.nextAt!;
+    final HostEntry? host = services.hosts.byId(task.hostId);
+    RuleCheck check;
+    if (host == null) {
+      check = RuleCheck(met: false, text: '主机已删除');
+    } else {
+      try {
+        final HostMetrics metrics = await _probe.read(host);
+        check = checkRules(task.rules, all: task.rulesAll, metrics: metrics);
+      } catch (e) {
+        check = RuleCheck(
+            met: false, text: '读不到：${'$e'.replaceFirst('Exception: ', '')}');
+      }
+    }
+
+    if (check.met) {
+      _settle(task, at);
+      await tasks.save();
+      final bool late = at.difference(scheduled) > kOnTimeSlack;
+      await _run(task, scheduled, late: late, gate: check.text);
+      return true;
+    }
+
+    final DateTime deadline =
+        scheduled.add(Duration(minutes: task.gateWindowStep));
+    if (at.isAfter(deadline)) {
+      _settle(task, at);
+      task.addRun(TaskRun(
+        at: scheduled,
+        skipped: true,
+        gate: check.text,
+        note: '条件没满足，这一轮没有跑：${check.text}',
+      ));
+      await tasks.save();
+      onChanged?.call();
+      return true;
+    }
+    task.gateAt = at.add(Duration(minutes: task.gateRetryStep));
+    await tasks.save();
+    onChanged?.call();
+    return true;
   }
 
   /// 资源监听：到点就读一次，过线就发一条通知。这一路不叫模型。
@@ -298,7 +379,8 @@ class TaskScheduler {
     await _run(task, DateTime.now(), late: false);
   }
 
-  Future<void> _run(ScheduledTask task, DateTime scheduled, {required bool late}) async {
+  Future<void> _run(ScheduledTask task, DateTime scheduled,
+      {required bool late, String gate = ''}) async {
     _running.add(task.id);
     onChanged?.call();
     board.note('t:${task.id}', '${task.title} · 开跑');
@@ -343,6 +425,7 @@ class TaskScheduler {
         steps: steps,
         tokens: tokens,
         late: late,
+        gate: gate,
       ));
       await tasks.save();
       final String done = ok ? '跑完了' : '失败了';
