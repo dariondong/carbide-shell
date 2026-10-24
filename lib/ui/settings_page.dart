@@ -67,7 +67,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _mode = 'autoRead';
   double _temperature = 0.2;
   double _font = 13.5;
-  int _context = 24000;
+  int _context = 60000;
   bool _stream = true;
   bool _autoUpdate = true;
 
@@ -641,7 +641,7 @@ class _SettingsPageState extends State<SettingsPage> {
               children: <Widget>[
                 _choices<int>(
                   '上下文预算',
-                  const <int>[8000, 16000, 24000, 48000],
+                  const <int>[24000, 60000, 120000, 240000],
                   _context,
                   (int v) => v % 1000 == 0 ? '${v ~/ 1000}k' : '$v',
                   (int v) => _apply(() => _context = v),
