@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../data/hosts.dart';
 import '../data/secrets.dart';
+import '../tools/ssh_tools.dart';
 import 'components.dart';
+import 'resources_page.dart';
 import 'theme.dart';
 
 class HostsPage extends StatefulWidget {
@@ -10,11 +12,13 @@ class HostsPage extends StatefulWidget {
     super.key,
     required this.hosts,
     required this.secrets,
+    required this.pool,
     required this.onChanged,
   });
 
   final HostStore hosts;
   final SecretStore secrets;
+  final SshPool pool;
   final VoidCallback onChanged;
 
   @override
@@ -39,7 +43,13 @@ class _HostsPageState extends State<HostsPage> {
               const Text('主机', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               const Spacer(),
               Text('${list.length} 台', style: C.monoSmall),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: list.isEmpty ? null : _monitor,
+                icon: Icon(Icons.monitor_heart_outlined,
+                    size: 18, color: list.isEmpty ? C.grey2 : C.grey),
+                tooltip: '资源监看',
+              ),
               GestureDetector(
                 onTap: () => _edit(),
                 child: Container(
@@ -83,6 +93,14 @@ class _HostsPageState extends State<HostsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  void _monitor() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ResourcesPage(hosts: widget.hosts, pool: widget.pool),
+      ),
     );
   }
 

@@ -173,7 +173,12 @@ class _HomeShellState extends State<HomeShell> {
               hosts: s.hosts,
               onChanged: _refresh,
             ),
-            HostsPage(hosts: s.hosts, secrets: s.secrets, onChanged: _refresh),
+            HostsPage(
+              hosts: s.hosts,
+              secrets: s.secrets,
+              pool: s.pool,
+              onChanged: _refresh,
+            ),
             TerminalPage(hosts: s.hosts, pool: s.pool),
             MemoryPage(services: s, onChanged: _refresh),
             SettingsPage(
