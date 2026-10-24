@@ -46,18 +46,11 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
              "CarbideShell_${GITHUB_REF_NAME}.apk"
 
+      - name: Release notes
+        run: python3 tool/release_notes.py "${GITHUB_REF_NAME}" > release_notes.md
+
       - uses: softprops/action-gh-release@v2
         with:
           files: CarbideShell_*.apk
           prerelease: true
-          body: |
-            Carbide Shell 碳壳 ${{ github.ref_name }}
-
-            - 逐字输出修好了，回答边到边显示
-            - 跑起来看得见：顶栏转圈加步数，回答下面一行「正在想 · 几秒」
-            - 对话页和会话列表的排布松开了，输入框能长到四行
-            - 固定一个签名，新版直接装在旧版上
-
-            第一次从 0.0.3 升上来要先卸一次：之前每次构件的 debug 签名都不一样。之后就装得上了。
-
-            装好第一件事：设置页填模型地址和密钥，再回主机页加一台机器。
+          body_path: release_notes.md
