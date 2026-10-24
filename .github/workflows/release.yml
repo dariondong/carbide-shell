@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Rename
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             "CarbideShell_${GITHUB_REF_NAME}.apk"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: CarbideShell_*.apk
+          prerelease: true
+          body: |
+            Carbide Shell 碳壳 ${{ github.ref_name }}
+
+            第一个能装到手机上试的版本。
+
+            - 纯 Dart 内核：问模型、调工具、回填结果、再问，最多 12 步
+            - 工具：ssh_exec / ssh_sftp / http_request / local_exec（仅桌面）/ file_io / remember
+            - 审批三档，危险命令一律拦下
+            - SSH 首次连接记指纹，之后不一致拒连
+            - 真 ANSI 终端，pty 直连
+            - 模型地址、密钥、模型名全部手填，不预填
+
+            装好第一件事：设置页填模型地址和密钥，再回主机页加一台机器。
+
+            当前是 debug 签名收口的测试包，不需要先卸旧版。
