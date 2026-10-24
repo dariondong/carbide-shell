@@ -14,6 +14,7 @@ import '../services.dart';
 import '../tools/ask_tool.dart';
 import 'components.dart';
 import 'md_text.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 /// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。
@@ -140,8 +141,8 @@ class _ChatPageState extends State<ChatPage> {
     if (!_scroll.hasClients) return;
     _scroll.animateTo(
       _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -716,20 +717,28 @@ class _ChatPageState extends State<ChatPage> {
         if (_pending != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-            child: ApprovalCard(
-              request: _pending!,
-              onDecide: _decide,
-              onAllowKind: _allowKind,
-              onAllowAll: _allowAll,
-              kindLabel: _kind,
+            child: FadeSlideIn(
+              lift: 6,
+              duration: const Duration(milliseconds: 220),
+              child: ApprovalCard(
+                request: _pending!,
+                onDecide: _decide,
+                onAllowKind: _allowKind,
+                onAllowAll: _allowAll,
+                kindLabel: _kind,
+              ),
             ),
           ),
         if (_live?.pendingAsk != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-            child: _AskCard(
-              request: _live!.pendingAsk!,
-              onAnswer: (String text) => _live?.answerAsk(text),
+            child: FadeSlideIn(
+              lift: 6,
+              duration: const Duration(milliseconds: 220),
+              child: _AskCard(
+                request: _live!.pendingAsk!,
+                onAnswer: (String text) => _live?.answerAsk(text),
+              ),
             ),
           ),
         if (_attachNames.isNotEmpty)

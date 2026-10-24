@@ -122,6 +122,16 @@ class C {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSmall)),
       ),
+      // 翻页用自己那一层：淡入 + 往上抬一点，比默认的左右滑安静。
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: SoftPageTransitions(),
+          TargetPlatform.windows: SoftPageTransitions(),
+          TargetPlatform.linux: SoftPageTransitions(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
   }
 
@@ -133,4 +143,32 @@ class C {
         border: Border.all(color: border),
         boxShadow: shadow ? softShadow : const <BoxShadow>[],
       );
+}
+
+/// 新页淡入、往上抬一点；系统开了「减少动态效果」时直接换页。
+class SoftPageTransitions extends PageTransitionsBuilder {
+  const SoftPageTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
+    final Animation<double> fade =
+        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.03),
+          end: Offset.zero,
+        ).animate(fade),
+        child: child,
+      ),
+    );
+  }
 }

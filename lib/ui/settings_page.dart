@@ -17,6 +17,7 @@ import '../data/usage.dart';
 import '../data/update.dart';
 import '../version.dart';
 import 'components.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 /// 设置：一页是模块清单，点进去才是那个模块的东西。
@@ -354,60 +355,65 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              CardBox(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < modules.length; i += 1) ...<Widget>[
-                      if (i > 0) const RuleLine(),
-                      _row(modules[i]),
+              FadeSlideIn(
+                child: CardBox(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      for (int i = 0; i < modules.length; i += 1) ...<Widget>[
+                        if (i > 0) const RuleLine(),
+                        _row(modules[i]),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-              CardBox(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: <Widget>[
-                    InkWell(
-                      onTap: widget.onOpenUsage,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-                        child: Row(
-                          children: <Widget>[
-                            const Expanded(
-                              child: Text('用量',
-                                  style: TextStyle(fontSize: 13.5, color: C.ink)),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(_usageSummary, style: C.monoSmall),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
-                          ],
+              FadeSlideIn(
+                delay: const Duration(milliseconds: 70),
+                child: CardBox(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      InkWell(
+                        onTap: widget.onOpenUsage,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                          child: Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text('用量',
+                                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(_usageSummary, style: C.monoSmall),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const RuleLine(),
-                    InkWell(
-                      onTap: widget.onOpenAbout,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-                        child: Row(
-                          children: <Widget>[
-                            const Expanded(
-                              child: Text('关于 Carbide Shell',
-                                  style: TextStyle(fontSize: 13.5, color: C.ink)),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(kAppVersion, style: C.monoSmall),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
-                          ],
+                      const RuleLine(),
+                      InkWell(
+                        onTap: widget.onOpenAbout,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                          child: Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text('关于 Carbide Shell',
+                                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(kAppVersion, style: C.monoSmall),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

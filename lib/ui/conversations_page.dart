@@ -5,6 +5,7 @@ import '../data/hosts.dart';
 import '../data/hub.dart';
 import '../services.dart';
 import 'components.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 /// The list of conversations. Each one is a scope plus a transcript.
@@ -70,7 +71,10 @@ class _ConversationsPageState extends State<ConversationsPage> {
                   itemCount: list.length,
                   itemBuilder: (BuildContext context, int i) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _row(list[i]),
+                    child: FadeSlideIn(
+                      delay: Duration(milliseconds: 40 * (i < 6 ? i : 6)),
+                      child: _row(list[i]),
+                    ),
                   ),
                 ),
         ),
@@ -106,9 +110,9 @@ class _ConversationsPageState extends State<ConversationsPage> {
     final String meta = '${c.turns} 轮 · ${_tokens(c.tokensUsed)} tok · ${_ago(c.updatedAt)}';
     final bool waiting = widget.hub.isWaiting(c.id);
     final bool busy = widget.hub.isRunning(c.id);
-    return InkWell(
+    return PressScale(
       onTap: () => widget.onOpen(c),
-      borderRadius: BorderRadius.circular(C.radius),
+      behavior: HitTestBehavior.deferToChild,
       child: CardBox(
         padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
         child: Row(

@@ -500,7 +500,8 @@ class ToggleKnob extends StatelessWidget {
     return GestureDetector(
       onTap: () => onChanged(!value),
       behavior: HitTestBehavior.opaque,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
         width: 44,
         height: 26,
         padding: const EdgeInsets.all(3),
@@ -509,7 +510,8 @@ class ToggleKnob extends StatelessWidget {
           borderRadius: BorderRadius.circular(13),
         ),
         child: AnimatedAlign(
-          duration: const Duration(milliseconds: 140),
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             width: 20,
