@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../core/policy.dart';
+import '../data/foreground.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
@@ -154,7 +155,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text(_saved, style: const TextStyle(fontSize: 12, color: C.grey)),
                 ],
               ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 22),
+              if (ForegroundTask.supported) ...<Widget>[
+                const RuleLine(),
+                InkWell(
+                  onTap: ForegroundTask.openBatterySettings,
+                  borderRadius: BorderRadius.circular(C.radius),
+                  child: CardBox(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+                    child: Row(
+                      children: <Widget>[
+                        const Expanded(
+                          child: Text('系统省电设置',
+                              style: TextStyle(fontSize: 13.5, color: C.ink)),
+                        ),
+                        Text('允许后台运行', style: C.monoSmall),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.chevron_right, size: 16, color: C.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const RuleLine(),
               InkWell(
                 onTap: widget.onOpenAbout,

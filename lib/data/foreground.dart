@@ -13,7 +13,8 @@ class ForegroundTask {
   static const MethodChannel _channel =
       MethodChannel('top.theez.carbide_shell/foreground');
 
-  static bool get _supported => Platform.isAndroid;
+  /// 这台机器有没有这一套（现在只有 Android 有）。
+  static bool get supported => Platform.isAndroid;
 
   /// 开始跑：通知上写现在在干什么。
   static Future<void> begin(String text) => _call('begin', text);
@@ -27,6 +28,9 @@ class ForegroundTask {
   /// 跑完了，把通知收掉。人不在这个应用里时留一条「跑完了」，点一下回来。
   static Future<void> finish(String text) => _call('finish', text);
 
+  /// 系统的省电与后台限制那一页。有的系统会连服务一起清掉，这一项让用户自己放开。
+  static Future<void> openBatterySettings() => _call('battery', '');
+
   /// 应用现在是不是在前台。取不到生命周期就当作在前台。
   static bool get visible {
     try {
@@ -38,7 +42,7 @@ class ForegroundTask {
   }
 
   static Future<void> _call(String method, String text) async {
-    if (!_supported) return;
+    if (!supported) return;
     try {
       await _channel.invokeMethod<void>(method, <String, Object?>{'text': text});
     } on MissingPluginException {
