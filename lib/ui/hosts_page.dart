@@ -212,7 +212,7 @@ class _HostsPageState extends State<HostsPage> {
     final TextEditingController secret = TextEditingController();
     String auth = entry?.auth ?? 'password';
 
-    final bool? ok = await showDialog<bool>(
+    final String? action = await showDialog<String>(
       context: context,
       builder: (BuildContext ctx) {
         return StatefulBuilder(
@@ -270,16 +270,16 @@ class _HostsPageState extends State<HostsPage> {
                     onPressed: () async {
                       await widget.hosts.remove(entry.id);
                       await widget.secrets.delete(hostSecretKey(entry.id));
-                      if (ctx.mounted) Navigator.of(ctx).pop(false);
+                      if (ctx.mounted) Navigator.of(ctx).pop('delete');
                     },
                     child: const Text('删除', style: TextStyle(fontSize: 13, color: C.grey)),
                   ),
                 TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
+                  onPressed: () => Navigator.of(ctx).pop(),
                   child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
+                  onPressed: () => Navigator.of(ctx).pop('save'),
                   child: const Text('保存', style: TextStyle(fontSize: 13, color: C.ink)),
                 ),
               ],
@@ -289,7 +289,14 @@ class _HostsPageState extends State<HostsPage> {
       },
     );
 
-    if (ok != true) return;
+    // 删掉之后要把列表重画一遍，不然那一行还挂在屏幕上。
+    if (action == 'delete') {
+      if (!mounted) return;
+      setState(() {});
+      widget.onChanged();
+      return;
+    }
+    if (action != 'save') return;
     if (name.text.trim().isEmpty || host.text.trim().isEmpty) return;
     if (entry == null && secret.text.isEmpty) return;
 

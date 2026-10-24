@@ -286,6 +286,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              CardBox(
+                padding: EdgeInsets.zero,
+                child: InkWell(
+                  onTap: widget.onOpenAbout,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                    child: Row(
+                      children: <Widget>[
+                        const Expanded(
+                          child: Text('关于 Carbide Shell',
+                              style: TextStyle(fontSize: 13.5, color: C.ink)),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(kAppVersion, style: C.monoSmall),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 14),
               const Text(
                 '改动都是当场存的：打字停手半秒，切换类立刻。',
@@ -360,8 +382,6 @@ class _SettingsPageState extends State<SettingsPage> {
         return _autoUpdate ? '启动时查' : '不自动查';
       case 'power':
         return '允许后台运行';
-      case 'about':
-        return kAppVersion;
     }
     return '';
   }
@@ -591,13 +611,6 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
-      case 'about':
-        return <Widget>[
-          CardBox(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-            child: _action('版本', kAppVersion, () async => widget.onOpenAbout()),
-          ),
-        ];
     }
     return const <Widget>[];
   }
@@ -735,7 +748,6 @@ const List<_Module> kSettingsModules = <_Module>[
   _Module('net', '网络'),
   _Module('update', '更新'),
   _Module('power', '后台'),
-  _Module('about', '关于'),
 ];
 
 /// 一个模块的子页。控制器还在 [SettingsPage] 那一层，这里只是换个地方摆。
