@@ -15,6 +15,7 @@ import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
+import 'data/usage.dart';
 import 'data/watch.dart';
 import 'services.dart';
 import 'tools/ssh_tools.dart';
@@ -41,6 +42,8 @@ Future<void> main() async {
   await tasks.load();
   final WatchStore watches = WatchStore(File('${dir.path}/watches.json'));
   await watches.load();
+  final UsageStore usage = UsageStore(File('${dir.path}/usage.json'));
+  await usage.load();
 
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard();
@@ -55,6 +58,7 @@ Future<void> main() async {
     conversations: conversations,
     tasks: tasks,
     watches: watches,
+    usage: usage,
     workspace: workspace.path,
   );
 

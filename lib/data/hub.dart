@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/agent.dart';
 import '../core/conversation.dart';
+import '../core/usage.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
 import '../core/tools.dart';
@@ -171,6 +172,9 @@ class SessionHub extends ChangeNotifier {
     loop.extraSystem = services.settings.value.extraPrompt;
     // 设置里的提示词改了，下一轮就用新的；对话自己那份照旧优先。
     loop.systemPrompt = promptFor(services.settings, live.conversation);
+    final int wasPrompt = loop.promptTokens;
+    final int wasTokens = loop.tokens;
+    final int wasCached = loop.cachedTokens;
     changed();
     board.note('c:${live.conversation.id}', '${live.conversation.title} · 开跑');
     try {
@@ -182,10 +186,38 @@ class SessionHub extends ChangeNotifier {
       live.pendingAsk = null;
       live.conversation.tokensUsed = loop.tokens;
       await services.persist(live.conversation);
+      await _recordUsage(
+        live,
+        wasPrompt: wasPrompt,
+        wasTokens: wasTokens,
+        wasCached: wasCached,
+      );
       board.done('c:${live.conversation.id}',
           summary: '${live.conversation.title} · ${summaryOf(live)}');
       changed();
     }
+  }
+
+  /// 这一轮花了多少 token 记进账本。多步的算一轮。
+  Future<void> _recordUsage(
+    LiveSession live, {
+    required int wasPrompt,
+    required int wasTokens,
+    required int wasCached,
+  }) async {
+    final AgentLoop loop = live.loop;
+    final int prompt = loop.promptTokens - wasPrompt;
+    final int completion = (loop.tokens - wasTokens) - prompt;
+    final int cached = loop.cachedTokens - wasCached;
+    if (prompt <= 0 && completion <= 0) return;
+    await services.usage.record(UsageEntry(
+      at: DateTime.now(),
+      model: services.settings.value.model,
+      prompt: prompt < 0 ? 0 : prompt,
+      completion: completion < 0 ? 0 : completion,
+      cached: cached < 0 ? 0 : cached,
+      conversationId: live.conversation.id,
+    ));
   }
 
   /// 停一轮：正在等确认的也一起放掉。

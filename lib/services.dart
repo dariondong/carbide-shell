@@ -10,6 +10,7 @@ import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
+import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
 import 'tools/host_tools.dart';
@@ -38,6 +39,7 @@ class AppServices {
     required this.conversations,
     required this.tasks,
     required this.watches,
+    required this.usage,
     required this.workspace,
   });
 
@@ -52,6 +54,9 @@ class AppServices {
   /// 定时任务与资源监听的清单：模型也能往里写，所以要在这里够得着。
   final TaskStore tasks;
   final WatchStore watches;
+
+  /// 模型用量账本。
+  final UsageStore usage;
   final String workspace;
 
   /// Tools are per session: `remember` must write into this conversation's

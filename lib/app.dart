@@ -14,6 +14,7 @@ import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/tasks_page.dart';
+import 'ui/usage_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
 
@@ -133,6 +134,14 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openUsage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UsagePage(usage: widget.services.usage),
+      ),
+    );
+  }
+
   void _refresh() {
     if (mounted) setState(() {});
   }
@@ -206,6 +215,8 @@ class _HomeShellState extends State<HomeShell> {
               conversations: s.conversations.all,
               onConversationChanged: (Conversation c) => s.conversations.save(c),
               onOpenAbout: _openAbout,
+              onOpenUsage: _openUsage,
+              usage: s.usage,
             ),
           ],
         ),

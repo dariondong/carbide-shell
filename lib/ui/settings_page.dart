@@ -6,10 +6,12 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/policy.dart';
+import '../core/usage.dart';
 import '../data/foreground.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
+import '../data/usage.dart';
 import '../data/update.dart';
 import '../version.dart';
 import 'components.dart';
@@ -28,6 +30,8 @@ class SettingsPage extends StatefulWidget {
     required this.conversations,
     required this.onConversationChanged,
     required this.onOpenAbout,
+    required this.onOpenUsage,
+    required this.usage,
   });
 
   final SettingsStore settings;
@@ -38,6 +42,8 @@ class SettingsPage extends StatefulWidget {
   final List<Conversation> conversations;
   final Future<void> Function(Conversation conversation) onConversationChanged;
   final VoidCallback onOpenAbout;
+  final VoidCallback onOpenUsage;
+  final UsageStore usage;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -289,23 +295,46 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 12),
               CardBox(
                 padding: EdgeInsets.zero,
-                child: InkWell(
-                  onTap: widget.onOpenAbout,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-                    child: Row(
-                      children: <Widget>[
-                        const Expanded(
-                          child: Text('关于 Carbide Shell',
-                              style: TextStyle(fontSize: 13.5, color: C.ink)),
+                child: Column(
+                  children: <Widget>[
+                    InkWell(
+                      onTap: widget.onOpenUsage,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                        child: Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Text('用量',
+                                  style: TextStyle(fontSize: 13.5, color: C.ink)),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(_usageSummary, style: C.monoSmall),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Text(kAppVersion, style: C.monoSmall),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.chevron_right, size: 16, color: C.grey2),
-                      ],
+                      ),
                     ),
-                  ),
+                    const RuleLine(),
+                    InkWell(
+                      onTap: widget.onOpenAbout,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                        child: Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Text('关于 Carbide Shell',
+                                  style: TextStyle(fontSize: 13.5, color: C.ink)),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(kAppVersion, style: C.monoSmall),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 14),
