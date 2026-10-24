@@ -10,6 +10,7 @@ pubspec.lock
 android/.gradle/
 android/local.properties
 android/key.properties
+android/app/carbide-release.p12
 ios/Pods/
 ios/.symlinks/
 macos/Pods/

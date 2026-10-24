@@ -29,7 +29,17 @@ jobs:
         run: flutter test
 
       - name: Build release APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release
+
+      - name: Signature
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 
       - name: Rename
         run: |
@@ -43,15 +53,11 @@ jobs:
           body: |
             Carbide Shell 碳壳 ${{ github.ref_name }}
 
-            第一个能装到手机上试的版本。
+            - 逐字输出修好了，回答边到边显示
+            - 跑起来看得见：顶栏转圈加步数，回答下面一行「正在想 · 几秒」
+            - 对话页和会话列表的排布松开了，输入框能长到四行
+            - 固定一个签名，新版直接装在旧版上
 
-            - 纯 Dart 内核：问模型、调工具、回填结果、再问，最多 12 步
-            - 工具：ssh_exec / ssh_sftp / http_request / local_exec（仅桌面）/ file_io / remember
-            - 审批三档，危险命令一律拦下
-            - SSH 首次连接记指纹，之后不一致拒连
-            - 真 ANSI 终端，pty 直连
-            - 模型地址、密钥、模型名全部手填，不预填
+            第一次从 0.0.3 升上来要先卸一次：之前每次构件的 debug 签名都不一样。之后就装得上了。
 
             装好第一件事：设置页填模型地址和密钥，再回主机页加一台机器。
-
-            当前是 debug 签名收口的测试包，不需要先卸旧版。

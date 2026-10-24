@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// 固定一个签名。密钥不进仓库：CI 里从仓库密钥 ANDROID_KEYSTORE_BASE64 解出来放进 app/，
+// 本地没有这个环境变量时退回 debug 签名（只影响本地随便跑的包）。
+val releaseKeyBase64: String = System.getenv("ANDROID_KEYSTORE_BASE64") ?: ""
+
 android {
     namespace = "top.theez.carbide_shell"
     compileSdk = 36
@@ -29,11 +33,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseKeyBase64.isNotEmpty()) {
+                val ks = file("carbide-release.p12")
+                ks.writeBytes(java.util.Base64.getDecoder().decode(releaseKeyBase64))
+                storeFile = ks
+                storeType = "PKCS12"
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "carbide"
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeyBase64.isNotEmpty()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
