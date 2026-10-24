@@ -50,6 +50,7 @@ class AgentLoop {
     this.approver,
     this.maxSteps = 12,
     this.maxContextChars = 24000,
+    this.environment,
   });
 
   final LlmProvider llm;
@@ -59,6 +60,9 @@ class AgentLoop {
   final ToolContext context;
   Approver? approver;
   int maxSteps;
+
+  /// Extra system text: which hosts exist, what this platform can do.
+  final String Function()? environment;
   final int maxContextChars;
 
   final List<LlmMessage> history = <LlmMessage>[];
@@ -89,8 +93,9 @@ class AgentLoop {
 
       LlmReply reply;
       try {
+        final String extra = environment?.call() ?? '';
         reply = await llm.chat(
-          system: kSystemPrompt,
+          system: extra.isEmpty ? kSystemPrompt : '$kSystemPrompt\n$extra',
           messages: _window(),
           tools: registry.specs(),
           cancel: cancel,

@@ -11,6 +11,7 @@ class ScriptedProvider implements LlmProvider {
 
   final List<LlmReply> replies;
   int calls = 0;
+  String lastSystem = '';
 
   @override
   String get label => 'scripted';
@@ -22,6 +23,7 @@ class ScriptedProvider implements LlmProvider {
     required List<ToolSpec> tools,
     CancelToken? cancel,
   }) async {
+    lastSystem = system;
     if (calls >= replies.length) return const LlmReply(text: '没有更多步骤。');
     return replies[calls++];
   }
@@ -222,6 +224,24 @@ void main() {
     final AgentLoop loop = buildLoop(_ThrowingProvider(), ToolRegistry());
     final String answer = await loop.send('看看');
     expect(answer.contains('模型请求失败'), isTrue);
+  });
+
+  test('环境说明会拼进系统提示', () async {
+    final SpyTool tool = SpyTool();
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[const LlmReply(text: '好')]);
+    final AgentLoop loop = AgentLoop(
+      llm: provider,
+      registry: registryWith(tool),
+      policy: ApprovalPolicy(),
+      journal: MemoryJournal(),
+      context: const ToolContext(workspace: '/tmp/carbide', desktop: false),
+      environment: () => 'web-01 = root@10.0.0.21:22',
+    );
+
+    await loop.send('看看');
+
+    expect(provider.lastSystem.contains('Carbide Shell'), isTrue);
+    expect(provider.lastSystem.contains('web-01 = root@10.0.0.21:22'), isTrue);
   });
 
   test('截断保留头尾并标出省略', () {

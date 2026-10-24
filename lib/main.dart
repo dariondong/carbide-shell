@@ -50,6 +50,7 @@ Future<void> main() async {
     journal: FileJournal(File('${dir.path}/journal.jsonl')),
     context: ToolContext(workspace: workspace.path, desktop: isDesktopPlatform),
     maxSteps: settings.value.maxSteps,
+    environment: () => _environment(hosts, workspace),
   );
 
   runApp(CarbideApp(
@@ -62,6 +63,21 @@ Future<void> main() async {
       pool: pool,
     ),
   ));
+}
+
+String _environment(HostStore hosts, Directory workspace) {
+  final StringBuffer b = StringBuffer('\n当前环境\n');
+  b.writeln('- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
+  b.writeln('- 工作目录：${workspace.path}');
+  if (hosts.hosts.isEmpty) {
+    b.writeln('- 还没有保存任何主机，需要用户先在主机页添加。');
+  } else {
+    b.writeln('- 可用的主机（ssh_exec 的 host 只能用这些名字）：');
+    for (final HostEntry h in hosts.hosts) {
+      b.writeln('  ${h.name} = ${h.address}');
+    }
+  }
+  return b.toString();
 }
 
 ApprovalMode _modeFrom(String name) {
