@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'core/conversation.dart';
+import 'core/models.dart';
 import 'core/memory.dart';
 import 'core/policy.dart';
 import 'data/hosts.dart';
