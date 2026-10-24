@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/conversation.dart';
+import '../core/models.dart';
 import '../core/policy.dart';
 import '../data/foreground.dart';
 import '../data/providers.dart';
