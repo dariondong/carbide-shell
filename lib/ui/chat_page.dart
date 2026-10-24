@@ -528,12 +528,15 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: _thread(),
+          // 对话里的字都能选中，长按就能复制。
+          child: SelectionArea(
+            child: SingleChildScrollView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _thread(),
+              ),
             ),
           ),
         ),
