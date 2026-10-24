@@ -15,9 +15,10 @@ import '../version.dart';
 import 'components.dart';
 import 'theme.dart';
 
-/// 设置：模型、审批、对话、网络、更新、后台、关于，一页看完。
+/// 设置：一页是模块清单，点进去才是那个模块的东西。
 ///
-/// 改了就存，右上角写着存没存。文字输入停手 600 毫秒才落盘，切换类当场生效。
+/// 改了就存，标题栏右侧写着存没存。文字输入停手 600 毫秒才落盘，切换类当场生效。
+/// 所有控制器都留在这一层，子页只是换个地方摆它们。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
@@ -64,6 +65,9 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _checking = false;
   Timer? _debounce;
 
+  /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
+  final ValueNotifier<int> _tick = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +93,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _tick.dispose();
     _base.dispose();
     _model.dispose();
     _key.dispose();
@@ -99,9 +104,19 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
+  void _bump() => _tick.value = _tick.value + 1;
+
+  /// 标题栏那句「已保存」。子页要跟着变，所以走一次 bump。
+  void _setSaved(String text) {
+    if (!mounted) return;
+    setState(() => _saved = text);
+    _bump();
+  }
+
   /// 打字的时候先记一笔，停手一会儿再落盘。
   void _touch() {
-    if (_saved.isNotEmpty) setState(() => _saved = '');
+    if (_saved.isNotEmpty) _setSaved('');
+    _bump();
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), _persist);
   }
@@ -131,8 +146,7 @@ class _SettingsPageState extends State<SettingsPage> {
         : _mode == 'askAll'
             ? ApprovalMode.askAll
             : ApprovalMode.autoRead;
-    if (!mounted) return;
-    setState(() => _saved = '已保存');
+    _setSaved('已保存');
   }
 
   static int _intOf(String text, int fallback, int low, int high) {
@@ -144,6 +158,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 一律立刻存：切换类控件不等人。
   void _apply(VoidCallback change) {
     setState(change);
+    _bump();
     _debounce?.cancel();
     _persist();
   }
@@ -159,7 +174,7 @@ class _SettingsPageState extends State<SettingsPage> {
       touched += 1;
     }
     if (!mounted) return;
-    setState(() => _saved = touched == 0 ? '本来就没有批准的记录' : '清掉了 $touched 个对话的批准');
+    _setSaved(touched == 0 ? '本来就没有批准的记录' : '清掉了 $touched 个对话的批准');
   }
 
   /// 内置那份长什么样，让用户看得见再决定要不要换。
@@ -197,6 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _checking = true;
       _updateNote = '正在问 GitHub…';
     });
+    _bump();
     final UpdateChecker checker = UpdateChecker();
     try {
       final List<UpdateInfo> list = await checker.fetch(includePrerelease: true);
@@ -218,12 +234,18 @@ class _SettingsPageState extends State<SettingsPage> {
       if (mounted) setState(() => _updateNote = '没查成：$e');
     } finally {
       checker.close();
-      if (mounted) setState(() => _checking = false);
+      if (mounted) {
+        setState(() => _checking = false);
+        _bump();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<_Module> modules = kSettingsModules
+        .where((_Module m) => m.key != 'power' || ForegroundTask.supported)
+        .toList();
     return ListView(
       padding: EdgeInsets.zero,
       children: <Widget>[
@@ -249,211 +271,24 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SectionLabel('模型'),
-              const SizedBox(height: 8),
               CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+                padding: EdgeInsets.zero,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: kLlmPresets.map(_presetChip).toList(),
-                    ),
-                    if (_picked.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 9),
-                      Text(_picked,
-                          style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.5)),
+                    for (int i = 0; i < modules.length; i += 1) ...<Widget>[
+                      if (i > 0) const RuleLine(),
+                      _row(modules[i]),
                     ],
-                    const SizedBox(height: 14),
-                    RuleField(
-                      controller: _base,
-                      label: '模型地址',
-                      hint: 'https://api.example.com/v1',
-                      onChanged: (_) => _touch(),
-                    ),
-                    RuleField(
-                      controller: _model,
-                      label: '模型名',
-                      hint: '支持 tools 的模型',
-                      onChanged: (_) => _touch(),
-                    ),
-                    RuleField(
-                      controller: _key,
-                      label: '接口密钥',
-                      obscure: true,
-                      onChanged: (_) => _touch(),
-                    ),
-                    _choices<double>(
-                      '温度',
-                      const <double>[0.0, 0.2, 0.7],
-                      _temperature,
-                      (double v) => '${v.toStringAsFixed(1)}',
-                      (double v) => _apply(() => _temperature = v),
-                      last: true,
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 22),
-              SectionLabel('审批'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _choices<String>(
-                      '写操作怎么放行',
-                      const <String>['autoRead', 'autoAll', 'askAll'],
-                      _mode,
-                      (String v) => switch (v) {
-                        'autoAll' => '全部放行',
-                        'askAll' => '全部确认',
-                        _ => '写操作确认',
-                      },
-                      (String v) => _apply(() => _mode = v),
-                    ),
-                    RuleField(
-                      controller: _steps,
-                      label: '每轮步数上限',
-                      keyboard: TextInputType.number,
-                      onChanged: (_) => _touch(),
-                    ),
-                    _action(
-                      '忘掉已批准的写法',
-                      '「这一类都批准」的记录一次清空',
-                      _forgetApprovals,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              SectionLabel('提示词'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    RuleField(
-                      controller: _sys,
-                      label: '系统提示词',
-                      hint: '留空就是用内置那份。写了就整份替换掉。',
-                      minLines: 6,
-                      maxLines: 14,
-                      onChanged: (_) => _touch(),
-                    ),
-                    RuleField(
-                      controller: _prompt,
-                      label: '附加指示',
-                      hint: '拼在系统提示词后面，比如：回答短一点',
-                      minLines: 2,
-                      maxLines: 4,
-                      onChanged: (_) => _touch(),
-                    ),
-                    _action('看看内置提示词', '只读', _showBuiltinPrompt),
-                    _action('恢复内置提示词', _sys.text.trim().isEmpty ? '现在就是内置的' : '清掉上面那份',
-                        _restoreBuiltinPrompt),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              SectionLabel('对话'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _choices<int>(
-                      '上下文预算',
-                      const <int>[8000, 16000, 24000, 48000],
-                      _context,
-                      (int v) => v % 1000 == 0 ? '${v ~/ 1000}k' : '$v',
-                      (int v) => _apply(() => _context = v),
-                    ),
-                    _toggle(
-                      '逐字显示',
-                      _stream,
-                      '关掉就是整段一次出来',
-                      (bool v) => _apply(() => _stream = v),
-                    ),
-                    _choices<double>(
-                      '回答字号',
-                      const <double>[13.0, 13.5, 15.0],
-                      _font,
-                      (double v) => v <= 13.0
-                          ? '小'
-                          : v <= 13.5
-                              ? '标准'
-                              : '大',
-                      (double v) => _apply(() => _font = v),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              SectionLabel('网络'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
-                child: RuleField(
-                  controller: _domains,
-                  label: 'http_request 允许的域名',
-                  hint: '一行一个，留空表示一个都不许',
-                  minLines: 3,
-                  maxLines: 6,
-                  onChanged: (_) => _touch(),
-                ),
-              ),
-              const SizedBox(height: 22),
-              SectionLabel('更新'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _toggle(
-                      '启动时检查新版本',
-                      _autoUpdate,
-                      '一天最多问一次 GitHub',
-                      (bool v) => _apply(() => _autoUpdate = v),
-                    ),
-                    const RuleLine(),
-                    _action(
-                      '立即检查',
-                      _checking ? '正在问…' : (_updateNote.isEmpty ? '含预发布' : _updateNote),
-                      _checkNow,
-                    ),
-                  ],
-                ),
-              ),
-              if (ForegroundTask.supported) ...<Widget>[
-                const SizedBox(height: 22),
-                SectionLabel('后台'),
-                const SizedBox(height: 8),
-                CardBox(
-                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-                  child: _action('系统省电设置', '允许后台运行', ForegroundTask.openBatterySettings),
-                ),
-              ],
-              const SizedBox(height: 22),
-              SectionLabel('关于'),
-              const SizedBox(height: 8),
-              CardBox(
-                padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-                child: _action('版本', kAppVersion, () async => widget.onOpenAbout()),
-              ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               const Text(
-                '密钥只存在本机安全存储，不进对话，不会写进日志。',
+                '改动都是当场存的：打字停手半秒，切换类立刻。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
               ),
             ],
@@ -461,6 +296,310 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
     );
+  }
+
+  /// 模块清单里的一行：名字、现在的样子、一个箭头。
+  Widget _row(_Module module) {
+    return InkWell(
+      onTap: () => _open(module),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(module.title,
+                  style: const TextStyle(fontSize: 13.5, color: C.ink)),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                _summary(module.key),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: C.monoSmall,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 每个模块右侧那句现状。看一眼就知道里面是什么。
+  String _summary(String key) {
+    switch (key) {
+      case 'model':
+        final String name = _model.text.trim();
+        return name.isEmpty ? '还没填' : name;
+      case 'approval':
+        return _mode == 'autoAll'
+            ? '全部放行'
+            : _mode == 'askAll'
+                ? '全部确认'
+                : '写操作确认';
+      case 'prompt':
+        final String own = _sys.text.trim().isEmpty ? '内置' : '自定';
+        return _prompt.text.trim().isEmpty ? own : '$own + 附加';
+      case 'talk':
+        final String size = _font <= 13.0
+            ? '小'
+            : _font <= 13.5
+                ? '标准'
+                : '大';
+        return '${_context ~/ 1000}k · $size · ${_stream ? '逐字' : '整段'}';
+      case 'net':
+        final int n = _domains.text
+            .split(RegExp(r'[\s,]+'))
+            .where((String d) => d.trim().isNotEmpty)
+            .length;
+        return n == 0 ? '一个都不许' : '$n 个域名';
+      case 'update':
+        return _autoUpdate ? '启动时查' : '不自动查';
+      case 'power':
+        return '允许后台运行';
+      case 'about':
+        return kAppVersion;
+    }
+    return '';
+  }
+
+  Future<void> _open(_Module module) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _SettingsModulePage(parent: this, module: module),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// 一个模块里的全部控件。子页原样摆出来。
+  List<Widget> _moduleBody(String key) {
+    switch (key) {
+      case 'model':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: kLlmPresets.map(_presetChip).toList(),
+                ),
+                if (_picked.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 9),
+                  Text(_picked,
+                      style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.5)),
+                ],
+                const SizedBox(height: 14),
+                RuleField(
+                  controller: _base,
+                  label: '模型地址',
+                  hint: 'https://api.example.com/v1',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _model,
+                  label: '模型名',
+                  hint: '支持 tools 的模型',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _key,
+                  label: '接口密钥',
+                  obscure: true,
+                  onChanged: (_) => _touch(),
+                ),
+                _choices<double>(
+                  '温度',
+                  const <double>[0.0, 0.2, 0.7],
+                  _temperature,
+                  (double v) => '${v.toStringAsFixed(1)}',
+                  (double v) => _apply(() => _temperature = v),
+                ),
+                RuleField(
+                  controller: _steps,
+                  label: '每轮步数上限',
+                  keyboard: TextInputType.number,
+                  onChanged: (_) => _touch(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '密钥只存在本机安全存储，不进对话，不会写进日志。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'approval':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _choices<String>(
+                  '写操作怎么放行',
+                  const <String>['autoRead', 'autoAll', 'askAll'],
+                  _mode,
+                  (String v) => switch (v) {
+                    'autoAll' => '全部放行',
+                    'askAll' => '全部确认',
+                    _ => '写操作确认',
+                  },
+                  (String v) => _apply(() => _mode = v),
+                ),
+                _action(
+                  '忘掉已批准的写法',
+                  '「这一类都批准」的记录一次清空',
+                  _forgetApprovals,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '危险命令不管选哪一档都会被拦下。定时任务里没人确认，除危险命令之外一律照做。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'prompt':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                RuleField(
+                  controller: _sys,
+                  label: '系统提示词',
+                  hint: '留空就是用内置那份。写了就整份替换掉。',
+                  minLines: 6,
+                  maxLines: 14,
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _prompt,
+                  label: '附加指示',
+                  hint: '拼在系统提示词后面，比如：回答短一点',
+                  minLines: 2,
+                  maxLines: 4,
+                  onChanged: (_) => _touch(),
+                ),
+                _action('看看内置提示词', '只读', _showBuiltinPrompt),
+                _action(
+                  '恢复内置提示词',
+                  _sys.text.trim().isEmpty ? '现在就是内置的' : '清掉上面那份',
+                  _restoreBuiltinPrompt,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '单个对话可以在对话页顶栏那个旋钮按钮里另写一份，留空就跟这里走。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'talk':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _choices<int>(
+                  '上下文预算',
+                  const <int>[8000, 16000, 24000, 48000],
+                  _context,
+                  (int v) => v % 1000 == 0 ? '${v ~/ 1000}k' : '$v',
+                  (int v) => _apply(() => _context = v),
+                ),
+                _toggle(
+                  '逐字显示',
+                  _stream,
+                  '关掉就是整段一次出来',
+                  (bool v) => _apply(() => _stream = v),
+                ),
+                _choices<double>(
+                  '回答字号',
+                  const <double>[13.0, 13.5, 15.0],
+                  _font,
+                  (double v) => v <= 13.0
+                      ? '小'
+                      : v <= 13.5
+                          ? '标准'
+                          : '大',
+                  (double v) => _apply(() => _font = v),
+                ),
+              ],
+            ),
+          ),
+        ];
+      case 'net':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+            child: RuleField(
+              controller: _domains,
+              label: 'http_request 允许的域名',
+              hint: '一行一个，留空表示一个都不许',
+              minLines: 4,
+              maxLines: 8,
+              onChanged: (_) => _touch(),
+            ),
+          ),
+        ];
+      case 'update':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _toggle(
+                  '启动时检查新版本',
+                  _autoUpdate,
+                  '一天最多问一次 GitHub',
+                  (bool v) => _apply(() => _autoUpdate = v),
+                ),
+                const RuleLine(),
+                _action(
+                  '立即检查',
+                  _checking ? '正在问…' : (_updateNote.isEmpty ? '含预发布' : _updateNote),
+                  _checkNow,
+                ),
+              ],
+            ),
+          ),
+        ];
+      case 'power':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+            child: _action('系统省电设置', '允许后台运行', ForegroundTask.openBatterySettings),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '长回合、定时任务都靠它在后台活着。系统把应用清掉就都停了。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'about':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+            child: _action('版本', kAppVersion, () async => widget.onOpenAbout()),
+          ),
+        ];
+    }
+    return const <Widget>[];
   }
 
   Widget _presetChip(LlmPreset p) {
@@ -573,6 +712,86 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 设置里的一个模块：清单上的一行，也是它子页的标题。
+class _Module {
+  const _Module(this.key, this.title);
+
+  final String key;
+  final String title;
+}
+
+const List<_Module> kSettingsModules = <_Module>[
+  _Module('model', '模型'),
+  _Module('approval', '审批'),
+  _Module('prompt', '提示词'),
+  _Module('talk', '对话'),
+  _Module('net', '网络'),
+  _Module('update', '更新'),
+  _Module('power', '后台'),
+  _Module('about', '关于'),
+];
+
+/// 一个模块的子页。控制器还在 [SettingsPage] 那一层，这里只是换个地方摆。
+class _SettingsModulePage extends StatelessWidget {
+  const _SettingsModulePage({required this.parent, required this.module});
+
+  final _SettingsPageState parent;
+  final _Module module;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: C.paper,
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            Container(
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: const BoxDecoration(
+                color: C.card,
+                border: Border(bottom: BorderSide(color: C.rule)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
+                  ),
+                  Text(module.title,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: parent._tick,
+                      builder: (BuildContext ctx, int value, Widget? child) => Text(
+                        parent._saved,
+                        style: C.monoSmall.copyWith(
+                          color: parent._saved == '已保存' ? C.blue : C.grey,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ValueListenableBuilder<int>(
+                valueListenable: parent._tick,
+                builder: (BuildContext ctx, int value, Widget? child) => ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+                  children: parent._moduleBody(module.key),
+                ),
+              ),
+            ),
           ],
         ),
       ),
