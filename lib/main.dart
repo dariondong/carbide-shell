@@ -4,19 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
-import 'core/agent.dart';
-import 'core/journal.dart';
+import 'core/conversation.dart';
 import 'core/memory.dart';
-import 'core/models.dart';
 import 'core/policy.dart';
-import 'core/tools.dart';
 import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'services.dart';
-import 'tools/http_tool.dart';
-import 'tools/local_tools.dart';
 import 'tools/ssh_tools.dart';
 
 Future<void> main() async {
@@ -30,64 +25,25 @@ Future<void> main() async {
   final SettingsStore settings = SettingsStore(File('${dir.path}/settings.json'));
   await settings.load();
 
-  final MemoryStore memory = MemoryStore(File('${dir.path}/memory.json'));
-  await memory.load();
+  final MemoryBook memory = MemoryBook(Directory('${dir.path}/memory'));
+  final ConversationStore conversations = ConversationStore(Directory('${dir.path}/conversations'));
+  await conversations.load();
 
   const SecretStore secrets = SecureSecretStore();
   final SshPool pool = SshPool(hosts: hosts, secrets: secrets);
-
-  final ToolRegistry registry = ToolRegistry()
-    ..register(SshExecTool(pool, hosts))
-    ..register(SshSftpTool(pool, hosts))
-    ..register(HttpTool(settings))
-    ..register(FileTool())
-    ..register(RememberTool(memory));
-  if (isDesktopPlatform) {
-    registry.register(LocalExecTool());
-  }
-
-  final ApprovalPolicy policy = ApprovalPolicy(mode: _modeFrom(settings.value.approvalMode));
-  final AgentLoop agent = AgentLoop(
-    llm: SettingsLlmProvider(settings, secrets),
-    registry: registry,
-    policy: policy,
-    journal: FileJournal(File('${dir.path}/journal.jsonl')),
-    context: ToolContext(workspace: workspace.path, desktop: isDesktopPlatform),
-    maxSteps: settings.value.maxSteps,
-    environment: () => _environment(hosts, workspace, memory),
-  );
 
   runApp(CarbideApp(
     services: AppServices(
       hosts: hosts,
       secrets: secrets,
       settings: settings,
-      policy: policy,
-      agent: agent,
+      policy: ApprovalPolicy(mode: _modeFrom(settings.value.approvalMode)),
       pool: pool,
       memory: memory,
+      conversations: conversations,
+      workspace: workspace.path,
     ),
   ));
-}
-
-String _environment(HostStore hosts, Directory workspace, MemoryStore memory) {
-  final StringBuffer b = StringBuffer('\n当前环境\n');
-  b.writeln('- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
-  b.writeln('- 工作目录：${workspace.path}');
-  if (hosts.hosts.isEmpty) {
-    b.writeln('- 还没有保存任何主机，需要用户先在主机页添加。');
-  } else {
-    b.writeln('- 可用的主机（ssh_exec 的 host 只能用这些名字）：');
-    for (final HostEntry h in hosts.hosts) {
-      b.writeln('  ${h.name} = ${h.address}');
-    }
-  }
-  final String known = memory.renderForPrompt();
-  if (known.isNotEmpty) {
-    b.write('\n');
-    b.write(known);
-  }
-  return b.toString();
 }
 
 ApprovalMode _modeFrom(String name) {

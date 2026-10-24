@@ -131,9 +131,10 @@ class SquareButton extends StatelessWidget {
   }
 }
 
-/// One tool call, drawn as a card: header, command, output block.
-class ToolCallCard extends StatelessWidget {
-  const ToolCallCard({
+/// One tool call as a single compact row. Output stays folded until asked
+/// for, so a run of commands cannot flood the conversation.
+class ToolStepRow extends StatefulWidget {
+  const ToolStepRow({
     super.key,
     required this.call,
     this.output,
@@ -144,96 +145,162 @@ class ToolCallCard extends StatelessWidget {
   final String? output;
   final bool running;
 
+  @override
+  State<ToolStepRow> createState() => _ToolStepRowState();
+}
+
+class _ToolStepRowState extends State<ToolStepRow> {
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(ToolStepRow old) {
+    super.didUpdateWidget(old);
+    // A step that starts running opens itself; the user can still fold it.
+    if (widget.running && !old.running) _open = true;
+  }
+
   String get _command {
-    final Object? raw = call.args['command'] ?? call.args['path'] ?? call.args['url'] ?? call.args['note'];
+    final Map<String, Object?> a = widget.call.args;
+    final Object? raw = a['command'] ?? a['path'] ?? a['url'] ?? a['note'] ?? a['op'];
     return '${raw ?? ''}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final String text = output ?? '';
+    final String text = widget.output ?? '';
     final List<String> lines = text.split('\n');
-    final bool long = lines.length > 12;
-    final String shown = long ? lines.take(12).join('\n') : text;
-    final int rest = long ? lines.length - 12 : 0;
+    final int shownLines = lines.length > 200 ? 200 : lines.length;
+    final int rest = lines.length - shownLines;
 
-    return CardBox(
-      padding: const EdgeInsets.fromLTRB(13, 11, 13, 13),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Text(call.name,
-                  style: C.monoSmall.copyWith(color: C.ink, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 8),
-              _status(),
-              const Spacer(),
-              if (running)
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.6, color: C.blue),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        InkWell(
+          onTap: text.isEmpty ? null : () => setState(() => _open = !_open),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Row(
+              children: <Widget>[
+                _dot(),
+                const SizedBox(width: 9),
+                Text(widget.call.name,
+                    style: C.monoSmall.copyWith(
+                      color: C.ink,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    )),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _command.replaceAll('\n', ' '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: C.monoSmall.copyWith(fontSize: 11, color: C.grey),
+                  ),
                 ),
-            ],
+                if (text.isNotEmpty)
+                  Icon(
+                    _open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    size: 16,
+                    color: C.grey2,
+                  ),
+              ],
+            ),
           ),
-          if (_command.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 7),
-            Text(_command,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: C.mono.copyWith(fontSize: 11.5, color: C.body)),
-          ],
-          if (shown.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 9),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              decoration: BoxDecoration(
-                color: C.paper2,
-                borderRadius: BorderRadius.circular(C.radiusSmall),
-              ),
-              child: Text(shown, style: C.output),
+        ),
+        if (_open && text.isNotEmpty)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: C.paper2,
+              borderRadius: BorderRadius.circular(C.radiusSmall),
             ),
-          ],
-          if (rest > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Text('还有 $rest 行', style: C.monoSmall.copyWith(color: C.grey2)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(lines.take(shownLines).join('\n'), style: C.output),
+                if (rest > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('还有 $rest 行没有显示',
+                        style: C.monoSmall.copyWith(color: C.grey2, fontSize: 10.5)),
+                  ),
+              ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
-  Widget _status() {
-    if (running) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: C.blueSoft,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text('执行中', style: C.monoSmall.copyWith(color: C.blue, fontSize: 10)),
-      );
-    }
-    if (output == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: C.paper2,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text('等待', style: C.monoSmall.copyWith(color: C.grey2, fontSize: 10)),
+  Widget _dot() {
+    final Color color = widget.running
+        ? C.blue
+        : (widget.output == null ? C.rule2 : const Color(0xFF3FA96B));
+    if (widget.running) {
+      return SizedBox(
+        width: 10,
+        height: 10,
+        child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
       );
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
+/// Several calls from one assistant turn, folded into one card.
+class ToolRunGroup extends StatelessWidget {
+  const ToolRunGroup({
+    super.key,
+    required this.calls,
+    required this.outputs,
+    this.runningId = '',
+  });
+
+  final List<LlmToolCall> calls;
+  final Map<String, String> outputs;
+  final String runningId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (calls.length == 1) {
+      final LlmToolCall c = calls.first;
+      return ToolStepRow(
+        call: c,
+        output: outputs[c.id],
+        running: c.id == runningId,
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
       decoration: BoxDecoration(
-        color: C.paper2,
-        borderRadius: BorderRadius.circular(20),
+        color: C.card,
+        borderRadius: BorderRadius.circular(C.radiusSmall),
+        border: Border.all(color: C.rule),
       ),
-      child: Text('完成', style: C.monoSmall.copyWith(color: C.grey, fontSize: 10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 2),
+            child: Text('${calls.length} 步操作', style: C.label),
+          ),
+          for (int i = 0; i < calls.length; i += 1) ...<Widget>[
+            if (i > 0) const RuleLine(),
+            ToolStepRow(
+              call: calls[i],
+              output: outputs[calls[i].id],
+              running: calls[i].id == runningId,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -244,10 +311,21 @@ class ApprovalCard extends StatelessWidget {
     super.key,
     required this.request,
     required this.onDecide,
+    this.onAllowKind,
+    this.onAllowAll,
+    this.kindLabel = '',
   });
 
   final ApprovalRequest request;
   final void Function(bool allowed) onDecide;
+
+  /// Approve this shape of command for the rest of the conversation.
+  final VoidCallback? onAllowKind;
+
+  /// Approve everything for the rest of the conversation.
+  final VoidCallback? onAllowAll;
+
+  final String kindLabel;
 
   String get _command {
     final Map<String, Object?> args = request.args;
@@ -314,13 +392,41 @@ class ApprovalCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: SquareButton(
-                  label: '批准执行',
+                  label: '批准这一条',
                   filled: true,
                   onPressed: () => onDecide(true),
                 ),
               ),
             ],
           ),
+          if (onAllowKind != null || onAllowAll != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 4,
+              children: <Widget>[
+                if (onAllowKind != null)
+                  TextButton(
+                    onPressed: onAllowKind,
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.blue,
+                      textStyle: const TextStyle(fontSize: 12),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: Text('这一类都批准${kindLabel.isEmpty ? '' : '（$kindLabel）'}'),
+                  ),
+                if (onAllowAll != null)
+                  TextButton(
+                    onPressed: onAllowAll,
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.grey,
+                      textStyle: const TextStyle(fontSize: 12),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Text('这个对话都批准'),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -122,3 +122,44 @@ class MemoryStore {
     return b.toString();
   }
 }
+
+/// All memory files. `global` for cross-host notes, one file per host id.
+class MemoryBook {
+  MemoryBook(this.dir);
+
+  final Directory dir;
+  final Map<String, MemoryStore> _open = <String, MemoryStore>{};
+
+  static const String globalScope = 'global';
+
+  Future<MemoryStore> open(String scope) async {
+    final MemoryStore? cached = _open[scope];
+    if (cached != null) return cached;
+    final MemoryStore store = MemoryStore(_file(scope));
+    await store.load();
+    _open[scope] = store;
+    return store;
+  }
+
+  MemoryStore? peek(String scope) => _open[scope];
+
+  File _file(String scope) => File(
+        '${dir.path}/${scope == globalScope ? 'global' : 'host-$scope'}.json',
+      );
+
+  /// Synchronous render for the system prompt. Only already-open scopes count.
+  String render(Iterable<String> scopes, {int maxChars = 1200}) {
+    final StringBuffer b = StringBuffer();
+    int left = maxChars;
+    for (final String scope in scopes) {
+      final MemoryStore? store = _open[scope];
+      if (store == null || store.entries.isEmpty) continue;
+      final String text = store.renderForPrompt(maxChars: left);
+      if (text.isEmpty) continue;
+      b.write(text);
+      left -= text.length;
+      if (left <= 0) break;
+    }
+    return b.toString();
+  }
+}

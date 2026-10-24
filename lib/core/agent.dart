@@ -51,7 +51,8 @@ class AgentLoop {
     this.maxSteps = 12,
     this.maxContextChars = 24000,
     this.environment,
-  });
+    List<LlmMessage>? messages,
+  }) : history = messages ?? <LlmMessage>[];
 
   final LlmProvider llm;
   final ToolRegistry registry;
@@ -65,7 +66,8 @@ class AgentLoop {
   final String Function()? environment;
   final int maxContextChars;
 
-  final List<LlmMessage> history = <LlmMessage>[];
+  /// The transcript. May be owned by a Conversation so it survives restarts.
+  final List<LlmMessage> history;
 
   /// Steps used by the current turn, and tokens reported by the provider.
   int step = 0;
@@ -260,4 +262,17 @@ String truncateOutput(String text, {int head = 3000, int tail = 800}) {
   if (text.length <= head + tail) return text;
   final int omitted = text.length - head - tail;
   return '${text.substring(0, head)}\n… 省略 $omitted 个字符 …\n${text.substring(text.length - tail)}';
+}
+
+/// The "kind" of a call: same tool + same first word of the command. Used to
+/// stop asking for the same shape of command over and over in one conversation.
+String approvalKind(LlmToolCall call) {
+  final Object? cmd = call.args['command'];
+  if (cmd is String && cmd.trim().isNotEmpty) {
+    final String word = cmd.trim().split(RegExp(r'\s+')).first.split('/').last.toLowerCase();
+    return '${call.name}:$word';
+  }
+  final Object? op = call.args['op'];
+  if (op is String && op.isNotEmpty) return '${call.name}:${op.toLowerCase()}';
+  return '${call.name}:*';
 }

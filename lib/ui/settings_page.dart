@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/agent.dart';
 import '../core/models.dart';
 import '../core/policy.dart';
 import '../data/providers.dart';
@@ -16,14 +15,12 @@ class SettingsPage extends StatefulWidget {
     required this.settings,
     required this.secrets,
     required this.policy,
-    required this.agent,
     required this.onOpenAbout,
   });
 
   final SettingsStore settings;
   final SecretStore secrets;
   final ApprovalPolicy policy;
-  final AgentLoop agent;
   final VoidCallback onOpenAbout;
 
   @override
@@ -85,7 +82,6 @@ class _SettingsPageState extends State<SettingsPage> {
         : s.approvalMode == 'askAll'
             ? ApprovalMode.askAll
             : ApprovalMode.autoRead;
-    widget.agent.maxSteps = s.maxSteps;
     if (!mounted) return;
     setState(() => _saved = '已保存');
   }

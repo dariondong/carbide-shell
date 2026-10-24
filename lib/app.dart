@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'core/conversation.dart';
 import 'data/hosts.dart';
 import 'data/update.dart';
 import 'services.dart';
 import 'ui/about_page.dart';
 import 'ui/chat_page.dart';
+import 'ui/conversations_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
@@ -39,6 +41,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  Conversation? _open;
 
   @override
   void initState() {
@@ -46,8 +49,8 @@ class _HomeShellState extends State<HomeShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
   }
 
-  /// Once a day, ask GitHub whether there is a newer release. Offline is fine:
-  /// a failed check says nothing and is tried again tomorrow.
+  /// Once a day, ask GitHub for a newer release. Offline is fine: a failed
+  /// check says nothing and is retried tomorrow.
   Future<void> _maybeCheckUpdate() async {
     final DateTime? last = DateTime.tryParse(widget.services.settings.value.lastUpdateCheck);
     if (last != null && DateTime.now().difference(last) < const Duration(hours: 24)) return;
@@ -81,7 +84,7 @@ class _HomeShellState extends State<HomeShell> {
                 final String url = best.apkUrl.isEmpty ? best.pageUrl : best.apkUrl;
                 launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
               },
-              child: const Text('去下载', style: TextStyle(fontSize: 13, color: C.ink)),
+              child: const Text('去下载', style: TextStyle(fontSize: 13, color: C.blue)),
             ),
           ],
         ),
@@ -105,33 +108,47 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted) setState(() {});
   }
 
+  String _subtitle(Conversation c) {
+    if (c.multiHost) return '全部主机';
+    final HostEntry? h = widget.services.hosts.byId(c.hostId);
+    return h == null ? '主机已删除' : '${h.name} · ${h.address}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppServices s = widget.services;
-    final List<HostEntry> hosts = s.hosts.hosts;
-    final String title = hosts.isEmpty ? '没有主机' : hosts.first.name;
-    final String address = hosts.isEmpty ? '先在主机页加一台' : hosts.first.address;
+    final Conversation? open = _open;
+
+    final Widget chatTab = open == null
+        ? ConversationsPage(
+            services: s,
+            onOpen: (Conversation c) => setState(() => _open = c),
+            onChanged: _refresh,
+          )
+        : ChatPage(
+            key: ValueKey<String>(open.id),
+            services: s,
+            conversation: open,
+            subtitle: _subtitle(open),
+            onBack: () {
+              setState(() => _open = null);
+              _refresh();
+            },
+          );
 
     return Scaffold(
       body: SafeArea(
         child: IndexedStack(
           index: _index,
           children: <Widget>[
-            ChatPage(
-              agent: s.agent,
-              title: title,
-              address: address,
-              hostCount: hosts.length,
-              onOpenHosts: () => setState(() => _index = 1),
-            ),
+            chatTab,
             HostsPage(hosts: s.hosts, secrets: s.secrets, onChanged: _refresh),
             TerminalPage(hosts: s.hosts, pool: s.pool),
-            MemoryPage(memory: s.memory, onChanged: _refresh),
+            MemoryPage(services: s, onChanged: _refresh),
             SettingsPage(
               settings: s.settings,
               secrets: s.secrets,
               policy: s.policy,
-              agent: s.agent,
               onOpenAbout: _openAbout,
             ),
           ],
@@ -161,7 +178,10 @@ class _HomeShellState extends State<HomeShell> {
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _index = index),
+        onTap: () => setState(() {
+          _index = index;
+          if (index != 0) _open = _open;
+        }),
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
