@@ -22,6 +22,7 @@ class ScriptedProvider implements LlmProvider {
     required List<LlmMessage> messages,
     required List<ToolSpec> tools,
     CancelToken? cancel,
+    void Function(String delta)? onText,
   }) async {
     lastSystem = system;
     if (calls >= replies.length) return const LlmReply(text: '没有更多步骤。');
@@ -264,6 +265,7 @@ class _ThrowingProvider implements LlmProvider {
     required List<LlmMessage> messages,
     required List<ToolSpec> tools,
     CancelToken? cancel,
+    void Function(String delta)? onText,
   }) async {
     throw LlmException('连不上');
   }

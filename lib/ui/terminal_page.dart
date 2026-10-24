@@ -50,6 +50,7 @@ class TerminalPage extends StatefulWidget {
 
 class _TerminalPageState extends State<TerminalPage> {
   final Terminal _terminal = Terminal(maxLines: 5000);
+  final TextEditingController _line = TextEditingController();
   HostEntry? _host;
   SSHSession? _session;
   bool _connecting = false;
