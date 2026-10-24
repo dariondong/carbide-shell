@@ -157,6 +157,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   String _subtitle(Conversation c) {
+    if (c.advanceMaster) return 'Advance Master · 全部主机';
     if (c.multiHost) return '全部主机';
     final HostEntry? h = widget.services.hosts.byId(c.hostId);
     return h == null ? '主机已删除' : '${h.name} · ${h.address}';

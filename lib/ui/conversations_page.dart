@@ -101,7 +101,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
   Widget _row(Conversation c) {
     final HostEntry? host = c.multiHost ? null : widget.services.hosts.byId(c.hostId);
     final String scope = c.multiHost
-        ? '全部主机'
+        ? (c.advanceMaster ? '全部主机 · Advance Master' : '全部主机')
         : (host == null ? '主机已删除' : '${host.name} · ${host.address}');
     final String meta = '${c.turns} 轮 · ${_tokens(c.tokensUsed)} tok · ${_ago(c.updatedAt)}';
     final bool waiting = widget.hub.isWaiting(c.id);
@@ -212,6 +212,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
     final TextEditingController title = TextEditingController();
     final List<HostEntry> hosts = widget.services.hosts.hosts;
     String hostId = '';
+    bool master = false;
     final bool? ok = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) => StatefulBuilder(
@@ -224,24 +225,61 @@ class _ConversationsPageState extends State<ConversationsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 RuleField(controller: title, label: '名字', hint: '磁盘清理'),
-                const Text('范围', style: TextStyle(fontSize: 11.5, color: C.grey)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                Row(
                   children: <Widget>[
-                    _scopeChip('全部主机', hostId.isEmpty, () => setLocal(() => hostId = '')),
-                    for (final HostEntry h in hosts)
-                      _scopeChip(h.name, hostId == h.id, () => setLocal(() => hostId = h.id)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text('Advance Master',
+                              style: TextStyle(fontSize: 13, color: C.ink)),
+                          const SizedBox(height: 3),
+                          Text(
+                            '管全部主机，还能把新主机写进列表。',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: master ? C.blue : C.grey,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ToggleKnob(
+                      value: master,
+                      onChanged: (bool v) => setLocal(() {
+                        master = v;
+                        if (v) hostId = '';
+                      }),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  hostId.isEmpty
-                      ? '这个对话可以操作全部主机。'
-                      : '这个对话只管这一台，记忆也单独存在它名下。',
-                  style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
-                ),
+                const SizedBox(height: 14),
+                if (master)
+                  const Text(
+                    '开了就是全部主机，范围不用选。加主机前它会先问地址和账号。',
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
+                  )
+                else ...<Widget>[
+                  const Text('范围', style: TextStyle(fontSize: 11.5, color: C.grey)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _scopeChip('全部主机', hostId.isEmpty, () => setLocal(() => hostId = '')),
+                      for (final HostEntry h in hosts)
+                        _scopeChip(h.name, hostId == h.id, () => setLocal(() => hostId = h.id)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    hostId.isEmpty
+                        ? '这个对话可以操作全部主机。'
+                        : '这个对话只管这一台，记忆也单独存在它名下。',
+                    style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
+                  ),
+                ],
               ],
             ),
           ),
@@ -262,6 +300,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
     final Conversation c = await widget.services.conversations.create(
       title: title.text.trim().isEmpty ? '新对话' : title.text,
       hostId: hostId,
+      advanceMaster: master,
     );
     if (!mounted) return;
     widget.onChanged();

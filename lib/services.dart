@@ -9,6 +9,7 @@ import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
+import 'tools/host_tools.dart';
 import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/ssh_tools.dart';
@@ -56,6 +57,10 @@ class AppServices {
     if (isDesktopPlatform) {
       registry.register(LocalExecTool());
     }
+    // Advance Master 才拿得到「加主机」这个写口子。
+    if (c.advanceMaster) {
+      registry.register(AddHostTool(hosts: hosts, secrets: secrets, pool: pool));
+    }
     final AgentLoop loop = AgentLoop(
       llm: SettingsLlmProvider(settings, secrets),
       registry: registry,
@@ -98,6 +103,11 @@ String environmentText(
   final List<HostEntry> visible = c.multiHost
       ? hosts.hosts
       : hosts.hosts.where((HostEntry h) => h.id == c.hostId).toList();
+
+  if (c.advanceMaster) {
+    b.writeln('- 这个对话是 Advance Master：管全部主机，可以用 host_add 把新主机写进列表。'
+        '地址、账号、密码或私钥先问清楚，不要自己编。');
+  }
 
   if (visible.isEmpty) {
     b.writeln('- 这台机器上没有可用的主机，需要用户先在主机页添加。');

@@ -14,6 +14,7 @@ class Conversation {
     this.autoApproveAll = false,
     this.tokensUsed = 0,
     this.systemPrompt = '',
+    this.advanceMaster = false,
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -37,6 +38,9 @@ class Conversation {
   /// 这个对话自己的系统提示词。空着表示跟设置走。
   String systemPrompt;
 
+  /// Advance Master：管全部主机，还能把新主机写进列表。
+  bool advanceMaster;
+
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
 
@@ -57,6 +61,7 @@ class Conversation {
         'autoApproveAll': autoApproveAll,
         'tokensUsed': tokensUsed,
         if (systemPrompt.trim().isNotEmpty) 'systemPrompt': systemPrompt,
+        if (advanceMaster) 'advanceMaster': true,
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -80,6 +85,7 @@ class Conversation {
       autoApproveAll: json['autoApproveAll'] == true,
       tokensUsed: (json['tokensUsed'] as num?)?.toInt() ?? 0,
       systemPrompt: '${json['systemPrompt'] ?? ''}',
+      advanceMaster: json['advanceMaster'] == true,
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],
@@ -181,11 +187,16 @@ class ConversationStore {
     }
   }
 
-  Future<Conversation> create({required String title, String hostId = ''}) async {
+  Future<Conversation> create({
+    required String title,
+    String hostId = '',
+    bool advanceMaster = false,
+  }) async {
     final Conversation c = Conversation(
       id: 'c${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}',
       title: title.trim().isEmpty ? '新对话' : title.trim(),
-      hostId: hostId,
+      hostId: advanceMaster ? '' : hostId,
+      advanceMaster: advanceMaster,
     );
     _items.add(c);
     await save(c);
