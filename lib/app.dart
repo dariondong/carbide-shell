@@ -129,7 +129,16 @@ class _HomeShellState extends State<HomeShell> {
   void _openAbout() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(backgroundColor: C.paper, body: SafeArea(child: AboutPage())),
+        builder: (_) => Scaffold(
+          backgroundColor: C.paper,
+          body: SafeArea(
+            child: AboutPage(
+              hostCount: widget.services.hosts.hosts.length,
+              conversationCount: widget.services.conversations.all.length,
+              usage: widget.services.usage,
+            ),
+          ),
+        ),
       ),
     );
   }
