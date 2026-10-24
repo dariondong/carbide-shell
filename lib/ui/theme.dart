@@ -1,24 +1,45 @@
 import 'package:flutter/material.dart';
 
-/// The palette and the type scale from DESIGN.md. Nothing else may be used.
+/// Direction B: warm paper, white cards, one ink-blue accent, soft radius.
 class C {
-  static const Color paper = Color(0xFFF4F2ED);
-  static const Color paper2 = Color(0xFFEDEAE3);
-  static const Color ink = Color(0xFF111315);
-  static const Color body = Color(0xFF2A2F33);
-  static const Color grey = Color(0xFF63686C);
-  static const Color grey2 = Color(0xFF787870);
-  static const Color rule = Color(0xFFD5D0C4);
-  static const Color rule2 = Color(0xFFBDB7A8);
-  static const Color blue = Color(0xFF1B4BC4);
+  // Surfaces
+  static const Color paper = Color(0xFFFAF9F6); // page
+  static const Color card = Color(0xFFFFFFFF); // raised card
+  static const Color paper2 = Color(0xFFF4F3EF); // inset / code block
+
+  // Ink
+  static const Color ink = Color(0xFF1A1C1F);
+  static const Color body = Color(0xFF3A4048);
+  static const Color grey = Color(0xFF6E7681);
+  static const Color grey2 = Color(0xFF9AA0A6);
+
+  // Lines
+  static const Color rule = Color(0xFFECEAE4);
+  static const Color rule2 = Color(0xFFDCD8D0);
+
+  // One accent
+  static const Color blue = Color(0xFF3355E8);
+  static const Color blueSoft = Color(0xFFE8ECFC);
+
+  // Terminal stays dark: it is a terminal.
   static const Color onInk = Color(0xFFE9E7E1);
+  static const Color termBg = Color(0xFF121417);
+
+  static const double radius = 14;
+  static const double radiusSmall = 10;
+
+  static List<BoxShadow> get softShadow => const <BoxShadow>[
+        BoxShadow(color: Color(0x0F181C23), blurRadius: 2, offset: Offset(0, 1)),
+        BoxShadow(color: Color(0x0D181C23), blurRadius: 16, offset: Offset(0, 6)),
+      ];
 
   static const String monoFamily = 'monospace';
 
   static const TextStyle label = TextStyle(
     fontSize: 10,
-    letterSpacing: 1.8,
+    letterSpacing: 1.4,
     color: grey,
+    fontWeight: FontWeight.w600,
     height: 1.4,
   );
 
@@ -38,14 +59,14 @@ class C {
 
   static const TextStyle output = TextStyle(
     fontFamily: monoFamily,
-    fontSize: 11.5,
-    height: 1.45,
-    color: Color(0xFF3A4045),
+    fontSize: 11,
+    height: 1.5,
+    color: Color(0xFF5C636C),
   );
 
   static const TextStyle ask = TextStyle(
     fontSize: 16,
-    height: 1.45,
+    height: 1.5,
     color: ink,
     letterSpacing: -0.1,
   );
@@ -58,12 +79,13 @@ class C {
 
   static ThemeData theme() {
     final ColorScheme scheme = const ColorScheme.light(
-      primary: ink,
-      onPrimary: paper,
-      secondary: blue,
-      onSecondary: paper,
-      surface: paper,
+      primary: blue,
+      onPrimary: Colors.white,
+      secondary: ink,
+      onSecondary: Colors.white,
+      surface: card,
       onSurface: ink,
+      error: Color(0xFFD7443E),
     );
     return ThemeData(
       useMaterial3: true,
@@ -75,7 +97,7 @@ class C {
       highlightColor: const Color(0x00000000),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: blue,
-        selectionColor: Color(0x331B4BC4),
+        selectionColor: Color(0x333355E8),
         selectionHandleColor: blue,
       ),
       textTheme: const TextTheme(
@@ -88,16 +110,27 @@ class C {
         isDense: true,
         hintStyle: TextStyle(fontSize: 13, color: grey2),
       ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: paper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      dialogTheme: DialogThemeData(
+        backgroundColor: card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
         elevation: 0,
+        shadowColor: const Color(0x1A181C23),
       ),
-      snackBarTheme: const SnackBarThemeData(
+      snackBarTheme: SnackBarThemeData(
         backgroundColor: ink,
-        contentTextStyle: TextStyle(color: paper),
+        contentTextStyle: const TextStyle(color: Colors.white),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSmall)),
       ),
     );
   }
+
+  /// The one card shape used everywhere.
+  static BoxDecoration cardDecoration({Color border = rule, bool shadow = true}) =>
+      BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: border),
+        boxShadow: shadow ? softShadow : const <BoxShadow>[],
+      );
 }

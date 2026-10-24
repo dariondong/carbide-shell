@@ -164,7 +164,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
           ),
           if (widget.hostCount == 0) ...<Widget>[
             const SizedBox(height: 20),
-            SquareButton(label: '去加主机', onPressed: widget.onOpenHosts),
+            SquareButton(label: '去加主机', filled: true, onPressed: widget.onOpenHosts),
           ],
         ],
       ),
@@ -179,7 +179,8 @@ class _ChatPageState extends State<ChatPage> implements Approver {
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: C.ink)),
+            color: C.card,
+            border: Border(bottom: BorderSide(color: C.rule)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -195,11 +196,15 @@ class _ChatPageState extends State<ChatPage> implements Approver {
                 GestureDetector(
                   onTap: _stop,
                   child: Container(
-                    width: 26,
-                    height: 26,
-                    color: C.ink,
+                    width: 30,
+                    height: 30,
                     alignment: Alignment.center,
-                    child: Container(width: 9, height: 9, color: C.paper),
+                    decoration: BoxDecoration(
+                      color: C.card,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: C.rule2),
+                    ),
+                    child: Container(width: 9, height: 9, color: C.body),
                   ),
                 )
               else
@@ -210,7 +215,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         Expanded(
           child: SingleChildScrollView(
             controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: _thread(),
@@ -219,45 +224,48 @@ class _ChatPageState extends State<ChatPage> implements Approver {
         ),
         if (_pending != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: ApprovalCard(request: _pending!, onDecide: _decide),
           ),
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: C.rule)),
-          ),
-          child: Column(
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  const Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      enabled: !_running,
-                      style: const TextStyle(fontSize: 14),
-                      onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(hintText: '接着说，或者让它停'),
-                    ),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+            decoration: BoxDecoration(
+              color: C.card,
+              borderRadius: BorderRadius.circular(C.radius),
+              border: Border.all(color: C.rule),
+              boxShadow: C.softShadow,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                const Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    enabled: !_running,
+                    style: const TextStyle(fontSize: 14),
+                    onSubmitted: (_) => _send(),
+                    decoration: const InputDecoration(hintText: '接着说，或者让它停'),
                   ),
-                  GestureDetector(
-                    onTap: _running ? null : _send,
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      color: _running ? C.rule2 : C.ink,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.arrow_upward, size: 16, color: C.paper),
+                ),
+                GestureDetector(
+                  onTap: _running ? null : _send,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: _running ? C.rule2 : C.blue,
+                      borderRadius: BorderRadius.circular(C.radiusSmall),
                     ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.arrow_upward, size: 18, color: Colors.white),
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(height: 2, color: C.ink),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ],

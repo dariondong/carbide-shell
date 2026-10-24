@@ -10,6 +10,7 @@ class AppSettings {
     this.maxSteps = 12,
     this.approvalMode = 'autoRead',
     this.allowedDomains = const <String>[],
+    this.lastUpdateCheck = '',
   });
 
   String baseUrl;
@@ -23,6 +24,9 @@ class AppSettings {
   /// Hosts `http_request` may reach. Empty means nothing is reachable.
   List<String> allowedDomains;
 
+  /// ISO time of the last update check, so a launch does not hammer GitHub.
+  String lastUpdateCheck;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'baseUrl': baseUrl,
         'model': model,
@@ -30,6 +34,7 @@ class AppSettings {
         'maxSteps': maxSteps,
         'approvalMode': approvalMode,
         'allowedDomains': allowedDomains,
+        'lastUpdateCheck': lastUpdateCheck,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -40,6 +45,7 @@ class AppSettings {
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.2,
       maxSteps: (json['maxSteps'] as num?)?.toInt() ?? 12,
       approvalMode: '${json['approvalMode'] ?? 'autoRead'}',
+      lastUpdateCheck: '${json['lastUpdateCheck'] ?? ''}',
       allowedDomains: domains is List
           ? domains.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],

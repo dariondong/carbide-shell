@@ -25,7 +25,8 @@ class _MemoryPageState extends State<MemoryPage> {
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: C.ink)),
+            color: C.card,
+            border: Border(bottom: BorderSide(color: C.rule)),
           ),
           child: Row(
             children: <Widget>[
@@ -36,11 +37,14 @@ class _MemoryPageState extends State<MemoryPage> {
               GestureDetector(
                 onTap: () => _edit(),
                 child: Container(
-                  width: 26,
-                  height: 26,
+                  width: 32,
+                  height: 32,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(border: Border.all(color: C.ink)),
-                  child: const Icon(Icons.add, size: 15, color: C.ink),
+                  decoration: BoxDecoration(
+                    color: C.blue,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                  ),
+                  child: const Icon(Icons.add, size: 17, color: Colors.white),
                 ),
               ),
             ],
@@ -56,15 +60,17 @@ class _MemoryPageState extends State<MemoryPage> {
                   ),
                 )
               : ListView.builder(
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                   itemCount: list.length,
-                  itemBuilder: (BuildContext context, int i) => _row(list[i], i),
+                  itemBuilder: (BuildContext context, int i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _row(list[i], i),
+                  ),
                 ),
         ),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.rule))),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
           child: const Text(
             '每轮对话会把这里最新的内容带进系统提示，最多 1200 字。删掉就不再带。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
@@ -75,11 +81,8 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _row(MemoryEntry e, int index) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 13, 12, 13),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: index == 0 ? C.ink : C.rule)),
-      ),
+    return CardBox(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

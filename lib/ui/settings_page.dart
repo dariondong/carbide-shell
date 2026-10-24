@@ -6,6 +6,7 @@ import '../core/policy.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
+import '../version.dart';
 import 'components.dart';
 import 'theme.dart';
 
@@ -16,12 +17,14 @@ class SettingsPage extends StatefulWidget {
     required this.secrets,
     required this.policy,
     required this.agent,
+    required this.onOpenAbout,
   });
 
   final SettingsStore settings;
   final SecretStore secrets;
   final ApprovalPolicy policy;
   final AgentLoop agent;
+  final VoidCallback onOpenAbout;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -96,7 +99,8 @@ class _SettingsPageState extends State<SettingsPage> {
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: C.ink)),
+            color: C.card,
+            border: Border(bottom: BorderSide(color: C.rule)),
           ),
           alignment: Alignment.centerLeft,
           child: const Text('设置', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -154,7 +158,24 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text(_saved, style: const TextStyle(fontSize: 12, color: C.grey)),
                 ],
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 26),
+              const RuleLine(),
+              InkWell(
+                onTap: widget.onOpenAbout,
+                borderRadius: BorderRadius.circular(C.radius),
+                child: CardBox(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+                  child: Row(
+                    children: <Widget>[
+                      const Text('关于', style: TextStyle(fontSize: 13.5, color: C.ink)),
+                      const Spacer(),
+                      Text('版本 $kAppVersion', style: C.monoSmall),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right, size: 16, color: C.grey),
+                    ],
+                  ),
+                ),
+              ),
               const RuleLine(),
               const SizedBox(height: 14),
               const Text(
@@ -191,13 +212,15 @@ class _SettingsPageState extends State<SettingsPage> {
       child: GestureDetector(
         onTap: () => setState(() => _mode = value),
         child: Container(
-          height: 34,
+          height: 36,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: on ? C.ink : null,
-            border: Border.all(color: C.ink),
+            color: on ? C.blue : C.card,
+            borderRadius: BorderRadius.circular(C.radiusSmall),
+            border: Border.all(color: on ? C.blue : C.rule2),
           ),
-          child: Text(label, style: TextStyle(fontSize: 12, color: on ? C.paper : C.ink)),
+          child: Text(label,
+              style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
         ),
       ),
     );

@@ -4,7 +4,37 @@ import '../core/agent.dart';
 import '../core/models.dart';
 import 'theme.dart';
 
-/// A hairline. The only separator this interface uses.
+/// A white card. The only container shape this interface uses.
+class CardBox extends StatelessWidget {
+  const CardBox({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(14),
+    this.border = C.rule,
+    this.tint,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+  final Color border;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: tint ?? C.card,
+        borderRadius: BorderRadius.circular(C.radius),
+        border: Border.all(color: border),
+        boxShadow: C.softShadow,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// A hairline, used inside cards where a border would be too loud.
 class RuleLine extends StatelessWidget {
   const RuleLine({super.key, this.strong = false, this.height = 1});
 
@@ -13,10 +43,7 @@ class RuleLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      color: strong ? C.ink : C.rule,
-    );
+    return Container(height: height, color: strong ? C.rule2 : C.rule);
   }
 }
 
@@ -41,13 +68,13 @@ class KeyValueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           SizedBox(
-            width: 90,
-            child: Text(label, style: const TextStyle(fontSize: 12, color: C.grey)),
+            width: 96,
+            child: Text(label, style: const TextStyle(fontSize: 12.5, color: C.grey)),
           ),
           Expanded(
             child: Text(
@@ -61,39 +88,42 @@ class KeyValueRow extends StatelessWidget {
   }
 }
 
-/// Square button. Filled means the main action, outlined means the other one.
+/// Filled = the one main action on the screen. Outlined otherwise.
 class SquareButton extends StatelessWidget {
   const SquareButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.filled = false,
-    this.danger = false,
+    this.tone = 'accent',
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool filled;
-  final bool danger;
+
+  /// `accent` for the blue action, `ink` for a quiet one.
+  final String tone;
 
   @override
   Widget build(BuildContext context) {
-    final Color fg = filled ? C.paper : (danger ? C.grey : C.ink);
-    final Color? bg = filled ? C.ink : null;
+    final Color accent = tone == 'ink' ? C.ink : C.blue;
+    final Color bg = filled ? accent : C.card;
+    final Color fg = filled ? Colors.white : (onPressed == null ? C.grey2 : C.ink);
     return SizedBox(
-      height: 36,
+      height: 38,
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-            side: BorderSide(color: C.ink),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(C.radiusSmall),
+            side: BorderSide(color: filled ? bg : C.rule2),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          minimumSize: const Size(0, 36),
-          textStyle: const TextStyle(fontSize: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          minimumSize: const Size(0, 38),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
         child: Text(label),
       ),
@@ -101,7 +131,7 @@ class SquareButton extends StatelessWidget {
   }
 }
 
-/// One tool call: a status rule on the left, then name, command and output.
+/// One tool call, drawn as a card: header, command, output block.
 class ToolCallCard extends StatelessWidget {
   const ToolCallCard({
     super.key,
@@ -114,14 +144,8 @@ class ToolCallCard extends StatelessWidget {
   final String? output;
   final bool running;
 
-  Color get _bar {
-    if (running) return C.blue;
-    if (output == null) return C.rule2;
-    return C.ink;
-  }
-
   String get _command {
-    final Object? raw = call.args['command'] ?? call.args['path'] ?? call.args['url'];
+    final Object? raw = call.args['command'] ?? call.args['path'] ?? call.args['url'] ?? call.args['note'];
     return '${raw ?? ''}';
   }
 
@@ -133,62 +157,88 @@ class ToolCallCard extends StatelessWidget {
     final String shown = long ? lines.take(12).join('\n') : text;
     final int rest = long ? lines.length - 12 : 0;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Container(width: 3, height: null, constraints: const BoxConstraints(minHeight: 44), color: _bar),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return CardBox(
+      padding: const EdgeInsets.fromLTRB(13, 11, 13, 13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: <Widget>[
-                    Text(call.name, style: C.monoSmall.copyWith(color: C.ink)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        running ? '执行中' : (output == null ? '等待' : '完成'),
-                        style: C.monoSmall.copyWith(color: running ? C.blue : C.grey2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_command.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _command,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: C.mono.copyWith(fontSize: 11.5),
-                  ),
-                ),
-              if (shown.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(top: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                  color: C.paper2,
-                  child: Text(shown, style: C.output),
-                ),
-              if (rest > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Text('还有 $rest 行', style: C.monoSmall.copyWith(color: C.grey2)),
+              Text(call.name,
+                  style: C.monoSmall.copyWith(color: C.ink, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              _status(),
+              const Spacer(),
+              if (running)
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 1.6, color: C.blue),
                 ),
             ],
           ),
+          if (_command.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 7),
+            Text(_command,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: C.mono.copyWith(fontSize: 11.5, color: C.body)),
+          ],
+          if (shown.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 9),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: C.paper2,
+                borderRadius: BorderRadius.circular(C.radiusSmall),
+              ),
+              child: Text(shown, style: C.output),
+            ),
+          ],
+          if (rest > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text('还有 $rest 行', style: C.monoSmall.copyWith(color: C.grey2)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _status() {
+    if (running) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: C.blueSoft,
+          borderRadius: BorderRadius.circular(20),
         ),
-      ],
+        child: Text('执行中', style: C.monoSmall.copyWith(color: C.blue, fontSize: 10)),
+      );
+    }
+    if (output == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text('等待', style: C.monoSmall.copyWith(color: C.grey2, fontSize: 10)),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: C.paper2,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text('完成', style: C.monoSmall.copyWith(color: C.grey, fontSize: 10)),
     );
   }
 }
 
-/// The one block that must be read before anything runs.
+/// The block that has to be read before anything runs.
 class ApprovalCard extends StatelessWidget {
   const ApprovalCard({
     super.key,
@@ -201,71 +251,83 @@ class ApprovalCard extends StatelessWidget {
 
   String get _command {
     final Map<String, Object?> args = request.args;
-    final String summary = request.summary;
     final Object? raw = args['command'] ?? args['path'] ?? args['url'] ?? args['note'];
     final String detail = '${raw ?? ''}';
-    return detail.isEmpty ? summary : detail;
+    return detail.isEmpty ? request.summary : detail;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const RuleLine(strong: true, height: 2),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return CardBox(
+      border: const Color(0xFFD9DEF7),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Container(width: 3, color: C.blue, constraints: const BoxConstraints(minHeight: 120)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('待批准', style: C.label.copyWith(color: C.blue)),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${request.tool.name} · ${request.summary}',
-                      style: C.monoSmall.copyWith(color: C.grey),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.only(left: 10),
-                      decoration: const BoxDecoration(
-                        border: Border(left: BorderSide(color: C.rule2)),
-                      ),
-                      child: Text(_command, style: C.mono.copyWith(fontSize: 12.5)),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: <Widget>[
-                        SquareButton(label: '拒绝', onPressed: () => onDecide(false)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: SquareButton(
-                            label: '批准执行',
-                            filled: true,
-                            onPressed: () => onDecide(true),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: C.blueSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('待批准',
+                    style: C.label.copyWith(color: C.blue, fontSize: 9.5, letterSpacing: 1)),
+              ),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Text(
+                  request.summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: C.monoSmall,
                 ),
               ),
             ],
           ),
-        ),
-        const RuleLine(),
-      ],
+          const SizedBox(height: 11),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+            decoration: BoxDecoration(
+              color: C.paper2,
+              borderRadius: BorderRadius.circular(C.radiusSmall),
+            ),
+            child: Text(_command, style: C.mono.copyWith(fontSize: 12.5, color: C.ink)),
+          ),
+          const SizedBox(height: 11),
+          const Text(
+            '批准后这条命令会在目标主机上执行。危险命令已经在上一步被拦掉了。',
+            style: TextStyle(fontSize: 12, height: 1.6, color: C.grey),
+          ),
+          const SizedBox(height: 13),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: SquareButton(
+                  label: '拒绝',
+                  onPressed: () => onDecide(false),
+                  tone: 'ink',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SquareButton(
+                  label: '批准执行',
+                  filled: true,
+                  onPressed: () => onDecide(true),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Labelled text field with a rule under it instead of a box.
+/// Text input as a soft filled box, label above.
 class RuleField extends StatelessWidget {
   const RuleField({
     super.key,
@@ -288,24 +350,30 @@ class RuleField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 隐藏输入只能是单行，多行字段的最小行数也不能超过最大行数。
     final int lines = obscure ? 1 : (maxLines < minLines ? minLines : maxLines);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SectionLabel(label),
+        Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
         const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          obscureText: obscure,
-          keyboardType: keyboard,
-          minLines: obscure ? 1 : minLines,
-          maxLines: lines,
-          style: C.mono.copyWith(fontSize: 13),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: C.card,
+            borderRadius: BorderRadius.circular(C.radiusSmall),
+            border: Border.all(color: C.rule),
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscure,
+            keyboardType: keyboard,
+            minLines: obscure ? 1 : minLines,
+            maxLines: lines,
+            style: C.mono.copyWith(fontSize: 13),
+            decoration: InputDecoration(hintText: hint.isEmpty ? null : hint),
+          ),
         ),
-        const SizedBox(height: 4),
-        const RuleLine(),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
       ],
     );
   }

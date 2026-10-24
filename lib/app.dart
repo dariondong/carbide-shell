@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'data/hosts.dart';
+import 'data/update.dart';
 import 'services.dart';
+import 'ui/about_page.dart';
 import 'ui/chat_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
+import 'version.dart';
 
 class CarbideApp extends StatelessWidget {
   const CarbideApp({super.key, required this.services});
@@ -36,6 +40,67 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
+  }
+
+  /// Once a day, ask GitHub whether there is a newer release. Offline is fine:
+  /// a failed check says nothing and is tried again tomorrow.
+  Future<void> _maybeCheckUpdate() async {
+    final DateTime? last = DateTime.tryParse(widget.services.settings.value.lastUpdateCheck);
+    if (last != null && DateTime.now().difference(last) < const Duration(hours: 24)) return;
+    final UpdateChecker checker = UpdateChecker();
+    try {
+      final List<UpdateInfo> list = await checker.fetch();
+      widget.services.settings.value.lastUpdateCheck = DateTime.now().toIso8601String();
+      await widget.services.settings.save();
+      if (list.isEmpty || !mounted) return;
+      UpdateInfo best = list.first;
+      for (final UpdateInfo i in list) {
+        if (compareVersions(i.version, best.version) > 0) best = i;
+      }
+      if (!best.newerThanCurrent || !mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext ctx) => AlertDialog(
+          title: Text('有新版本 ${best.version}'),
+          content: SingleChildScrollView(
+            child: Text(shortNotes(best.notes),
+                style: const TextStyle(fontSize: 13, height: 1.6)),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('以后再说', style: TextStyle(fontSize: 13, color: C.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                final String url = best.apkUrl.isEmpty ? best.pageUrl : best.apkUrl;
+                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+              },
+              child: const Text('去下载', style: TextStyle(fontSize: 13, color: C.ink)),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      // 离线、限流都当作没发生。
+    } finally {
+      checker.close();
+    }
+  }
+
+  void _openAbout() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(backgroundColor: C.paper, body: SafeArea(child: AboutPage())),
+      ),
+    );
+  }
 
   void _refresh() {
     if (mounted) setState(() {});
@@ -68,13 +133,15 @@ class _HomeShellState extends State<HomeShell> {
               secrets: s.secrets,
               policy: s.policy,
               agent: s.agent,
+              onOpenAbout: _openAbout,
             ),
           ],
         ),
       ),
       bottomNavigationBar: Container(
-        height: 58,
+        height: 60,
         decoration: const BoxDecoration(
+          color: C.card,
           border: Border(top: BorderSide(color: C.rule)),
         ),
         child: Row(
@@ -92,25 +159,34 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _nav(int index, IconData icon, String label) {
     final bool on = _index == index;
-    final Color color = on ? C.ink : C.grey;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => setState(() => _index = index),
-        child: Column(
-          children: <Widget>[
-            Container(height: 2, color: on ? C.ink : const Color(0x00000000)),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(icon, size: 18, color: color),
-                  const SizedBox(height: 4),
-                  Text(label, style: TextStyle(fontSize: 10.5, color: color)),
-                ],
-              ),
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: on ? C.blueSoft : const Color(0x00000000),
+              borderRadius: BorderRadius.circular(20),
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(icon, size: 19, color: on ? C.blue : C.grey2),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: on ? C.blue : C.grey,
+                    fontWeight: on ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

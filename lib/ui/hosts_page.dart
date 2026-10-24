@@ -31,7 +31,8 @@ class _HostsPageState extends State<HostsPage> {
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: C.ink)),
+            color: C.card,
+            border: Border(bottom: BorderSide(color: C.rule)),
           ),
           child: Row(
             children: <Widget>[
@@ -42,27 +43,40 @@ class _HostsPageState extends State<HostsPage> {
               GestureDetector(
                 onTap: () => _edit(),
                 child: Container(
-                  width: 26,
-                  height: 26,
+                  width: 32,
+                  height: 32,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(border: Border.all(color: C.ink)),
-                  child: const Icon(Icons.add, size: 15, color: C.ink),
+                  decoration: BoxDecoration(
+                    color: C.blue,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                  ),
+                  child: const Icon(Icons.add, size: 17, color: Colors.white),
                 ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            itemCount: list.length,
-            itemBuilder: (BuildContext context, int i) => _row(list[i], i),
-          ),
+          child: list.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
+                  child: Text(
+                    '还没有主机。加一台，密钥只留在本机。',
+                    style: TextStyle(fontSize: 13.5, height: 1.6, color: C.body),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  itemCount: list.length,
+                  itemBuilder: (BuildContext context, int i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _row(list[i], i),
+                  ),
+                ),
         ),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.rule))),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
           child: const Text(
             '密钥放在本机安全存储里，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
@@ -75,25 +89,30 @@ class _HostsPageState extends State<HostsPage> {
   Widget _row(HostEntry h, int index) {
     return InkWell(
       onTap: () => _edit(h),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: index == 0 ? C.ink : C.rule),
-          ),
-        ),
+      borderRadius: BorderRadius.circular(C.radius),
+      child: CardBox(
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
         child: Row(
           children: <Widget>[
-            SizedBox(
-              width: 22,
-              child: Text('${index + 1}'.padLeft(2, '0'), style: C.monoSmall.copyWith(color: C.grey2)),
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: C.paper2,
+                borderRadius: BorderRadius.circular(C.radiusSmall),
+              ),
+              child: Text('${index + 1}'.padLeft(2, '0'),
+                  style: C.monoSmall.copyWith(color: C.grey)),
             ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(h.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
+                  Text(h.name,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
                   Text(h.address, style: C.monoSmall),
                 ],
               ),
@@ -101,10 +120,23 @@ class _HostsPageState extends State<HostsPage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
-                Text(h.trusted ? '指纹已记' : '指纹待确认',
-                    style: TextStyle(fontSize: 11, color: h.trusted ? C.grey : C.blue)),
-                const SizedBox(height: 2),
-                Text(h.auth == 'key' ? '私钥' : '密码', style: C.monoSmall.copyWith(color: C.grey2)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: h.trusted ? C.paper2 : C.blueSoft,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    h.trusted ? '指纹已记' : '指纹待确认',
+                    style: C.monoSmall.copyWith(
+                      fontSize: 10,
+                      color: h.trusted ? C.grey : C.blue,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(h.auth == 'key' ? '私钥' : '密码',
+                    style: C.monoSmall.copyWith(color: C.grey2)),
               ],
             ),
           ],
@@ -226,11 +258,12 @@ class _HostsPageState extends State<HostsPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: on ? C.ink : null,
-          border: Border.all(color: C.ink),
+          color: on ? C.blue : C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? C.paper : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
       ),
     );
   }

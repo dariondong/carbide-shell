@@ -120,7 +120,8 @@ class _TerminalPageState extends State<TerminalPage> {
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: C.ink)),
+            color: C.card,
+            border: Border(bottom: BorderSide(color: C.rule)),
           ),
           child: Row(
             children: <Widget>[
@@ -170,7 +171,12 @@ class _TerminalPageState extends State<TerminalPage> {
           ),
         Expanded(
           child: Container(
-            color: C.ink,
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: C.termBg,
+              borderRadius: BorderRadius.circular(C.radius),
+            ),
             width: double.infinity,
             child: TerminalView(
               _terminal,
@@ -185,7 +191,6 @@ class _TerminalPageState extends State<TerminalPage> {
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.rule))),
           child: Row(
             children: <Widget>[
               Text(
