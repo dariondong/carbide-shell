@@ -26,6 +26,7 @@ class SettingsLlmProvider implements LlmProvider {
     required List<LlmMessage> messages,
     required List<ToolSpec> tools,
     CancelToken? cancel,
+    void Function(String delta)? onText,
   }) async {
     final String key = await secrets.read(modelSecretKey());
     final OpenAiProvider provider = OpenAiProvider(
@@ -40,6 +41,7 @@ class SettingsLlmProvider implements LlmProvider {
         messages: messages,
         tools: tools,
         cancel: cancel,
+        onText: onText,
       );
     } finally {
       provider.close();

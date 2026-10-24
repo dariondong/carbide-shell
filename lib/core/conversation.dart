@@ -78,6 +78,7 @@ class Conversation {
 Map<String, Object?> messageToJson(LlmMessage m) => <String, Object?>{
       'role': m.role.name,
       'text': m.text,
+      if (m.images.isNotEmpty) 'images': m.images,
       if (m.calls.isNotEmpty)
         'calls': m.calls
             .map((LlmToolCall c) => <String, Object?>{
@@ -109,7 +110,11 @@ LlmMessage? messageFromJson(Map<String, Object?> json) {
   }
   switch (role) {
     case 'user':
-      return LlmMessage.user(text);
+      final Object? rawImages = json['images'];
+      final List<String> images = rawImages is List
+          ? rawImages.map((Object? e) => '$e').toList()
+          : const <String>[];
+      return LlmMessage.user(text, images: images);
     case 'assistant':
       return LlmMessage.assistant(text, calls: calls);
     case 'tool':

@@ -30,5 +30,6 @@ abstract class LlmProvider {
     required List<LlmMessage> messages,
     required List<ToolSpec> tools,
     CancelToken? cancel,
+    void Function(String delta)? onText,
   });
 }

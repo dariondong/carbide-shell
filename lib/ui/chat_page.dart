@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
@@ -39,6 +41,8 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   Completer<bool>? _waiter;
   CancelToken? _cancel;
   bool _running = false;
+  final List<String> _images = <String>[];
+  final List<String> _attachNames = <String>[];
 
   List<LlmMessage> get _messages => widget.conversation.messages;
 
@@ -119,11 +123,77 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     _cancel = token;
     try {
       session.loop.maxSteps = widget.services.settings.value.maxSteps;
-      await session.loop.send(text, cancel: token);
+      final List<String> images = List<String>.of(_images);
+      _images.clear();
+      _attachNames.clear();
+      await session.loop.send(text, cancel: token, images: images);
       await widget.services.persist(widget.conversation);
     } finally {
       if (mounted) setState(() => _running = false);
     }
+  }
+
+  Future<void> _pickFiles() async {
+    final FilePickerResult? picked = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    for (final PlatformFile f in picked.files) {
+      final List<int>? bytes = f.bytes;
+      if (bytes == null) continue;
+      final String name = f.name.toLowerCase();
+      final bool isImage = name.endsWith('.png') ||
+          name.endsWith('.jpg') ||
+          name.endsWith('.jpeg') ||
+          name.endsWith('.gif') ||
+          name.endsWith('.webp') ||
+          name.endsWith('.bmp');
+      if (isImage) {
+        if (bytes.length > 3 * 1024 * 1024) {
+          _toast('${f.name} 太大了，图片请小于 3 MB。');
+          continue;
+        }
+        final String mime = name.endsWith('.png')
+            ? 'image/png'
+            : name.endsWith('.webp')
+                ? 'image/webp'
+                : name.endsWith('.gif')
+                    ? 'image/gif'
+                    : 'image/jpeg';
+        _images.add('data:$mime;base64,${base64Encode(bytes)}');
+        _attachNames.add(f.name);
+        continue;
+      }
+      final bool isText = name.endsWith('.txt') ||
+          name.endsWith('.md') ||
+          name.endsWith('.json') ||
+          name.endsWith('.csv') ||
+          name.endsWith('.log') ||
+          name.endsWith('.yaml') ||
+          name.endsWith('.yml') ||
+          name.endsWith('.conf') ||
+          name.endsWith('.ini') ||
+          name.endsWith('.sh');
+      if (isText) {
+        final String body = utf8.decode(bytes, allowMalformed: true);
+        if (body.length > 60000) {
+          _toast('${f.name} 太长了，先截前 60000 字。');
+        }
+        final String clipped = body.length > 60000 ? body.substring(0, 60000) : body;
+        _input.text = '${_input.text}${_input.text.isEmpty ? '' : '\n\n'}'
+            '文件 ${f.name}：\n\n```\n$clipped\n```';
+        _attachNames.add(f.name);
+        continue;
+      }
+      _toast('${f.name} 的类型还读不了，现在支持图片和纯文本。');
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _toast(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _stop() {
@@ -185,6 +255,13 @@ class _ChatPageState extends State<ChatPage> implements Approver {
           ));
         }
       }
+    }
+    final String partial = _session?.loop.partial ?? '';
+    if (partial.isNotEmpty) {
+      out.add(Padding(
+        padding: const EdgeInsets.only(bottom: 12, left: 22),
+        child: Text(partial, style: C.answer),
+      ));
     }
     if (out.isEmpty) out.add(_empty());
     return out;
@@ -303,6 +380,42 @@ class _ChatPageState extends State<ChatPage> implements Approver {
               kindLabel: _kind,
             ),
           ),
+        if (_attachNames.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: <Widget>[
+                for (int i = 0; i < _attachNames.length; i += 1)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 4, 6, 4),
+                    decoration: BoxDecoration(
+                      color: C.blueSoft,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(_attachNames[i],
+                            style: C.monoSmall.copyWith(color: C.blue, fontSize: 10.5)),
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _attachNames.removeAt(i);
+                            if (i < _images.length) _images.removeAt(i);
+                          }),
+                          child: const Padding(
+                            padding: EdgeInsets.only(left: 6),
+                            child: Icon(Icons.close, size: 13, color: C.blue),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
           child: Container(
@@ -315,6 +428,14 @@ class _ChatPageState extends State<ChatPage> implements Approver {
             ),
             child: Row(
               children: <Widget>[
+                GestureDetector(
+                  onTap: _running ? null : _pickFiles,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(Icons.add_circle_outline, size: 20, color: C.grey),
+                  ),
+                ),
+                const SizedBox(width: 7),
                 const Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
                 const SizedBox(width: 9),
                 Expanded(

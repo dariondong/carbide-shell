@@ -69,6 +69,7 @@ class OpenAiProvider implements LlmProvider {
     required List<LlmMessage> messages,
     required List<ToolSpec> tools,
     CancelToken? cancel,
+    void Function(String delta)? onText,
   }) async {
     if (!configured) {
       throw LlmException('还没有填模型地址或模型名。');
@@ -78,13 +79,24 @@ class OpenAiProvider implements LlmProvider {
     if (apiKey.trim().isNotEmpty) {
       req.headers.set('Authorization', 'Bearer ${apiKey.trim()}');
     }
-    req.write(jsonEncode(payload(system: system, messages: messages, tools: tools)));
+    final Map<String, Object?> body = payload(
+      system: system,
+      messages: messages,
+      tools: tools,
+    );
+    final bool streaming = onText != null;
+    if (streaming) body['stream'] = true;
+    req.write(jsonEncode(body));
     final HttpClientResponse res = await req.close();
-    final String text = await res.transform(utf8.decoder).join();
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      final String trimmed = text.length > 400 ? text.substring(0, 400) : text;
+      final String error = await res.transform(utf8.decoder).join();
+      final String trimmed = error.length > 400 ? error.substring(0, 400) : error;
       throw LlmException('模型返回 HTTP ${res.statusCode}：$trimmed');
     }
+    if (streaming) {
+      return _readStream(res, onText);
+    }
+    final String text = await res.transform(utf8.decoder).join();
     final Object? decoded = jsonDecode(text);
     if (decoded is! Map) {
       throw LlmException('模型返回的不是 JSON 对象。');
@@ -100,7 +112,21 @@ Map<String, Object?> messageJson(LlmMessage m) {
     case LlmRole.system:
       return <String, Object?>{'role': 'system', 'content': m.text};
     case LlmRole.user:
-      return <String, Object?>{'role': 'user', 'content': m.text};
+      if (m.images.isEmpty) {
+        return <String, Object?>{'role': 'user', 'content': m.text};
+      }
+      return <String, Object?>{
+        'role': 'user',
+        'content': <Object?>[
+          if (m.text.trim().isNotEmpty)
+            <String, Object?>{'type': 'text', 'text': m.text},
+          for (final String url in m.images)
+            <String, Object?>{
+              'type': 'image_url',
+              'image_url': <String, Object?>{'url': url},
+            },
+        ],
+      };
     case LlmRole.tool:
       return <String, Object?>{
         'role': 'tool',
@@ -200,4 +226,74 @@ int _asInt(Object? v) {
   if (v is num) return v.toInt();
   if (v is String) return int.tryParse(v) ?? 0;
   return 0;
+}
+
+class _ToolAcc {
+  String id = '';
+  String name = '';
+  final StringBuffer args = StringBuffer();
+}
+
+/// Server-sent events: `data: {...}` lines, one delta each, `[DONE]` at the end.
+Future<LlmReply> _readStream(
+  HttpClientResponse res,
+  void Function(String delta)? onText,
+) async {
+  final StringBuffer text = StringBuffer();
+  final Map<int, _ToolAcc> tools = <int, _ToolAcc>{};
+  final Stream<String> lines =
+      res.transform(utf8.decoder).transform(const LineSplitter());
+  await for (final String line in lines) {
+    if (!line.startsWith('data:')) continue;
+    final String data = line.substring(5).trim();
+    if (data.isEmpty) continue;
+    if (data == '[DONE]') break;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(data);
+    } catch (_) {
+      continue;
+    }
+    if (decoded is! Map) continue;
+    final Object? choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) continue;
+    final Object? first = choices.first;
+    if (first is! Map) continue;
+    final Object? delta = first['delta'];
+    if (delta is! Map) continue;
+    final Object? content = delta['content'];
+    if (content is String && content.isNotEmpty) {
+      text.write(content);
+      onText?.call(content);
+    }
+    final Object? calls = delta['tool_calls'];
+    if (calls is List) {
+      for (final Object? raw in calls) {
+        if (raw is! Map) continue;
+        final int index = (raw['index'] as num?)?.toInt() ?? 0;
+        final _ToolAcc acc = tools.putIfAbsent(index, () => _ToolAcc());
+        final Object? id = raw['id'];
+        if (id is String && id.isNotEmpty) acc.id = id;
+        final Object? fn = raw['function'];
+        if (fn is Map) {
+          final Object? name = fn['name'];
+          if (name is String && name.isNotEmpty) acc.name = name;
+          final Object? args = fn['arguments'];
+          if (args is String) acc.args.write(args);
+        }
+      }
+    }
+  }
+  final List<LlmToolCall> calls = <LlmToolCall>[];
+  final List<int> keys = tools.keys.toList()..sort();
+  for (final int k in keys) {
+    final _ToolAcc acc = tools[k]!;
+    if (acc.name.isEmpty) continue;
+    calls.add(LlmToolCall(
+      id: acc.id.isEmpty ? 'call_$k' : acc.id,
+      name: acc.name,
+      args: _decodeArgs(acc.args.toString()),
+    ));
+  }
+  return LlmReply(text: text.toString(), calls: calls);
 }

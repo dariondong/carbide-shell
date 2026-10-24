@@ -104,6 +104,14 @@ class _TerminalPageState extends State<TerminalPage> {
     }
   }
 
+  void _sendLine() {
+    final String text = _line.text;
+    _line.clear();
+    final SSHSession? session = _session;
+    if (session == null || text.isEmpty) return;
+    session.write(Uint8List.fromList(utf8.encode('$text\n')));
+  }
+
   Future<void> _disconnect() async {
     _session?.close();
     setState(() => _session = null);
@@ -185,22 +193,65 @@ class _TerminalPageState extends State<TerminalPage> {
               padding: const EdgeInsets.all(12),
               backgroundOpacity: 1,
               autofocus: true,
-              keyboardType: TextInputType.text,
+              deleteDetection: true,
             ),
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+          child: Column(
             children: <Widget>[
-              Text(
-                live ? '直接在上面打字，回车发送' : '连上之后这里就是它的 shell',
-                style: const TextStyle(fontSize: 11, color: C.grey),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: C.card,
+                        borderRadius: BorderRadius.circular(C.radiusSmall),
+                        border: Border.all(color: C.rule),
+                      ),
+                      child: TextField(
+                        controller: _line,
+                        enabled: live,
+                        style: const TextStyle(fontFamily: C.monoFamily, fontSize: 13),
+                        onSubmitted: (_) => _sendLine(),
+                        textInputAction: TextInputAction.send,
+                        decoration: InputDecoration(
+                          hintText: live ? '输入命令，回车发送' : '先连上一台主机',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: live ? _sendLine : null,
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: live ? C.blue : C.rule2,
+                        borderRadius: BorderRadius.circular(C.radiusSmall),
+                      ),
+                      child: const Icon(Icons.keyboard_return, size: 17, color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => _terminal.eraseDisplay(),
-                child: const Text('清屏', style: TextStyle(fontSize: 11, color: C.grey)),
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  Text(
+                    live ? '直接点终端也能打字（英文键盘）。中文请用上面这行。' : '连上之后这里就是它的 shell',
+                    style: const TextStyle(fontSize: 10.5, color: C.grey),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => _terminal.eraseDisplay(),
+                    child: const Text('清屏', style: TextStyle(fontSize: 10.5, color: C.grey)),
+                  ),
+                ],
               ),
             ],
           ),

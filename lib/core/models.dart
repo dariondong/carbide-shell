@@ -45,7 +45,7 @@ class LlmToolCall {
 }
 
 class LlmMessage {
-  const LlmMessage.user(this.text)
+  const LlmMessage.user(this.text, {this.images = const <String>[]})
       : role = LlmRole.user,
         calls = const <LlmToolCall>[],
         toolCallId = '',
@@ -54,6 +54,7 @@ class LlmMessage {
 
   const LlmMessage.assistant(this.text, {this.calls = const <LlmToolCall>[]})
       : role = LlmRole.assistant,
+        images = const <String>[],
         toolCallId = '',
         toolName = '',
         failed = false;
@@ -64,7 +65,8 @@ class LlmMessage {
     required this.toolName,
     this.failed = false,
   })  : role = LlmRole.tool,
-        calls = const <LlmToolCall>[];
+        calls = const <LlmToolCall>[],
+        images = const <String>[];
 
   final LlmRole role;
   final String text;
@@ -72,6 +74,9 @@ class LlmMessage {
   final String toolCallId;
   final String toolName;
   final bool failed;
+
+  /// Data URLs (`data:image/png;base64,…`) the model should look at.
+  final List<String> images;
 
   bool get isTool => role == LlmRole.tool;
 }

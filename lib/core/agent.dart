@@ -73,6 +73,9 @@ class AgentLoop {
   int step = 0;
   int tokens = 0;
 
+  /// Text of the answer being streamed right now. Empty when idle.
+  String partial = '';
+
   /// Called whenever the visible state changes.
   void Function()? onChanged;
 
@@ -81,10 +84,14 @@ class AgentLoop {
 
   bool get canApprove => approver != null;
 
-  Future<String> send(String input, {CancelToken? cancel}) async {
+  Future<String> send(
+    String input, {
+    CancelToken? cancel,
+    List<String> images = const <String>[],
+  }) async {
     final String text = input.trim();
-    if (text.isEmpty) return '';
-    history.add(LlmMessage.user(text));
+    if (text.isEmpty && images.isEmpty) return '';
+    history.add(LlmMessage.user(text, images: images));
     journal.add(<String, Object?>{'event': 'user', 'text': text});
     _notify();
     step = 0;
@@ -109,6 +116,7 @@ class AgentLoop {
       }
       tokens += reply.usage.total;
 
+      partial = '';
       if (!reply.wantsTools) {
         final String answer = reply.text.trim().isEmpty ? '（没有内容）' : reply.text.trim();
         history.add(LlmMessage.assistant(answer));
@@ -211,6 +219,7 @@ class AgentLoop {
   }
 
   String _finish(String note) {
+    partial = '';
     history.add(LlmMessage.assistant(note));
     journal.add(<String, Object?>{'event': 'stop', 'text': note});
     _notify();
