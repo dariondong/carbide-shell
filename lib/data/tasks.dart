@@ -244,7 +244,7 @@ class TaskScheduler {
           extra: watch.valueText(value),
         );
       case WatchKind.loginFail:
-        final String text = await _run(host, kLoginFailCommand);
+        final String text = await _readText(host, kLoginFailCommand);
         final DateTime from = at.subtract(Duration(minutes: watch.windowStep));
         int count = 0;
         for (final LoginEvent e in parseLastLog(text)) {
@@ -258,7 +258,7 @@ class TaskScheduler {
           extra: '$count 次',
         );
       case WatchKind.loginNew:
-        final String text = await _run(host, kLoginCommand);
+        final String text = await _readText(host, kLoginCommand);
         final List<LoginEvent> events = parseLastLog(text);
         final int total = events.where((LoginEvent e) => e.remote).length;
         if (watch.knownIps.isEmpty) {
@@ -281,7 +281,7 @@ class TaskScheduler {
   }
 
   /// 读一台主机上的登录记录。空输出但有 stderr 就是把错误说出来。
-  Future<String> _run(HostEntry host, String command) async {
+  Future<String> _readText(HostEntry host, String command) async {
     final SSHClient client = await services.pool.connect(host);
     final SSHRunResult result =
         await client.runWithResult(command).timeout(const Duration(seconds: 15));

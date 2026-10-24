@@ -247,6 +247,14 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// 设置页那一行右边写今天花了多少，没记录就留空。
+  String get _usageSummary {
+    final UsageTotals totals = UsageTotals()
+      ..addAll(usageSince(widget.usage.all, usageFrom(1)));
+    if (totals.turns == 0) return '';
+    return '今天 ${usageText(totals.total)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<_Module> modules = kSettingsModules
