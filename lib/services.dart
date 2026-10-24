@@ -9,8 +9,11 @@ import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
+import 'data/tasks.dart';
+import 'data/watch.dart';
 import 'tools/ask_tool.dart';
 import 'tools/host_tools.dart';
+import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/ssh_tools.dart';
@@ -33,6 +36,8 @@ class AppServices {
     required this.pool,
     required this.memory,
     required this.conversations,
+    required this.tasks,
+    required this.watches,
     required this.workspace,
   });
 
@@ -43,6 +48,10 @@ class AppServices {
   final SshPool pool;
   final MemoryBook memory;
   final ConversationStore conversations;
+
+  /// 定时任务与资源监听的清单：模型也能往里写，所以要在这里够得着。
+  final TaskStore tasks;
+  final WatchStore watches;
   final String workspace;
 
   /// Tools are per session: `remember` must write into this conversation's
@@ -55,7 +64,9 @@ class AppServices {
       ..register(HttpTool(settings))
       ..register(FileTool())
       ..register(RememberTool(store))
-      ..register(AskTool());
+      ..register(AskTool())
+      ..register(TaskAddTool(tasks: tasks, hosts: hosts))
+      ..register(WatchAddTool(watches: watches, hosts: hosts));
     if (isDesktopPlatform) {
       registry.register(LocalExecTool());
     }

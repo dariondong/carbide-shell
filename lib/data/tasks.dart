@@ -4,9 +4,17 @@ import 'dart:io';
 
 import '../core/agent.dart';
 import '../core/conversation.dart';
+import '../core/monitor.dart';
 import '../core/schedule.dart';
+import 'package:dartssh2/dartssh2.dart';
+
+import '../core/watch.dart';
 import '../services.dart';
 import 'activity.dart';
+import 'foreground.dart';
+import 'hosts.dart';
+import 'monitor.dart';
+import 'watch.dart';
 
 /// 定时任务清单，一个 JSON 文件，和主机、设置放在一起。
 class TaskStore {
@@ -94,12 +102,16 @@ class TaskScheduler {
   TaskScheduler({
     required this.services,
     required this.tasks,
+    required this.watches,
     required this.board,
     this.onChanged,
   });
 
   final AppServices services;
   final TaskStore tasks;
+
+  /// 资源监听的清单，和定时任务共用这一个计时器。
+  final WatchStore watches;
 
   /// 现在在忙什么由它统一写通知，和对话共用一条。
   final ActivityBoard board;
@@ -108,6 +120,12 @@ class TaskScheduler {
   void Function()? onChanged;
 
   static const Duration tickEvery = Duration(seconds: 20);
+
+  late final HostProbe _probe = HostProbe(services.pool);
+
+  /// 读登录记录：`last` 看成功，`lastb` 看失败。都要秒和年份才好算窗口。
+  static const String kLoginCommand = 'LC_ALL=C last -w -F -n 120 2>&1';
+  static const String kLoginFailCommand = 'LC_ALL=C lastb -F -n 200 2>&1';
 
   Timer? _timer;
   bool _busy = false;
@@ -171,12 +189,110 @@ class TaskScheduler {
         await _run(task, scheduled, late: action == DueAction.runLate);
       }
       if (changed) onChanged?.call();
+      await _tickWatches(at);
     } finally {
       _busy = false;
     }
   }
 
-  /// 界面上点「跑一次」。不改下一次的时刻。
+  /// 资源监听：到点就读一次，过线就发一条通知。这一路不叫模型。
+  Future<void> _tickWatches(DateTime at) async {
+    for (final WatchTask watch in watches.all.toList()) {
+      if (!watch.enabled) continue;
+      final DateTime? due = watch.nextAt;
+      if (due == null || at.isBefore(due)) continue;
+      watch.scheduleFrom(at);
+      final HostEntry? host = services.hosts.byId(watch.hostId);
+      if (host == null) {
+        watch.enabled = false;
+        watch.nextAt = null;
+        await watches.save();
+        onChanged?.call();
+        continue;
+      }
+      try {
+        final WatchReading reading = await _read(watch, host, at);
+        final DateTime? last = watch.lastAlertAt;
+        final bool cooled = last == null ||
+            at.difference(last) >= Duration(minutes: watch.cooldownStep);
+        final bool fire = reading.fire && cooled;
+        watch.addHit(WatchHit(at: at, value: reading.value, fired: fire));
+        if (fire) {
+          watch.lastAlertAt = at;
+          unawaited(ForegroundTask.alert(
+            watch.title.isEmpty ? host.name : watch.title,
+            watch.alertBody(host.name, reading.value, extra: reading.extra),
+          ));
+        }
+      } catch (e) {
+        watch.addHit(WatchHit(at: at, error: '$e'.replaceFirst('Exception: ', '')));
+      }
+      await watches.save();
+      onChanged?.call();
+    }
+  }
+
+  Future<WatchReading> _read(WatchTask watch, HostEntry host, DateTime at) async {
+    switch (watch.kind) {
+      case WatchKind.metric:
+        final HostMetrics metrics = await _probe.read(host);
+        final double? value = watch.valueOf(metrics);
+        if (value == null) throw StateError('这台读不到${watch.metricName}');
+        return WatchReading(
+          value: value,
+          fire: watch.passes(value),
+          extra: watch.valueText(value),
+        );
+      case WatchKind.loginFail:
+        final String text = await _run(host, kLoginFailCommand);
+        final DateTime from = at.subtract(Duration(minutes: watch.windowStep));
+        int count = 0;
+        for (final LoginEvent e in parseLastLog(text)) {
+          final DateTime? when = e.at;
+          if (when == null) continue;
+          if (!when.isBefore(from) && !when.isAfter(at)) count += 1;
+        }
+        return WatchReading(
+          value: count.toDouble(),
+          fire: count >= watch.threshold,
+          extra: '$count 次',
+        );
+      case WatchKind.loginNew:
+        final String text = await _run(host, kLoginCommand);
+        final List<LoginEvent> events = parseLastLog(text);
+        final int total = events.where((LoginEvent e) => e.remote).length;
+        if (watch.knownIps.isEmpty) {
+          // 头一次读只把当前来源记下来，不然开了这条监听会立刻报一堆「新」来源。
+          watch.takeNewHosts(events);
+          return WatchReading(value: total.toDouble(), fire: false);
+        }
+        final List<String> fresh = watch.takeNewHosts(events);
+        return WatchReading(
+          value: fresh.isEmpty ? total.toDouble() : fresh.length.toDouble(),
+          fire: fresh.isNotEmpty,
+          extra: _shortHosts(fresh),
+        );
+    }
+  }
+
+  static String _shortHosts(List<String> hosts) {
+    if (hosts.length <= 3) return hosts.join('、');
+    return '${hosts.take(3).join('、')} 等 ${hosts.length} 个';
+  }
+
+  /// 读一台主机上的登录记录。空输出但有 stderr 就是把错误说出来。
+  Future<String> _run(HostEntry host, String command) async {
+    final SSHClient client = await services.pool.connect(host);
+    final SSHRunResult result =
+        await client.runWithResult(command).timeout(const Duration(seconds: 15));
+    final String out = utf8.decode(result.stdout, allowMalformed: true);
+    if (out.trim().isEmpty) {
+      final String err = utf8.decode(result.stderr, allowMalformed: true).trim();
+      if (err.isNotEmpty) throw StateError(err.split('\n').first);
+    }
+    return out;
+  }
+
   Future<void> runNow(ScheduledTask task) async {
     if (_running.contains(task.id)) return;
     await _run(task, DateTime.now(), late: false);
@@ -251,4 +367,13 @@ class TaskScheduler {
     _lastNoticeText = text;
     board.note('t:${task.id}', text);
   }
+}
+
+/// 一次监听读到的结果：值、要不要提醒、通知上补的那半句。
+class WatchReading {
+  WatchReading({required this.value, required this.fire, this.extra = ''});
+
+  final double value;
+  final bool fire;
+  final String extra;
 }

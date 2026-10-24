@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/schedule.dart';
+import '../core/watch.dart';
 import '../data/hosts.dart';
 import '../data/tasks.dart';
+import '../data/watch.dart';
 import 'components.dart';
 import 'theme.dart';
 
@@ -13,12 +15,14 @@ class TasksPage extends StatefulWidget {
   const TasksPage({
     super.key,
     required this.tasks,
+    required this.watches,
     required this.scheduler,
     required this.hosts,
     required this.onChanged,
   });
 
   final TaskStore tasks;
+  final WatchStore watches;
   final TaskScheduler scheduler;
   final HostStore hosts;
   final VoidCallback onChanged;
@@ -82,10 +86,11 @@ class _TasksPageState extends State<TasksPage> {
               const Text('任务',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
               const SizedBox(width: 8),
-              Text('${list.length}', style: C.monoSmall),
+              Text('${list.length} 定时 · ${widget.watches.all.length} 监听',
+                  style: C.monoSmall),
               const Spacer(),
               GestureDetector(
-                onTap: () => _edit(),
+                onTap: _addSheet,
                 child: Container(
                   width: 32,
                   height: 32,
@@ -101,47 +106,43 @@ class _TasksPageState extends State<TasksPage> {
           ),
         ),
         Expanded(
-          child: list.isEmpty
-              ? _empty()
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-                  itemCount: list.length,
-                  itemBuilder: (BuildContext context, int i) => Padding(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+            children: <Widget>[
+              const SectionLabel('定时任务'),
+              const SizedBox(height: 8),
+              if (list.isEmpty)
+                _hint('还没有定时任务。写一句话定个时间，到点它自己去做。')
+              else
+                for (final ScheduledTask task in list)
+                  Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _card(list[i]),
+                    child: _card(task),
                   ),
-                ),
+              const SizedBox(height: 18),
+              const SectionLabel('资源监听'),
+              const SizedBox(height: 8),
+              if (_watchList.isEmpty)
+                _hint('还没有监听。选一台机器的 CPU、内存或磁盘，过线就推一条通知给你，不叫模型。')
+              else
+                for (final WatchTask watch in _watchList)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _watchCard(watch),
+                  ),
+            ],
+          ),
         ),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: const Text(
             '定时任务在应用里计时。应用被系统清掉时不会触发，三小时内错过的会在下次打开时补跑一次。'
-            '到点后它自己动手，不再问你，只有危险命令会被拦下。',
+            '到点后它自己动手，不再问你，只有危险命令会被拦下。资源监听只看数字，过线就推一条通知。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _empty() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 34, 20, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('还没有定时任务',
-              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),
-          const SizedBox(height: 8),
-          const Text(
-            '写一句话，定个时间，到点它自己去做。比如每天凌晨看一眼磁盘，每周一早上整理一遍日志。',
-            style: C.answer,
-          ),
-          const SizedBox(height: 20),
-          SquareButton(label: '加一个', filled: true, onPressed: () => _edit()),
-        ],
-      ),
     );
   }
 
@@ -231,6 +232,200 @@ class _TasksPageState extends State<TasksPage> {
         ],
       ),
     );
+  }
+
+  /// 一段空白时的两行说明。
+  Widget _hint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(text,
+          style: const TextStyle(fontSize: 12.5, height: 1.65, color: C.body)),
+    );
+  }
+
+  List<WatchTask> get _watchList {
+    final List<WatchTask> all = List<WatchTask>.of(widget.watches.all);
+    all.sort((WatchTask a, WatchTask b) {
+      if (a.enabled != b.enabled) return a.enabled ? -1 : 1;
+      return a.title.compareTo(b.title);
+    });
+    return all;
+  }
+
+  /// 加号先问一句：定时任务，还是只看数字的监听。
+  Future<void> _addSheet() async {
+    final String? pick = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0x00000000),
+      builder: (BuildContext ctx) => Container(
+        decoration: const BoxDecoration(
+          color: C.paper,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10, left: 4),
+              child: Row(
+                children: const <Widget>[
+                  Text('加什么',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            CardBox(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: <Widget>[
+                  _addRow('定时任务', '到点让它自己去做一件事', 'task', ctx),
+                  const RuleLine(),
+                  _addRow('资源监听', '过线就推一条通知，不叫模型', 'watch', ctx),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (pick == null || !mounted) return;
+    if (pick == 'watch') {
+      await _editWatch();
+    } else {
+      await _edit();
+    }
+  }
+
+  Widget _addRow(String title, String note, String value, BuildContext ctx) {
+    return InkWell(
+      onTap: () => Navigator.of(ctx).pop(value),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title, style: const TextStyle(fontSize: 13.5, color: C.ink)),
+                  const SizedBox(height: 3),
+                  Text(note, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _watchCard(WatchTask watch) {
+    final HostEntry? host = widget.hosts.byId(watch.hostId);
+    final WatchHit? last = watch.lastHit;
+    final Color dot = last == null
+        ? C.rule2
+        : last.error.isNotEmpty
+            ? const Color(0xFFD7443E)
+            : last.fired
+                ? C.blue
+                : const Color(0xFF3FA96B);
+    final String lastText;
+    if (last == null) {
+      lastText = '还没读过';
+    } else if (last.error.isNotEmpty) {
+      lastText = '${last.stamp} · 读不到：${last.error}';
+    } else {
+      lastText = '${last.stamp} · ${watch.valueText(last.value ?? 0)}'
+          '${last.fired ? ' · 已提醒' : ''}';
+    }
+    return CardBox(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: InkWell(
+                  onTap: () => _editWatch(watch),
+                  child: Text(
+                    watch.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              if (!watch.enabled)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: _chip('已停用', fg: C.grey, bg: C.paper2),
+                ),
+              ToggleKnob(
+                value: watch.enabled,
+                onChanged: (bool v) => _toggleWatch(watch, v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(watch.when, maxLines: 1, overflow: TextOverflow.ellipsis, style: C.monoSmall),
+          const SizedBox(height: 3),
+          Text(host == null ? '主机已删除' : host.name,
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: C.monoSmall.copyWith(color: C.grey2)),
+          const SizedBox(height: 10),
+          const RuleLine(),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(lastText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: C.monoSmall.copyWith(color: C.grey)),
+              ),
+              const SizedBox(width: 6),
+              _link('改', () => _editWatch(watch)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleWatch(WatchTask watch, bool value) async {
+    watch.enabled = value;
+    if (value) {
+      watch.scheduleFrom(DateTime.now());
+    } else {
+      watch.nextAt = null;
+    }
+    await widget.watches.upsert(watch);
+    if (!mounted) return;
+    setState(() {});
+    widget.onChanged();
+  }
+
+  Future<void> _editWatch([WatchTask? watch]) async {
+    final bool? saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => _WatchEditorPage(
+          watch: watch,
+          hosts: widget.hosts,
+          store: widget.watches,
+        ),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    widget.onChanged();
   }
 
   Widget _dot(TaskRun? last) {
@@ -868,6 +1063,425 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     if (!_enabled) return '${probe.when} · 已停用';
     if (next == null) return '${probe.when} · 时间已经过去了';
     return '${probe.when} · 下次 ${stampText(next, now: now)}';
+  }
+
+  Widget _chip(String label, bool on, VoidCallback tap) {
+    return GestureDetector(
+      onTap: tap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? C.blue : C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: on ? C.blue : C.rule2),
+        ),
+        child: Text(label,
+            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+      ),
+    );
+  }
+}
+
+/// 新建或改一条资源监听。阈值只看一个数，超了或者低于就发通知。
+class _WatchEditorPage extends StatefulWidget {
+  const _WatchEditorPage({
+    required this.watch,
+    required this.hosts,
+    required this.store,
+  });
+
+  final WatchTask? watch;
+  final HostStore hosts;
+  final WatchStore store;
+
+  @override
+  State<_WatchEditorPage> createState() => _WatchEditorPageState();
+}
+
+class _WatchEditorPageState extends State<_WatchEditorPage> {
+  late final TextEditingController _title;
+  late final TextEditingController _threshold;
+  late String _hostId;
+  late WatchKind _kind;
+  late WatchMetric _metric;
+  late bool _above;
+  late int _window;
+  late int _interval;
+  late int _cooldown;
+  late bool _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    final WatchTask? w = widget.watch;
+    final List<HostEntry> hosts = widget.hosts.hosts;
+    _title = TextEditingController(text: w?.title ?? '');
+    _threshold = TextEditingController(
+        text: w == null ? '90' : WatchTask.numberText(w.threshold));
+    _hostId = w?.hostId ?? (hosts.isEmpty ? '' : hosts.first.id);
+    _kind = w?.kind ?? WatchKind.metric;
+    _metric = w?.metric ?? WatchMetric.disk;
+    _above = w?.above ?? true;
+    _window = w?.windowMinutes ?? 10;
+    _interval = w?.intervalMinutes ?? 5;
+    _cooldown = w?.cooldownMinutes ?? 30;
+    _enabled = w?.enabled ?? true;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _threshold.dispose();
+    super.dispose();
+  }
+
+  bool get _isNew => widget.watch == null;
+
+  Future<void> _save() async {
+    if (_hostId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('先选一台主机。监听要盯具体的机器。')),
+      );
+      return;
+    }
+    final double? threshold = double.tryParse(_threshold.text.trim());
+    if (threshold == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('阈值写个数字。')),
+      );
+      return;
+    }
+    final HostEntry? host = widget.hosts.byId(_hostId);
+    final WatchTask watch = widget.watch ??
+        WatchTask(
+          id: WatchStore.newId(),
+          title: '',
+          hostId: _hostId,
+        );
+    if (_title.text.trim().isEmpty) {
+      final String base = host == null ? '监听' : host.name;
+      switch (_kind) {
+        case WatchKind.metric:
+          watch.title = '$base ${kWatchNames[_metric]}';
+        case WatchKind.loginFail:
+          watch.title = '$base 失败登录';
+        case WatchKind.loginNew:
+          watch.title = '$base 新 IP 登录';
+      }
+    } else {
+      watch.title = _title.text.trim();
+    }
+    watch.hostId = _hostId;
+    watch.kind = _kind;
+    watch.metric = _metric;
+    watch.above = _above;
+    watch.windowMinutes = _window;
+    watch.threshold = threshold;
+    watch.intervalMinutes = _interval;
+    watch.cooldownMinutes = _cooldown;
+    watch.enabled = _enabled;
+    if (_enabled) {
+      watch.scheduleFrom(DateTime.now());
+    } else {
+      watch.nextAt = null;
+    }
+    await widget.store.upsert(watch);
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    final WatchTask? watch = widget.watch;
+    if (watch == null) return;
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('删掉这条监听？', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text('「${watch.title}」和它的读数记录会一起删掉。',
+            style: const TextStyle(fontSize: 13, height: 1.6)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除', style: TextStyle(fontSize: 13, color: Color(0xFFD7443E))),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.store.remove(watch.id);
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  String get _preview {
+    final WatchTask probe = WatchTask(
+      id: 'probe',
+      title: 'probe',
+      hostId: _hostId,
+      kind: _kind,
+      metric: _metric,
+      above: _above,
+      threshold: double.tryParse(_threshold.text.trim()) ?? 0,
+      windowMinutes: _window,
+      intervalMinutes: _interval,
+      cooldownMinutes: _cooldown,
+    );
+    if (!_enabled) return '${probe.when} · 已停用';
+    final DateTime at = DateTime.now().add(Duration(minutes: probe.intervalStep));
+    return '${probe.when} · 下次 ${stampText(at)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<HostEntry> hosts = widget.hosts.hosts;
+    final WatchTask? editing = widget.watch;
+    return Scaffold(
+      backgroundColor: C.paper,
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            Container(
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: const BoxDecoration(
+                color: C.card,
+                border: Border(bottom: BorderSide(color: C.rule)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.grey,
+                      minimumSize: const Size(0, 36),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _isNew ? '新监听' : '改监听',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _save,
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.blue,
+                      minimumSize: const Size(0, 36),
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+                children: <Widget>[
+                  RuleField(controller: _title, label: '名字', hint: '磁盘快满了'),
+                  const SectionLabel('盯哪一台'),
+                  const SizedBox(height: 8),
+                  if (hosts.isEmpty)
+                    const Text('主机列表还是空的，先去主机页加一台。',
+                        style: TextStyle(fontSize: 12.5, color: C.body, height: 1.6))
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final HostEntry h in hosts)
+                          _chip(h.name, _hostId == h.id, () => setState(() => _hostId = h.id)),
+                      ],
+                    ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('看什么'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final WatchKind k in WatchKind.values)
+                        _chip(kWatchKindNames[k] ?? k.name, _kind == k,
+                            () => setState(() => _kind = k)),
+                    ],
+                  ),
+                  if (_kind == WatchKind.metric) ...<Widget>[
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final WatchMetric m in WatchMetric.values)
+                          _chip(kWatchNames[m] ?? m.name, _metric == m,
+                              () => setState(() => _metric = m)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        _chip('超过', _above, () => setState(() => _above = true)),
+                        _chip('低于', !_above, () => setState(() => _above = false)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    RuleField(
+                      controller: _threshold,
+                      label: _metric == WatchMetric.load ? '阈值（1 分钟负载）' : '阈值（百分比）',
+                      keyboard: TextInputType.number,
+                      hint: _metric == WatchMetric.load ? '4.0' : '90',
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                  if (_kind == WatchKind.loginFail) ...<Widget>[
+                    const SizedBox(height: 14),
+                    RuleField(
+                      controller: _threshold,
+                      label: '失败次数到多少算异常',
+                      keyboard: TextInputType.number,
+                      hint: '10',
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final int m in <int>[5, 10, 30, 60])
+                          _chip('$m 分钟内', _window == m,
+                              () => setState(() => _window = m)),
+                      ],
+                    ),
+                  ],
+                  if (_kind == WatchKind.loginNew) ...<Widget>[
+                    const SizedBox(height: 12),
+                    const Text(
+                      '记住见过的来源，第一次出现的来源登录就提醒。第一次打开时会把当前的来源都记下，之后才认得出新的。',
+                      style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
+                    ),
+                  ],
+                  const SectionLabel('多久读一次'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final int m in <int>[1, 5, 15, 30, 60])
+                        _chip(_minutes(m), _interval == m, () => setState(() => _interval = m)),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('提醒过之后歇多久'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final int m in <int>[30, 120, 360, 1440])
+                        _chip(_minutes(m), _cooldown == m, () => setState(() => _cooldown = m)),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  CardBox(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Text('启用', style: TextStyle(fontSize: 13, color: C.ink)),
+                              const SizedBox(height: 3),
+                              Text(_preview, style: C.monoSmall.copyWith(color: C.blue)),
+                            ],
+                          ),
+                        ),
+                        ToggleKnob(
+                          value: _enabled,
+                          onChanged: (bool v) => setState(() => _enabled = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '到点读一次 /proc，过线直接推一条通知到手机。这一路不叫模型，也不花 token。',
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
+                  ),
+                  if (editing != null && editing.hits.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 22),
+                    const SectionLabel('最近读数'),
+                    const SizedBox(height: 8),
+                    for (final WatchHit hit in editing.hits)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: <Widget>[
+                            SizedBox(
+                              width: 96,
+                              child: Text(hit.stamp, style: C.monoSmall),
+                            ),
+                            Expanded(
+                              child: Text(
+                                hit.error.isNotEmpty
+                                    ? '读不到：${hit.error}'
+                                    : '${editing.valueText(hit.value ?? 0)}'
+                                        '${hit.fired ? ' · 已提醒' : ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: C.monoSmall.copyWith(
+                                  color: hit.error.isNotEmpty
+                                      ? const Color(0xFFD7443E)
+                                      : (hit.fired ? C.blue : C.ink),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                  if (!_isNew) ...<Widget>[
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      height: 38,
+                      child: TextButton(
+                        onPressed: _delete,
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFD7443E),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(C.radiusSmall),
+                            side: const BorderSide(color: C.rule2),
+                          ),
+                          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        child: const Text('删掉这条监听'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _minutes(int m) {
+    if (m < 60) return '$m 分钟';
+    if (m % 60 == 0) {
+      final int h = m ~/ 60;
+      return h >= 24 ? '${h ~/ 24} 天' : '$h 小时';
+    }
+    return '$m 分钟';
   }
 
   Widget _chip(String label, bool on, VoidCallback tap) {

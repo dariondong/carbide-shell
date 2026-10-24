@@ -21,13 +21,11 @@ class CarbideApp extends StatelessWidget {
   const CarbideApp({
     super.key,
     required this.services,
-    required this.tasks,
     required this.hub,
     required this.scheduler,
   });
 
   final AppServices services;
-  final TaskStore tasks;
   final SessionHub hub;
   final TaskScheduler scheduler;
 
@@ -37,12 +35,7 @@ class CarbideApp extends StatelessWidget {
       title: 'Carbide Shell',
       debugShowCheckedModeBanner: false,
       theme: C.theme(),
-      home: HomeShell(
-        services: services,
-        tasks: tasks,
-        hub: hub,
-        scheduler: scheduler,
-      ),
+      home: HomeShell(services: services, hub: hub, scheduler: scheduler),
     );
   }
 }
@@ -51,13 +44,11 @@ class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
     required this.services,
-    required this.tasks,
     required this.hub,
     required this.scheduler,
   });
 
   final AppServices services;
-  final TaskStore tasks;
   final SessionHub hub;
   final TaskScheduler scheduler;
 
@@ -194,7 +185,8 @@ class _HomeShellState extends State<HomeShell> {
           children: <Widget>[
             chatTab,
             TasksPage(
-              tasks: widget.tasks,
+              tasks: s.tasks,
+              watches: s.watches,
               scheduler: widget.scheduler,
               hosts: s.hosts,
               onChanged: _refresh,

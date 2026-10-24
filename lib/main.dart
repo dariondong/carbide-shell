@@ -15,6 +15,7 @@ import 'data/llm_settings.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
+import 'data/watch.dart';
 import 'services.dart';
 import 'tools/ssh_tools.dart';
 
@@ -38,6 +39,8 @@ Future<void> main() async {
 
   final TaskStore tasks = TaskStore(File('${dir.path}/tasks.json'));
   await tasks.load();
+  final WatchStore watches = WatchStore(File('${dir.path}/watches.json'));
+  await watches.load();
 
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard();
@@ -50,14 +53,20 @@ Future<void> main() async {
     pool: pool,
     memory: memory,
     conversations: conversations,
+    tasks: tasks,
+    watches: watches,
     workspace: workspace.path,
   );
 
   runApp(CarbideApp(
     services: services,
-    tasks: tasks,
     hub: SessionHub(services: services, board: board),
-    scheduler: TaskScheduler(services: services, tasks: tasks, board: board),
+    scheduler: TaskScheduler(
+      services: services,
+      tasks: tasks,
+      watches: watches,
+      board: board,
+    ),
   ));
 }
 
