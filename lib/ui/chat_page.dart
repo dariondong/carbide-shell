@@ -45,6 +45,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   CancelToken? _cancel;
   bool _running = false;
   DateTime _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
+  String _lastNoteText = '';
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
 
@@ -131,6 +132,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     _input.clear();
     setState(() => _running = true);
     _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
+    _lastNoteText = '';
     final CancelToken token = CancelToken();
     _cancel = token;
     // 手机上挂一条前台通知：切出去看别的、锁屏，这一轮也不会被系统掐掉。
@@ -168,7 +170,10 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       AgentPhase.waiting => '等你确认',
       AgentPhase.idle => '收尾',
     };
-    unawaited(ForegroundTask.update('第 ${loop.step}/${loop.maxSteps} 步 · $where'));
+    final String text = '第 ${loop.step}/${loop.maxSteps} 步 · $where';
+    if (text == _lastNoteText) return; // 字没变就不重发通知
+    _lastNoteText = text;
+    unawaited(ForegroundTask.update(text));
   }
 
   /// 跑完时通知上那句话：最后一条回答的第一行，太长就截。
