@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_notification_title">Carbide Shell 正在执行</string>
+    <string name="task_channel_name">任务进度</string>
+    <string name="task_channel_desc">跑长任务时挂一条通知，切出去也不中断。</string>
+</resources>

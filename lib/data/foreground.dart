@@ -1,0 +1,36 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+
+/// 跑长任务时挂一条前台通知，切出去、锁屏都还在跑。
+///
+/// 只有 Android 有这一套；别的平台这几个方法什么都不做，调用点不用分支。
+/// 原生那边起不来（没权限、被后台限制）时也只当没这回事：任务本身照常跑完。
+class ForegroundTask {
+  ForegroundTask._();
+
+  static const MethodChannel _channel =
+      MethodChannel('top.theez.carbide_shell/foreground');
+
+  static bool get _supported => Platform.isAndroid;
+
+  /// 开始跑：通知上写现在在干什么。
+  static Future<void> begin(String text) => _call('begin', text);
+
+  /// 换通知上那句话。服务没起来就等于再 begin 一次。
+  static Future<void> update(String text) => _call('update', text);
+
+  /// 跑完了，把通知收掉。
+  static Future<void> end() => _call('end', '');
+
+  static Future<void> _call(String method, String text) async {
+    if (!_supported) return;
+    try {
+      await _channel.invokeMethod<void>(method, <String, Object?>{'text': text});
+    } on MissingPluginException {
+      // 没有原生那一段（桌面、测试环境）：当没这个能力。
+    } on PlatformException {
+      // 系统拦下了这次调用，任务本身不受影响。
+    }
+  }
+}

@@ -8,6 +8,7 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
+import '../data/foreground.dart';
 import '../services.dart';
 import 'components.dart';
 import 'theme.dart';
@@ -41,6 +42,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   Completer<bool>? _waiter;
   CancelToken? _cancel;
   bool _running = false;
+  DateTime _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
 
@@ -74,6 +76,7 @@ class _ChatPageState extends State<ChatPage> implements Approver {
   void _refresh() {
     if (!mounted) return;
     setState(() {});
+    _noteProgress();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       final ScrollPosition p = _scroll.position;
@@ -125,8 +128,11 @@ class _ChatPageState extends State<ChatPage> implements Approver {
     if (session == null || text.isEmpty || _running) return;
     _input.clear();
     setState(() => _running = true);
+    _lastNote = DateTime.fromMillisecondsSinceEpoch(0);
     final CancelToken token = CancelToken();
     _cancel = token;
+    // 手机上挂一条前台通知：切出去看别的、锁屏，这一轮也不会被系统掐掉。
+    unawaited(ForegroundTask.begin('第 1 步'));
     try {
       session.loop.maxSteps = widget.services.settings.value.maxSteps;
       final List<String> images = List<String>.of(_images);
@@ -136,8 +142,26 @@ class _ChatPageState extends State<ChatPage> implements Approver {
       widget.conversation.tokensUsed = session.loop.tokens;
       await widget.services.persist(widget.conversation);
     } finally {
+      unawaited(ForegroundTask.end());
       if (mounted) setState(() => _running = false);
     }
+  }
+
+  /// 通知上那句进度：走到第几步、在等什么。不用每 60 毫秒改一次。
+  void _noteProgress() {
+    if (!_running) return;
+    final AgentLoop? loop = _session?.loop;
+    if (loop == null) return;
+    final DateTime now = DateTime.now();
+    if (now.difference(_lastNote).inMilliseconds < 1200) return;
+    _lastNote = now;
+    final String where = switch (loop.phase) {
+      AgentPhase.thinking => '等模型回话',
+      AgentPhase.acting => '执行命令',
+      AgentPhase.waiting => '等你确认',
+      AgentPhase.idle => '收尾',
+    };
+    unawaited(ForegroundTask.update('第 ${loop.step}/${loop.maxSteps} 步 · $where'));
   }
 
   Future<void> _pickFiles() async {
