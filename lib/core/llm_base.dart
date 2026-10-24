@@ -1,3 +1,4 @@
+import 'models.dart';
 
 /// Cancel flag shared by the UI and the loop.
 class CancelToken {

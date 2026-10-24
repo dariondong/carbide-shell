@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
+import '../core/models.dart';
 import '../core/policy.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';

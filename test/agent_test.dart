@@ -76,7 +76,7 @@ class FixedApprover implements Approver {
   }
 }
 
-AgentLoop buildLoop(ScriptedProvider provider, ToolRegistry registry, {Approver? approver, ApprovalMode mode = ApprovalMode.autoRead, int maxSteps = 12}) {
+AgentLoop buildLoop(LlmProvider provider, ToolRegistry registry, {Approver? approver, ApprovalMode mode = ApprovalMode.autoRead, int maxSteps = 12}) {
   return AgentLoop(
     llm: provider,
     registry: registry,
