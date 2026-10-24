@@ -63,6 +63,17 @@ class OpenAiProvider implements LlmProvider {
     return out;
   }
 
+  /// One POST with the JSON body. The streaming and the one-shot path share it.
+  Future<HttpClientRequest> _open(Map<String, Object?> body) async {
+    final HttpClientRequest req = await _client.postUrl(endpoint());
+    req.headers.contentType = ContentType.json;
+    if (apiKey.trim().isNotEmpty) {
+      req.headers.set('Authorization', 'Bearer ${apiKey.trim()}');
+    }
+    req.write(jsonEncode(body));
+    return req;
+  }
+
   @override
   Future<LlmReply> chat({
     required String system,
@@ -74,40 +85,58 @@ class OpenAiProvider implements LlmProvider {
     if (!configured) {
       throw LlmException('还没有填模型地址或模型名。');
     }
-    final HttpClientRequest req = await _client.postUrl(endpoint());
-    req.headers.contentType = ContentType.json;
-    if (apiKey.trim().isNotEmpty) {
-      req.headers.set('Authorization', 'Bearer ${apiKey.trim()}');
-    }
     final Map<String, Object?> body = payload(
       system: system,
       messages: messages,
       tools: tools,
     );
-    final bool streaming = onText != null;
-    if (streaming) {
+    final bool wantsStream = onText != null;
+    if (wantsStream) {
       body['stream'] = true;
       body['stream_options'] = <String, Object?>{'include_usage': true};
     }
-    req.write(jsonEncode(body));
-    final HttpClientResponse res = await req.close();
+    HttpClientResponse res = await (await _open(body)).close();
+    if (wantsStream && res.statusCode >= 400 && res.statusCode < 500) {
+      // 有的服务端不认 stream 参数，退回一次不流式的请求。
+      await res.drain<void>();
+      body.remove('stream');
+      body.remove('stream_options');
+      res = await (await _open(body)).close();
+    }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       final String error = await res.transform(utf8.decoder).join();
       final String trimmed = error.length > 400 ? error.substring(0, 400) : error;
       throw LlmException('模型返回 HTTP ${res.statusCode}：$trimmed');
     }
-    if (streaming) {
-      return _readStream(res, onText, cancel);
+    final String mime = res.headers.contentType?.mimeType ?? '';
+    if (onText != null && mime.contains('event-stream')) {
+      return _readStream(
+        res.transform(utf8.decoder).transform(const LineSplitter()),
+        onText,
+        cancel,
+      );
     }
-    final String text = await res.transform(utf8.decoder).join();
-    final Object? decoded = jsonDecode(text);
-    if (decoded is! Map) {
+    final String whole = await res.transform(utf8.decoder).join();
+    final Object? decoded = _decodeJson(whole);
+    if (decoded is Map) {
+      return parseChatResponse(Map<String, Object?>.from(decoded));
+    }
+    if (onText == null) {
       throw LlmException('模型返回的不是 JSON 对象。');
     }
-    return parseChatResponse(Map<String, Object?>.from(decoded));
+    // 头不是 event-stream，内容却是流，照样一行一行读。
+    return _readStream(Stream<String>.fromIterable(whole.split('\n')), onText, cancel);
   }
 
   void close() => _client.close(force: true);
+}
+
+Object? _decodeJson(String text) {
+  try {
+    return jsonDecode(text);
+  } catch (_) {
+    return null;
+  }
 }
 
 Map<String, Object?> messageJson(LlmMessage m) {
@@ -238,15 +267,13 @@ class _ToolAcc {
 /// A cancelled turn stops reading at the next delta instead of draining the
 /// rest of the answer.
 Future<LlmReply> _readStream(
-  HttpClientResponse res,
+  Stream<String> lines,
   void Function(String delta)? onText,
   CancelToken? cancel,
 ) async {
   final StringBuffer text = StringBuffer();
   final Map<int, _ToolAcc> tools = <int, _ToolAcc>{};
   LlmUsage usage = const LlmUsage();
-  final Stream<String> lines =
-      res.transform(utf8.decoder).transform(const LineSplitter());
   await for (final String line in lines) {
     if (cancel?.cancelled ?? false) break;
     if (!line.startsWith('data:')) continue;
