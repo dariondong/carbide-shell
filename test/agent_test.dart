@@ -253,6 +253,74 @@ void main() {
     expect(cut.contains('省略'), isTrue);
     expect(truncateOutput('short'), 'short');
   });
+
+  test('流式增量攒进 partial，界面与相位都跟着走', () async {
+    final _StreamProvider provider = _StreamProvider(<String>['磁盘', '干净']);
+    final AgentLoop loop = buildLoop(provider, ToolRegistry());
+    final List<String> seen = <String>[];
+    final List<AgentPhase> phases = <AgentPhase>[];
+    loop.onChanged = () {
+      phases.add(loop.phase);
+      if (loop.partial.isNotEmpty) seen.add(loop.partial);
+    };
+
+    final String answer = await loop.send('看一下');
+
+    expect(provider.sawOnText, isTrue);
+    expect(seen.first, '磁盘');
+    expect(seen.contains('磁盘干净'), isTrue);
+    expect(phases.contains(AgentPhase.thinking), isTrue);
+    expect(loop.phase, AgentPhase.idle);
+    expect(loop.partial, '');
+    expect(answer, '磁盘干净');
+  });
+
+  test('停掉之后剩下的增量不再进 partial', () async {
+    final CancelToken token = CancelToken();
+    final _StreamProvider provider = _StreamProvider(<String>['磁盘', '干净'], cancelAfter: 1);
+    final AgentLoop loop = buildLoop(provider, ToolRegistry());
+    final List<String> seen = <String>[];
+    loop.onChanged = () {
+      if (loop.partial.isNotEmpty) seen.add(loop.partial);
+    };
+
+    await loop.send('看一下', cancel: token);
+
+    expect(seen.contains('磁盘'), isTrue);
+    expect(seen.any((String s) => s.contains('干净')), isFalse);
+    expect(loop.phase, AgentPhase.idle);
+  });
+}
+
+class _StreamProvider implements LlmProvider {
+  _StreamProvider(this.deltas, {this.cancelAfter = 0});
+
+  final List<String> deltas;
+
+  /// Cancel the turn right before this delta is pushed, to prove a stopped
+  /// turn stops collecting text.
+  final int cancelAfter;
+  bool sawOnText = false;
+
+  @override
+  String get label => 'stream';
+
+  @override
+  Future<LlmReply> chat({
+    required String system,
+    required List<LlmMessage> messages,
+    required List<ToolSpec> tools,
+    CancelToken? cancel,
+    void Function(String delta)? onText,
+  }) async {
+    sawOnText = onText != null;
+    for (int i = 0; i < deltas.length; i += 1) {
+      if (i == cancelAfter) cancel?.cancel();
+      onText?.call(deltas[i]);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    }
+    return LlmReply(text: deltas.join());
+  }
 }
 
 class _ThrowingProvider implements LlmProvider {

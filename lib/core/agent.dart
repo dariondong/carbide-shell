@@ -39,6 +39,10 @@ const String kSystemPrompt = '''
 6. 用户用中文提问就用中文回答。
 ''';
 
+/// What the loop is doing right now. The header reads this to answer
+/// 「它还在跑吗」 without the user guessing.
+enum AgentPhase { idle, thinking, acting, waiting }
+
 /// The loop: ask the model, run what it asks for, feed results back, repeat.
 class AgentLoop {
   AgentLoop({
@@ -85,6 +89,14 @@ class AgentLoop {
   /// Text of the answer being streamed right now. Empty when idle.
   String partial = '';
 
+  /// thinking = waiting on the model, acting = a tool is running,
+  /// waiting = a call needs a yes from the user.
+  AgentPhase phase = AgentPhase.idle;
+
+  /// The token of the turn in flight, so a stopped turn also stops the deltas.
+  CancelToken? _cancel;
+  DateTime? _lastNotice;
+
   /// Called whenever the visible state changes.
   void Function()? onChanged;
 
@@ -102,12 +114,18 @@ class AgentLoop {
     if (text.isEmpty && images.isEmpty) return '';
     history.add(LlmMessage.user(text, images: images));
     journal.add(<String, Object?>{'event': 'user', 'text': text});
+    _cancel = cancel;
+    partial = '';
+    phase = AgentPhase.thinking;
     _notify();
     step = 0;
 
     while (step < maxSteps) {
       if (cancel?.cancelled ?? false) return _finish('已中断。');
       step += 1;
+      partial = '';
+      phase = AgentPhase.thinking;
+      _notify();
 
       LlmReply reply;
       try {
@@ -117,6 +135,7 @@ class AgentLoop {
           messages: _window(),
           tools: registry.specs(),
           cancel: cancel,
+          onText: _onDelta,
         );
       } on LlmException catch (e) {
         return _finish('模型请求失败：${e.message}');
@@ -127,16 +146,18 @@ class AgentLoop {
       promptTokens += reply.usage.prompt;
       cachedTokens += reply.usage.cached;
 
-      partial = '';
       if (!reply.wantsTools) {
         final String answer = reply.text.trim().isEmpty ? '（没有内容）' : reply.text.trim();
         history.add(LlmMessage.assistant(answer));
+        partial = '';
+        phase = AgentPhase.idle;
         journal.add(<String, Object?>{'event': 'final', 'text': answer});
         _notify();
         return answer;
       }
 
       history.add(LlmMessage.assistant(reply.text, calls: reply.calls));
+      partial = '';
       _notify();
 
       for (final LlmToolCall call in reply.calls) {
@@ -150,6 +171,18 @@ class AgentLoop {
     }
 
     return _finish('到步数上限了，先停在这里。已经做过的事都在上面。');
+  }
+
+  /// One streamed delta. Repaint at most every 60 ms so a fast model does not
+  /// rebuild the transcript dozens of times a second.
+  void _onDelta(String delta) {
+    if (_cancel?.cancelled ?? false) return;
+    partial += delta;
+    final DateTime now = DateTime.now();
+    final DateTime? last = _lastNotice;
+    if (last != null && now.difference(last).inMilliseconds < 60) return;
+    _lastNotice = now;
+    _notify();
   }
 
   Future<void> _runOne(LlmToolCall call) async {
@@ -186,6 +219,8 @@ class AgentLoop {
         summary: summary,
         dangerous: false,
       );
+      phase = AgentPhase.waiting;
+      _notify();
       onApproval?.call(request);
       bool allowed = false;
       try {
@@ -193,12 +228,16 @@ class AgentLoop {
       } finally {
         onApproval?.call(null);
       }
+      phase = AgentPhase.acting;
+      _notify();
       if (!allowed) {
         _appendResult(call, '用户拒绝执行。', failed: true);
         return;
       }
     }
 
+    phase = AgentPhase.acting;
+    _notify();
     final Stopwatch watch = Stopwatch()..start();
     ToolOutcome outcome;
     try {
@@ -231,6 +270,7 @@ class AgentLoop {
 
   String _finish(String note) {
     partial = '';
+    phase = AgentPhase.idle;
     history.add(LlmMessage.assistant(note));
     journal.add(<String, Object?>{'event': 'stop', 'text': note});
     _notify();

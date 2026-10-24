@@ -97,7 +97,7 @@ class OpenAiProvider implements LlmProvider {
       throw LlmException('模型返回 HTTP ${res.statusCode}：$trimmed');
     }
     if (streaming) {
-      return _readStream(res, onText);
+      return _readStream(res, onText, cancel);
     }
     final String text = await res.transform(utf8.decoder).join();
     final Object? decoded = jsonDecode(text);
@@ -235,9 +235,12 @@ class _ToolAcc {
 }
 
 /// Server-sent events: `data: {...}` lines, one delta each, `[DONE]` at the end.
+/// A cancelled turn stops reading at the next delta instead of draining the
+/// rest of the answer.
 Future<LlmReply> _readStream(
   HttpClientResponse res,
   void Function(String delta)? onText,
+  CancelToken? cancel,
 ) async {
   final StringBuffer text = StringBuffer();
   final Map<int, _ToolAcc> tools = <int, _ToolAcc>{};
@@ -245,6 +248,7 @@ Future<LlmReply> _readStream(
   final Stream<String> lines =
       res.transform(utf8.decoder).transform(const LineSplitter());
   await for (final String line in lines) {
+    if (cancel?.cancelled ?? false) break;
     if (!line.startsWith('data:')) continue;
     final String data = line.substring(5).trim();
     if (data.isEmpty) continue;
