@@ -63,10 +63,10 @@ class _ConversationsPageState extends State<ConversationsPage> {
           child: list.isEmpty
               ? _empty()
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
                   itemCount: list.length,
                   itemBuilder: (BuildContext context, int i) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: _row(list[i]),
                   ),
                 ),
@@ -100,11 +100,12 @@ class _ConversationsPageState extends State<ConversationsPage> {
     final String scope = c.multiHost
         ? '全部主机'
         : (host == null ? '主机已删除' : '${host.name} · ${host.address}');
+    final String meta = '${c.turns} 轮 · ${_tokens(c.tokensUsed)} tok · ${_ago(c.updatedAt)}';
     return InkWell(
       onTap: () => widget.onOpen(c),
       borderRadius: BorderRadius.circular(C.radius),
       child: CardBox(
-        padding: const EdgeInsets.fromLTRB(14, 13, 8, 13),
+        padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
         child: Row(
           children: <Widget>[
             Expanded(
@@ -114,24 +115,18 @@ class _ConversationsPageState extends State<ConversationsPage> {
                   Text(c.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
+                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
                   Text(scope, maxLines: 1, overflow: TextOverflow.ellipsis, style: C.monoSmall),
+                  const SizedBox(height: 3),
+                  Text(meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, color: C.grey2, height: 1.5)),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Text('${c.turns} 轮',
-                    style: C.monoSmall.copyWith(color: C.grey2)),
-                const SizedBox(height: 2),
-                Text('${_tokens(c.tokensUsed)} tok',
-                    style: C.monoSmall.copyWith(color: C.grey2)),
-                const SizedBox(height: 4),
-                Text(_ago(c.updatedAt), style: C.monoSmall.copyWith(color: C.grey2)),
-              ],
-            ),
+            const SizedBox(width: 10),
             IconButton(
               onPressed: () => _delete(c),
               icon: const Icon(Icons.close, size: 15, color: C.grey2),
