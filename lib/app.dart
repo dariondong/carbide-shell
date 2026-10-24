@@ -11,7 +11,6 @@ import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
-import 'version.dart';
 
 class CarbideApp extends StatelessWidget {
   const CarbideApp({super.key, required this.services});
