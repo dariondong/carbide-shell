@@ -31,6 +31,12 @@ class MdText extends StatefulWidget {
 class _MdTextState extends State<MdText> {
   final List<TapGestureRecognizer> _taps = <TapGestureRecognizer>[];
 
+  /// 上一遍拆出来的那些块。字没变就直接拿来回这一份，
+  /// 长对话里几十条回答不用每秒重拆十几次。
+  List<Widget>? _kids;
+  String? _source;
+  TextStyle? _base;
+
   @override
   void dispose() {
     _dropTaps();
@@ -46,15 +52,22 @@ class _MdTextState extends State<MdText> {
 
   @override
   Widget build(BuildContext context) {
-    _dropTaps();
     final TextStyle base = widget.base ?? C.answer;
     final String source = widget.streaming ? '${widget.text} ▍' : widget.text;
+    if (_kids != null && _source == source && _base == base) {
+      // 同一个对象交回去，Flutter 会连子树都不用走。
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: _kids!);
+    }
+    _dropTaps();
     final List<MdBlock> blocks = parseMarkdown(source);
     final List<Widget> kids = <Widget>[];
     for (int i = 0; i < blocks.length; i += 1) {
       if (i > 0) kids.add(const SizedBox(height: 8));
       kids.add(_block(blocks[i], base));
     }
+    _kids = kids;
+    _source = source;
+    _base = base;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: kids);
   }
 
