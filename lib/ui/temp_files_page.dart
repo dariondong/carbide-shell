@@ -462,6 +462,10 @@ class _UploadSheetState extends State<_UploadSheet> {
   String _hostId = '';
   bool _busy = false;
   String _error = '';
+  UploadCancel? _cancel;
+  int _sent = 0;
+  int _total = 0;
+  int _pct = 0;
 
   @override
   void initState() {
@@ -473,6 +477,18 @@ class _UploadSheetState extends State<_UploadSheet> {
   void dispose() {
     _path.dispose();
     super.dispose();
+  }
+
+  /// 百分比没变就不重画，小文件一多也不会闪。
+  void _progress(int sent, int total) {
+    if (!mounted) return;
+    final int pct = total <= 0 ? 100 : (sent * 100 ~/ total);
+    if (pct == _pct && sent != total) return;
+    setState(() {
+      _pct = pct;
+      _sent = sent;
+      _total = total;
+    });
   }
 
   Future<void> _run() async {
@@ -487,22 +503,49 @@ class _UploadSheetState extends State<_UploadSheet> {
       setState(() => _error = '这个文件已经不在了。');
       return;
     }
+    final UploadCancel cancel = UploadCancel();
     setState(() {
       _busy = true;
       _error = '';
+      _cancel = cancel;
+      _sent = 0;
+      _total = widget.item.size;
+      _pct = 0;
     });
     try {
-      final TempUpload done =
-          await sftpUpload(widget.pool, entry, local, _path.text);
+      final TempUpload done = await sftpUpload(
+        widget.pool,
+        entry,
+        local,
+        _path.text,
+        cancel: cancel,
+        onProgress: _progress,
+      );
       if (!mounted) return;
       Navigator.of(context).pop('${done.host}:${done.path}');
+    } on UploadCancelled {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _cancel = null;
+        _error = '停下了。服务器上可能留了一个没传完的文件。';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _cancel = null;
         _error = '传不上去：$e';
       });
     }
+  }
+
+  void _stop() {
+    if (_busy) {
+      _cancel?.cancel();
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   @override
@@ -548,6 +591,28 @@ class _UploadSheetState extends State<_UploadSheet> {
               decoration: const InputDecoration(hintText: '/tmp/文件名'),
             ),
           ),
+          if (_busy) ...<Widget>[
+            const SizedBox(height: 16),
+            Row(
+              children: <Widget>[
+                Text('正在传 · $_pct%',
+                    style: C.monoSmall.copyWith(color: C.blue)),
+                const Spacer(),
+                Text('${tempSize(_sent)} / ${tempSize(_total)}',
+                    style: C.monoSmall),
+              ],
+            ),
+            const SizedBox(height: 7),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: _pct / 100,
+                minHeight: 4,
+                backgroundColor: C.rule,
+                color: C.blue,
+              ),
+            ),
+          ],
           if (_error.isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
             Text(_error,
@@ -561,7 +626,7 @@ class _UploadSheetState extends State<_UploadSheet> {
                 child: SquareButton(
                   label: '取消',
                   tone: 'ink',
-                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                  onPressed: _stop,
                 ),
               ),
               const SizedBox(width: 10),

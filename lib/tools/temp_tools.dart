@@ -9,19 +9,47 @@ import '../data/hosts.dart';
 import '../data/temp_files.dart';
 import 'ssh_tools.dart';
 
+/// 传一次的上限：可以取消，也可以一路上报进度。
+class UploadCancel {
+  UploadCancel();
+
+  bool _cancelled = false;
+  SftpFileWriter? _writer;
+
+  bool get cancelled => _cancelled;
+
+  /// 字节已经提交了一半也能停下：后面没发的不会再发。
+  void cancel() {
+    _cancelled = true;
+    _writer?.abort();
+  }
+}
+
+/// 传一半被取消了。
+class UploadCancelled implements Exception {
+  const UploadCancelled();
+
+  @override
+  String toString() => '已取消';
+}
+
 /// 把临时文件区里的一个文件写到主机上。远端路径以 `/` 结尾时接上原文件名。
 /// 写之前不建目录，parent 不存在就报错让调用方自己看。
+///
+/// 上传是一段段写进去的，[onProgress] 会拿到已经落地的字节数。
 Future<TempUpload> sftpUpload(
   SshPool pool,
   HostEntry entry,
   File local,
-  String remote,
-) async {
+  String remote, {
+  void Function(int sent, int total)? onProgress,
+  UploadCancel? cancel,
+}) async {
   final String name = local.path.split('/').last;
   String target = remote.trim();
   if (target.isEmpty) target = '/tmp/$name';
   if (target.endsWith('/')) target = '$target$name';
-  final Uint8List bytes = await local.readAsBytes();
+  final int total = await local.length();
   final SSHClient client = await pool.connect(entry);
   final SftpClient sftp = await client.sftp();
   final SftpFile file = await sftp.open(
@@ -30,9 +58,18 @@ Future<TempUpload> sftpUpload(
         SftpFileOpenMode.create |
         SftpFileOpenMode.truncate,
   );
-  await file.writeBytes(bytes);
+  final Stream<Uint8List> chunks = local.openRead().map(
+        (List<int> chunk) => chunk is Uint8List ? chunk : Uint8List.fromList(chunk),
+      );
+  final SftpFileWriter writer = file.write(
+    chunks,
+    onProgress: (int sent) => onProgress?.call(sent, total),
+  );
+  cancel?._writer = writer;
+  await writer.done;
   await file.close();
-  return TempUpload(path: target, bytes: bytes.length, host: entry.name);
+  if (cancel?.cancelled ?? false) throw const UploadCancelled();
+  return TempUpload(path: target, bytes: total, host: entry.name);
 }
 
 class TempUpload {
