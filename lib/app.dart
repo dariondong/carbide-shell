@@ -197,55 +197,66 @@ class _HomeShellState extends State<HomeShell> {
           );
 
     return Scaffold(
-      body: SafeArea(
-        child: IndexedStack(
-          index: _index,
-          children: <Widget>[
-            chatTab,
-            TasksPage(
-              tasks: s.tasks,
-              watches: s.watches,
-              scheduler: widget.scheduler,
-              hosts: s.hosts,
-              onChanged: _refresh,
-            ),
-            HostsPage(
-              hosts: s.hosts,
-              secrets: s.secrets,
-              pool: s.pool,
-              onChanged: _refresh,
-            ),
-            TerminalPage(hosts: s.hosts, pool: s.pool),
-            MemoryPage(services: s, onChanged: _refresh),
-            SettingsPage(
-              settings: s.settings,
-              secrets: s.secrets,
-              policy: s.policy,
-              conversations: s.conversations.all,
-              onConversationChanged: (Conversation c) => s.conversations.save(c),
-              onOpenAbout: _openAbout,
-              onOpenUsage: _openUsage,
-              usage: s.usage,
-              mail: s.mail,
-            ),
-          ],
+      body: MediaQuery.removePadding(
+        context: context,
+        // 底部的系统栏距离由下面那条导航条让，页面里不再重复让一次。
+        removeBottom: true,
+        child: SafeArea(
+          child: IndexedStack(
+            index: _index,
+            children: <Widget>[
+              chatTab,
+              TasksPage(
+                tasks: s.tasks,
+                watches: s.watches,
+                scheduler: widget.scheduler,
+                hosts: s.hosts,
+                onChanged: _refresh,
+              ),
+              HostsPage(
+                hosts: s.hosts,
+                secrets: s.secrets,
+                pool: s.pool,
+                onChanged: _refresh,
+              ),
+              TerminalPage(hosts: s.hosts, pool: s.pool),
+              MemoryPage(services: s, onChanged: _refresh),
+              SettingsPage(
+                settings: s.settings,
+                secrets: s.secrets,
+                policy: s.policy,
+                conversations: s.conversations.all,
+                onConversationChanged: (Conversation c) => s.conversations.save(c),
+                onOpenAbout: _openAbout,
+                onOpenUsage: _openUsage,
+                usage: s.usage,
+                mail: s.mail,
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: Container(
-        height: 60,
         decoration: const BoxDecoration(
           color: C.card,
           border: Border(top: BorderSide(color: C.rule)),
         ),
-        child: Row(
-          children: <Widget>[
-            _nav(0, Icons.forum_outlined, '会话'),
-            _nav(1, Icons.schedule_outlined, '任务'),
-            _nav(2, Icons.dns_outlined, '主机'),
-            _nav(3, Icons.terminal, '终端'),
-            _nav(4, Icons.bookmarks_outlined, '记忆'),
-            _nav(5, Icons.settings_outlined, '设置'),
-          ],
+        // 三键导航条、手势条的高度加在这条底下，按钮不会被盖住。
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 60,
+            child: Row(
+              children: <Widget>[
+                _nav(0, Icons.forum_outlined, '会话'),
+                _nav(1, Icons.schedule_outlined, '任务'),
+                _nav(2, Icons.dns_outlined, '主机'),
+                _nav(3, Icons.terminal, '终端'),
+                _nav(4, Icons.bookmarks_outlined, '记忆'),
+                _nav(5, Icons.settings_outlined, '设置'),
+              ],
+            ),
+          ),
         ),
       ),
     );

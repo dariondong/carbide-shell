@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
@@ -23,6 +24,18 @@ import 'tools/ssh_tools.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 铺到屏幕边上：两条系统栏都用透明底，纸面自己透上去。
+  // 三键导航（金刚键）会压掉底下那一截，所以底部由 SafeArea 让出距离。
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Color(0x00000000),
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Color(0x00000000),
+    systemNavigationBarDividerColor: Color(0x00000000),
+    systemNavigationBarIconBrightness: Brightness.dark,
+  ));
 
   final Directory dir = await getApplicationSupportDirectory();
   final Directory workspace = Directory('${dir.path}/workspace')..createSync(recursive: true);
