@@ -709,7 +709,7 @@ class _ChatPageState extends State<ChatPage> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: running ? C.blueSoft : C.paper2,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(C.radiusSmall),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

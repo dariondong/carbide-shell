@@ -733,7 +733,7 @@ class _PreviewSheetState extends State<_PreviewSheet> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: on ? C.blueSoft : C.card,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(C.radiusSmall),
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(
@@ -758,7 +758,7 @@ class _PreviewSheetState extends State<_PreviewSheet> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: _saving ? C.rule : C.blue,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(C.radiusSmall),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
