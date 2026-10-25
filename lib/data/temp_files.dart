@@ -155,11 +155,14 @@ class TempFiles {
     return _describe(f);
   }
 
-  Future<TempFile> saveText(String path, String text) async {
+  Future<TempFile> saveText(String path, String text) =>
+      put(path, Uint8List.fromList(utf8.encode(text)));
+
+  /// 指定路径原样写进去（同名就覆盖）。恢复刚删掉的那个名字时用它。
+  Future<TempFile> put(String path, List<int> bytes) async {
     ensure();
     final String cleaned = cleanPath(path);
     if (cleaned.isEmpty) throw StateError('路径是空的。');
-    final Uint8List bytes = Uint8List.fromList(utf8.encode(text));
     if (bytes.length > maxBytes) {
       throw StateError('超过 ${maxBytes ~/ (1024 * 1024)} MB，临时文件区不收。');
     }

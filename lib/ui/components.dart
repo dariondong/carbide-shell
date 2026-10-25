@@ -523,3 +523,88 @@ class ToggleKnob extends StatelessWidget {
     );
   }
 }
+
+/// 一块底部面板的白卡：圆角顶、一条抓手，键盘弹起来时整块跟着上去。
+class SheetCard extends StatelessWidget {
+  const SheetCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(18, 8, 18, 14),
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: C.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: padding,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: C.rule2,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Flexible(child: child),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 面板的标题行：一句话 + 右边那个文件。
+class SheetHead extends StatelessWidget {
+  const SheetHead({super.key, required this.title, required this.note});
+
+  final String title;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
+              const SizedBox(height: 3),
+              Text(note,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: C.monoSmall),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          behavior: HitTestBehavior.opaque,
+          child: const SizedBox(
+            width: 30,
+            height: 30,
+            child: Icon(Icons.close, size: 17, color: C.grey),
+          ),
+        ),
+      ],
+    );
+  }
+}
