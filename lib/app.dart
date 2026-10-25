@@ -155,6 +155,18 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted) setState(() {});
   }
 
+  /// 已经在最外面：会话列表、第一个页签。
+  bool get _atRoot => _index == 0 && _open == null;
+
+  /// 返回键先退一层：对话→列表，其它页签→会话，都退完了才交给系统退出。
+  void _back() {
+    if (_open != null) {
+      setState(() => _open = null);
+      return;
+    }
+    if (_index != 0) setState(() => _index = 0);
+  }
+
   String _busy = '';
 
   /// 只在「谁在跑、谁在等」变了的时候重画外壳。
@@ -196,65 +208,72 @@ class _HomeShellState extends State<HomeShell> {
             },
           );
 
-    return Scaffold(
-      body: MediaQuery.removePadding(
-        context: context,
-        // 底部的系统栏距离由下面那条导航条让，页面里不再重复让一次。
-        removeBottom: true,
-        child: SafeArea(
-          child: IndexedStack(
-            index: _index,
-            children: <Widget>[
-              chatTab,
-              TasksPage(
-                tasks: s.tasks,
-                watches: s.watches,
-                scheduler: widget.scheduler,
-                hosts: s.hosts,
-                onChanged: _refresh,
-              ),
-              HostsPage(
-                hosts: s.hosts,
-                secrets: s.secrets,
-                pool: s.pool,
-                onChanged: _refresh,
-              ),
-              TerminalPage(hosts: s.hosts, pool: s.pool),
-              MemoryPage(services: s, onChanged: _refresh),
-              SettingsPage(
-                settings: s.settings,
-                secrets: s.secrets,
-                policy: s.policy,
-                conversations: s.conversations.all,
-                onConversationChanged: (Conversation c) => s.conversations.save(c),
-                onOpenAbout: _openAbout,
-                onOpenUsage: _openUsage,
-                usage: s.usage,
-                mail: s.mail,
-              ),
-            ],
+    return PopScope(
+      canPop: _atRoot,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        _back();
+      },
+      child: Scaffold(
+          body: MediaQuery.removePadding(
+          context: context,
+          // 底部的系统栏距离由下面那条导航条让，页面里不再重复让一次。
+          removeBottom: true,
+          child: SafeArea(
+            child: IndexedStack(
+              index: _index,
+              children: <Widget>[
+                chatTab,
+                TasksPage(
+                  tasks: s.tasks,
+                  watches: s.watches,
+                  scheduler: widget.scheduler,
+                  hosts: s.hosts,
+                  onChanged: _refresh,
+                ),
+                HostsPage(
+                  hosts: s.hosts,
+                  secrets: s.secrets,
+                  pool: s.pool,
+                  onChanged: _refresh,
+                ),
+                TerminalPage(hosts: s.hosts, pool: s.pool),
+                MemoryPage(services: s, onChanged: _refresh),
+                SettingsPage(
+                  settings: s.settings,
+                  secrets: s.secrets,
+                  policy: s.policy,
+                  conversations: s.conversations.all,
+                  onConversationChanged: (Conversation c) => s.conversations.save(c),
+                  onOpenAbout: _openAbout,
+                  onOpenUsage: _openUsage,
+                  usage: s.usage,
+                  mail: s.mail,
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: C.card,
-          border: Border(top: BorderSide(color: C.rule)),
-        ),
-        // 三键导航条、手势条的高度加在这条底下，按钮不会被盖住。
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 60,
-            child: Row(
-              children: <Widget>[
-                _nav(0, Icons.forum_outlined, '会话'),
-                _nav(1, Icons.schedule_outlined, '任务'),
-                _nav(2, Icons.dns_outlined, '主机'),
-                _nav(3, Icons.terminal, '终端'),
-                _nav(4, Icons.bookmarks_outlined, '记忆'),
-                _nav(5, Icons.settings_outlined, '设置'),
-              ],
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: C.card,
+            border: Border(top: BorderSide(color: C.rule)),
+          ),
+          // 三键导航条、手势条的高度加在这条底下，按钮不会被盖住。
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 60,
+              child: Row(
+                children: <Widget>[
+                  _nav(0, Icons.forum_outlined, '会话'),
+                  _nav(1, Icons.schedule_outlined, '任务'),
+                  _nav(2, Icons.dns_outlined, '主机'),
+                  _nav(3, Icons.terminal, '终端'),
+                  _nav(4, Icons.bookmarks_outlined, '记忆'),
+                  _nav(5, Icons.settings_outlined, '设置'),
+                ],
+              ),
             ),
           ),
         ),
@@ -268,8 +287,12 @@ class _HomeShellState extends State<HomeShell> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => setState(() {
+          // 正在某个页签上再点一下：对话退回列表，别的页签原地不动。
+          if (index == _index && index == 0 && _open != null) {
+            _open = null;
+            return;
+          }
           _index = index;
-          if (index != 0) _open = _open;
         }),
         child: Center(
           child: AnimatedContainer(
