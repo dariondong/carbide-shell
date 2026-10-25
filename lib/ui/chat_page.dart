@@ -15,6 +15,7 @@ import '../tools/ask_tool.dart';
 import 'components.dart';
 import 'md_text.dart';
 import 'motion.dart';
+import 'temp_files_page.dart';
 import 'theme.dart';
 
 /// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。
@@ -299,6 +300,99 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(saved.trim().isEmpty ? '这个对话改回跟设置走。' : '这个对话换成了自己的一份。')),
+    );
+  }
+
+  /// 加号先问一句：这一条消息带文件，还是去临时文件区。
+  Future<void> _attachSheet() async {
+    final bool running = _running;
+    final String? pick = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => SheetCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('给它带东西',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
+            const SizedBox(height: 3),
+            Text(running ? '这一轮还在跑，跑完再进文件。' : '文件跟着下一条消息一起发出去。',
+                style: C.monoSmall),
+            const SizedBox(height: 14),
+            _sheetRow(
+              Icons.attach_file,
+              '进对话',
+              '图片、纯文本、Word',
+              !running,
+              () => Navigator.of(ctx).pop('pick'),
+            ),
+            const SizedBox(height: 8),
+            _sheetRow(
+              Icons.folder_open_outlined,
+              '临时文件区',
+              '模型写的文件在这里，能传到主机',
+              true,
+              () => Navigator.of(ctx).pop('temp'),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    if (pick == 'pick') {
+      await _pickFiles();
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TempFilesPage(
+          files: widget.services.files,
+          hosts: widget.services.hosts,
+          pool: widget.services.pool,
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetRow(
+    IconData icon,
+    String title,
+    String note,
+    bool enabled,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 18, color: enabled ? C.ink : C.rule2),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title,
+                      style: TextStyle(fontSize: 13, color: enabled ? C.ink : C.grey2)),
+                  const SizedBox(height: 2),
+                  Text(note, style: C.monoSmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+          ],
+        ),
+      ),
     );
   }
 
@@ -808,12 +902,12 @@ class _ChatPageState extends State<ChatPage> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 GestureDetector(
-                  onTap: _running ? null : _pickFiles,
+                  onTap: _attachSheet,
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 8, right: 6, left: 2),
-                    child: Icon(Icons.add_circle_outline,
-                        size: 21, color: _running ? C.rule2 : C.grey),
+                    child: const Icon(Icons.add_circle_outline,
+                        size: 21, color: C.grey),
                   ),
                 ),
                 const Padding(
