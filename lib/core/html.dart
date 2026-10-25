@@ -267,7 +267,8 @@ String htmlToMarkdown(String html) {
         break;
       case 'a':
         if (closing) {
-          out.write(linkHref == null ? ']' : '](${linkHref!})');
+          final String? href = linkHref;
+          out.write(href == null ? ']' : ']($href)');
           linkHref = null;
         } else {
           linkHref = _attr(body, 'href');
