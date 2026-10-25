@@ -987,15 +987,16 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// 右边那一颗：平时是发，跑的时候是停。
+  /// 右边那一颗：平时是发，跑的时候是停。按下去会缩一点。
   Widget _sendKey({
     required bool running,
     required bool canType,
     required bool typed,
   }) {
     final bool on = running || (canType && typed);
-    return GestureDetector(
+    return PressScale(
       onTap: !on ? null : (running ? _stop : _send),
+      scale: 0.92,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,

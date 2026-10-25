@@ -160,12 +160,12 @@ class SoftPageTransitions extends PageTransitionsBuilder {
   ) {
     if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
     final Animation<double> fade =
-        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        CurvedAnimation(parent: animation, curve: Curves.easeOutQuart);
     return FadeTransition(
       opacity: fade,
       child: SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(0, 0.03),
+          begin: const Offset(0, 0.022),
           end: Offset.zero,
         ).animate(fade),
         child: child,
