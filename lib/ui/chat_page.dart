@@ -672,36 +672,73 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// 标题两行：名字在上，跟谁在聊在下。名字太长就收成省略号，不推挤右边。
+  Widget _heading() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Text(
+          widget.conversation.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          widget.subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: C.monoSmall,
+        ),
+      ],
+    );
+  }
+
+  /// 标题右边那一小牌：跑着就写第几步，闲着就写这一场花了多少。
+  Widget _statusPill(AgentLoop? loop) {
+    if (loop == null) return const SizedBox.shrink();
+    final bool running = _running;
+    final double hit = loop.cacheHitRate;
+    final bool wide = MediaQuery.sizeOf(context).width >= 380;
+    final String text = running
+        ? '${loop.step}/${loop.maxSteps}'
+        : '${_fmtTokens(loop.tokens)} tok${wide && hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}';
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: running ? C.blueSoft : C.paper2,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (running) ...<Widget>[
+            const SizedBox(
+              width: 9,
+              height: 9,
+              child: CircularProgressIndicator(strokeWidth: 1.4, color: C.blue),
+            ),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            text,
+            style: C.monoSmall.copyWith(
+              fontSize: 10,
+              height: 1.2,
+              color: running ? C.blue : C.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static String _fmtTokens(int n) {
     if (n < 1000) return '$n';
     final double k = n / 1000;
     return '${k.toStringAsFixed(k < 10 ? 1 : 0)}k';
-  }
-
-  /// While a turn is running the header answers 「它还在跑吗」; when idle it
-  /// shows what the conversation has spent.
-  Widget _usage(AgentLoop? loop) {
-    if (loop == null) return const SizedBox.shrink();
-    if (_running) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const SizedBox(
-            width: 11,
-            height: 11,
-            child: CircularProgressIndicator(strokeWidth: 1.6, color: C.blue),
-          ),
-          const SizedBox(width: 7),
-          Text('第 ${loop.step}/${loop.maxSteps} 步',
-              style: C.monoSmall.copyWith(color: C.blue)),
-        ],
-      );
-    }
-    final double hit = loop.cacheHitRate;
-    return Text(
-      '${_fmtTokens(loop.tokens)} tok${hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}',
-      style: C.monoSmall.copyWith(color: hit > 0 ? C.blue : C.grey2),
-    );
   }
 
   @override
@@ -711,7 +748,7 @@ class _ChatPageState extends State<ChatPage> {
       children: <Widget>[
         Container(
           height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
           decoration: const BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
@@ -723,60 +760,23 @@ class _ChatPageState extends State<ChatPage> {
                 behavior: HitTestBehavior.opaque,
                 child: const SizedBox(
                   width: 36,
-                  height: 36,
+                  height: 56,
                   child: Icon(Icons.arrow_back, size: 19, color: C.ink),
                 ),
               ),
+              const SizedBox(width: 2),
+              Expanded(child: _heading()),
+              _statusPill(loop),
               const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Text(
-                      widget.conversation.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(widget.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: C.monoSmall),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
               GestureDetector(
                 onTap: _editPrompt,
                 behavior: HitTestBehavior.opaque,
                 child: const SizedBox(
-                  width: 30,
-                  height: 30,
+                  width: 34,
+                  height: 56,
                   child: Icon(Icons.tune, size: 17, color: C.grey),
                 ),
               ),
-              const SizedBox(width: 4),
-              Flexible(child: _usage(loop)),
-              const SizedBox(width: 10),
-              if (_running)
-                GestureDetector(
-                  onTap: _stop,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: C.card,
-                      borderRadius: BorderRadius.circular(C.radiusSmall),
-                      border: Border.all(color: C.rule2),
-                    ),
-                    child: Container(width: 9, height: 9, color: C.body),
-                  ),
-                )
-              else
-                const SizedBox(width: 32),
             ],
           ),
         ),
