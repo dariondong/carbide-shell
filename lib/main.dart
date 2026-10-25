@@ -17,6 +17,7 @@ import 'data/mail.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
+import 'data/temp_files.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
 import 'services.dart';
@@ -77,6 +78,7 @@ Future<void> main() async {
     usage: usage,
     mail: mail,
     workspace: workspace.path,
+    files: TempFiles(workspace),
   );
 
   runApp(CarbideApp(

@@ -11,6 +11,7 @@ import 'data/mail.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
+import 'data/temp_files.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
@@ -20,6 +21,7 @@ import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/ssh_tools.dart';
 import 'tools/status_tools.dart';
+import 'tools/temp_tools.dart';
 
 /// One conversation's live pieces: its loop and the memory file it writes.
 class AgentSession {
@@ -44,6 +46,7 @@ class AppServices {
     required this.usage,
     required this.mail,
     required this.workspace,
+    required this.files,
   });
 
   final HostStore hosts;
@@ -65,6 +68,9 @@ class AppServices {
   final MailStore mail;
   final String workspace;
 
+  /// 临时文件区：模型写文件、用户往里放文件、两个都把文件传到主机。
+  final TempFiles files;
+
   /// Tools are per session: `remember` must write into this conversation's
   /// memory file, and a single-host conversation only ever sees that host.
   Future<AgentSession> sessionFor(Conversation c) async {
@@ -74,6 +80,8 @@ class AppServices {
       ..register(SshSftpTool(pool, hosts))
       ..register(HttpTool(settings))
       ..register(FileTool())
+      ..register(TempFileTool(files))
+      ..register(TempUploadTool(files: files, pool: pool, hosts: hosts))
       ..register(RememberTool(store))
       ..register(AskTool())
       ..register(TaskAddTool(tasks: tasks, hosts: hosts))
@@ -132,7 +140,9 @@ String environmentText(
   final StringBuffer b = StringBuffer('\n当前环境\n');
   b.writeln(
       '- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
-  b.writeln('- 工作目录：$workspace');
+  b.writeln('- 工作目录也是临时文件区：$workspace');
+  b.writeln(
+      '  写、列、读、删文件用 temp_file；要把这里的文件传到主机上用 temp_upload。');
   final DateTime now = DateTime.now();
   const List<String> week = <String>['一', '二', '三', '四', '五', '六', '日'];
   String two(int n) => n.toString().padLeft(2, '0');
