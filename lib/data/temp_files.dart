@@ -24,11 +24,17 @@ class TempFile {
   bool get isImage =>
       const <String>{'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}.contains(ext);
 
+  /// 能按 Markdown 渲染的。
+  bool get isMarkdown => ext == 'md' || ext == 'markdown';
+
+  /// 能当网页渲染的（先收成 Markdown 再画）。
+  bool get isHtml => ext == 'html' || ext == 'htm';
+
   /// 认得出来的文本类型。读的时候还会再看一眼有没有 0 字节，二进制一律当读不了。
   bool get isText => const <String>{
         'txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'log', 'yaml', 'yml',
         'conf', 'cfg', 'ini', 'env', 'sh', 'bash', 'zsh', 'dart', 'py', 'js',
-        'ts', 'html', 'css', 'xml', 'sql', 'toml', 'service', 'pem', 'pub',
+        'ts', 'html', 'htm', 'css', 'xml', 'sql', 'toml', 'service', 'pem', 'pub',
       }.contains(ext);
 }
 
