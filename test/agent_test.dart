@@ -13,6 +13,9 @@ class ScriptedProvider implements LlmProvider {
   int calls = 0;
   String lastSystem = '';
 
+  /// 每次请求看到的上下文，用来盯住前缀是不是一直在变。
+  final List<List<LlmMessage>> seen = <List<LlmMessage>>[];
+
   @override
   String get label => 'scripted';
 
@@ -25,6 +28,7 @@ class ScriptedProvider implements LlmProvider {
     void Function(String delta)? onText,
   }) async {
     lastSystem = system;
+    seen.add(messages.toList(growable: false));
     if (calls >= replies.length) return const LlmReply(text: '没有更多步骤。');
     return replies[calls++];
   }
@@ -289,6 +293,75 @@ void main() {
     expect(seen.contains('磁盘'), isTrue);
     expect(seen.any((String s) => s.contains('干净')), isFalse);
     expect(loop.phase, AgentPhase.idle);
+  });
+
+  test('上下文只在真超预算时砍一次，平时的前缀不动', () async {
+    final String filler = 'y' * 300;
+    final SpyTool tool = SpyTool();
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      for (int i = 0; i < 20; i += 1) LlmReply(text: filler),
+    ]);
+    final AgentLoop loop = AgentLoop(
+      llm: provider,
+      registry: registryWith(tool),
+      policy: ApprovalPolicy(),
+      journal: MemoryJournal(),
+      context: const ToolContext(workspace: '/tmp/carbide', desktop: true),
+      maxContextChars: 2000,
+    );
+
+    for (int i = 0; i < 10; i += 1) {
+      await loop.send('第 $i 轮 $filler');
+    }
+
+    expect(provider.seen.length, 10);
+    for (final List<LlmMessage> window in provider.seen) {
+      expect(window, isNotEmpty);
+      expect(window.first.role, isNot(LlmRole.tool));
+      // 这一轮说的话永远在里面
+      expect(window.last.text.contains(filler.substring(0, 8)), isTrue);
+    }
+
+    // 一轮一刀会把前缀每轮都切碎，现在应该只有砍的那几次断开。
+    int kept = 0;
+    for (int i = 1; i < provider.seen.length; i += 1) {
+      final List<LlmMessage> before = provider.seen[i - 1];
+      final List<LlmMessage> after = provider.seen[i];
+      if (after.length <= before.length) continue;
+      bool same = true;
+      for (int k = 0; k < before.length; k += 1) {
+        if (after[k].text != before[k].text) {
+          same = false;
+          break;
+        }
+      }
+      if (same) kept += 1;
+    }
+    // 一轮一刀的时候这个数几乎为零：每轮都会从头掉一条。
+    expect(kept, greaterThanOrEqualTo((provider.seen.length - 1) ~/ 2));
+  });
+
+  test('预算没满时上下文一条不掉', () async {
+    final String filler = 'z' * 300;
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      for (int i = 0; i < 8; i += 1) LlmReply(text: filler),
+    ]);
+    final AgentLoop loop = AgentLoop(
+      llm: provider,
+      registry: registryWith(SpyTool()),
+      policy: ApprovalPolicy(),
+      journal: MemoryJournal(),
+      context: const ToolContext(workspace: '/tmp/carbide', desktop: true),
+      maxContextChars: 4000,
+    );
+
+    for (int i = 0; i < 5; i += 1) {
+      await loop.send('第 $i 轮 $filler');
+    }
+
+    expect(provider.seen.length, 5);
+    expect(provider.seen.first.length, 1);
+    expect(provider.seen.last.length, 9);
   });
 }
 

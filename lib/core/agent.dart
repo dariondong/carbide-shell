@@ -287,21 +287,41 @@ class AgentLoop {
     return note;
   }
 
+  /// 上下文从哪一条开始算。缓存按前缀算，每轮从头砍一条等于每轮都重算一遍，
+  /// 所以只在真的超了才砍，一次砍到留有余量，之后就看着它长回来。
+  int _cut = 0;
+
   /// Drop the oldest turns until the estimate fits, never split a tool result
   /// from the assistant message that asked for it.
   List<LlmMessage> _window() {
-    int total = 0;
-    final List<LlmMessage> kept = <LlmMessage>[];
-    for (int i = history.length - 1; i >= 0; i -= 1) {
-      final LlmMessage m = history[i];
-      total += m.text.length + 24;
-      if (kept.isNotEmpty && total > maxContextChars) break;
-      kept.insert(0, m);
+    if (_charsFrom(_cut) > maxContextChars) {
+      // 砍到六成，下一轮不再动，前缀能一直被命中。
+      _cut = _cutFor((maxContextChars * 0.6).round());
     }
+    final List<LlmMessage> kept = history.sublist(_cut);
     while (kept.isNotEmpty && kept.first.role == LlmRole.tool) {
       kept.removeAt(0);
     }
     return kept;
+  }
+
+  /// [from] 之后这些消息按现在的估算一共多少字符。
+  int _charsFrom(int from) {
+    int total = 0;
+    for (int i = from; i < history.length; i += 1) {
+      total += history[i].text.length + 24;
+    }
+    return total;
+  }
+
+  /// 从尾巴往前攒，攒过 [budget] 的那一条之后就是起点。最新那一条无论如何留着。
+  int _cutFor(int budget) {
+    int total = 0;
+    for (int i = history.length - 1; i >= 0; i -= 1) {
+      total += history[i].text.length + 24;
+      if (total > budget && i < history.length - 1) return i + 1;
+    }
+    return 0;
   }
 
   /// 基础提示词 + 用户附加的指示 + 当前环境。空着就用内置那份。
