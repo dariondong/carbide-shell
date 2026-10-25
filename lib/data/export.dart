@@ -37,12 +37,13 @@ String mimeOf(String name) {
 
 /// 存一份到系统的下载目录，回一句话说存哪儿了。
 ///
-/// Android 直接写进「下载」（不需要存储权限）；桌面与网页退回系统的保存框，
-/// 存到哪里由那一下选择决定。
+/// Android 直接写进「下载」（不需要存储权限）；写不进去、或者根本没有这条
+/// 通道（桌面、网页）时退到系统的保存框，存到哪里由那一下选择决定。
 Future<String> saveToDownloads({
   required String name,
   required Uint8List bytes,
 }) async {
+  String? phoneError;
   try {
     final String? where = await _files.invokeMethod<String>('save', <String, Object?>{
       'name': name,
@@ -53,13 +54,16 @@ Future<String> saveToDownloads({
   } on MissingPluginException {
     // 桌面、网页没有这条通道，走下面那条。
   } on PlatformException catch (e) {
-    throw Exception(e.message ?? e.code);
+    // 老系统的公共目录写不进去，也要给保存框一次机会。
+    phoneError = e.message ?? e.code;
   }
   final String? picked = await FilePicker.platform.saveFile(
     dialogTitle: '存到哪儿',
     fileName: name,
     bytes: bytes,
   );
-  if (picked == null || picked.isEmpty) throw Exception('没有选保存位置。');
+  if (picked == null || picked.isEmpty) {
+    throw Exception(phoneError ?? '没有选保存位置。');
+  }
   return picked;
 }
