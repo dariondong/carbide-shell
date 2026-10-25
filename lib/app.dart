@@ -5,6 +5,7 @@ import 'core/conversation.dart';
 import 'data/hosts.dart';
 import 'data/hub.dart';
 import 'data/tasks.dart';
+import 'data/temp_files.dart';
 import 'data/update.dart';
 import 'services.dart';
 import 'ui/about_page.dart';
@@ -14,6 +15,7 @@ import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/tasks_page.dart';
+import 'ui/temp_files_page.dart';
 import 'ui/usage_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
@@ -151,6 +153,30 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openFiles() {
+    final AppServices s = widget.services;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TempFilesPage(files: s.files, hosts: s.hosts, pool: s.pool),
+      ),
+    );
+  }
+
+  /// 设置页那一行右边写文件区的轻重，读一眼目录就够。
+  String _filesSummary() {
+    try {
+      final List<TempFile> all = widget.services.files.list();
+      if (all.isEmpty) return '空的';
+      int sum = 0;
+      for (final TempFile f in all) {
+        sum += f.size;
+      }
+      return '${all.length} 个 · ${tempSize(sum)}';
+    } catch (_) {
+      return '';
+    }
+  }
+
   void _refresh() {
     if (mounted) setState(() {});
   }
@@ -247,6 +273,8 @@ class _HomeShellState extends State<HomeShell> {
                   onConversationChanged: (Conversation c) => s.conversations.save(c),
                   onOpenAbout: _openAbout,
                   onOpenUsage: _openUsage,
+                  onOpenFiles: _openFiles,
+                  filesSummary: _filesSummary(),
                   usage: s.usage,
                   mail: s.mail,
                 ),

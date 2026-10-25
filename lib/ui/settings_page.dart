@@ -34,6 +34,8 @@ class SettingsPage extends StatefulWidget {
     required this.onConversationChanged,
     required this.onOpenAbout,
     required this.onOpenUsage,
+    required this.onOpenFiles,
+    required this.filesSummary,
     required this.usage,
     required this.mail,
   });
@@ -47,6 +49,13 @@ class SettingsPage extends StatefulWidget {
   final Future<void> Function(Conversation conversation) onConversationChanged;
   final VoidCallback onOpenAbout;
   final VoidCallback onOpenUsage;
+
+  /// 临时文件区是单独一页，设置里留一个入口。
+  final VoidCallback onOpenFiles;
+
+  /// 那一行右边写「N 个 · 总量」，进页面前就知道里面轻重。
+  final String filesSummary;
+
   final UsageStore usage;
 
   /// 邮件通知的设置。
@@ -375,6 +384,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: <Widget>[
+                      InkWell(
+                        onTap: widget.onOpenFiles,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                          child: Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text('临时文件',
+                                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(widget.filesSummary, style: C.monoSmall),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const RuleLine(),
                       InkWell(
                         onTap: widget.onOpenUsage,
                         child: Padding(
