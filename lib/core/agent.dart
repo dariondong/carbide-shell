@@ -127,6 +127,15 @@ class AgentLoop {
     _notify();
     step = 0;
 
+    // 系统提示词和上下文起点都在回合开始时定下来。缓存认的是前缀，中途只要
+    // 挪一个字，这一回合剩下的每一步都要整段重算。
+    final String extra = environment?.call() ?? '';
+    final String turnTail = <String>[extraSystem.trim(), extra.trim()]
+        .where((String s) => s.isNotEmpty)
+        .join('\n');
+    final String turnSystem = systemText(turnTail);
+    _window();
+
     while (step < maxSteps) {
       if (cancel?.cancelled ?? false) return _finish('已中断。');
       step += 1;
@@ -136,13 +145,9 @@ class AgentLoop {
 
       LlmReply reply;
       try {
-        final String extra = environment?.call() ?? '';
-        final String tail = <String>[extraSystem.trim(), extra.trim()]
-            .where((String s) => s.isNotEmpty)
-            .join('\n');
         reply = await llm.chat(
-          system: systemText(tail),
-          messages: _window(),
+          system: turnSystem,
+          messages: _window(hard: true),
           tools: registry.specs(),
           cancel: cancel,
           onText: _onDelta,
@@ -291,10 +296,18 @@ class AgentLoop {
   /// 所以只在真的超了才砍，一次砍到留有余量，之后就看着它长回来。
   int _cut = 0;
 
+  /// 回合里的硬上限：正常长到预算之上不动它，只有快到撑爆模型上下文才再砍一次。
+  static const double _hardFactor = 1.5;
+
   /// Drop the oldest turns until the estimate fits, never split a tool result
   /// from the assistant message that asked for it.
-  List<LlmMessage> _window() {
-    if (_charsFrom(_cut) > maxContextChars) {
+  ///
+  /// [hard] 是回合中间那次检查：只按预算的一点五倍算，一回合里上下文只往上长，
+  /// 前缀不被弄断，缓存还能命中。
+  List<LlmMessage> _window({bool hard = false}) {
+    final int limit =
+        hard ? (maxContextChars * _hardFactor).round() : maxContextChars;
+    if (_charsFrom(_cut) > limit) {
       // 砍到六成，下一轮不再动，前缀能一直被命中。
       _cut = _cutFor((maxContextChars * 0.6).round());
     }

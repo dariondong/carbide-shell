@@ -13,6 +13,9 @@ class ScriptedProvider implements LlmProvider {
   int calls = 0;
   String lastSystem = '';
 
+  /// 每次请求收到的系统提示词，用来盯住一轮之内它有没有变。
+  final List<String> systems = <String>[];
+
   /// 每次请求看到的上下文，用来盯住前缀是不是一直在变。
   final List<List<LlmMessage>> seen = <List<LlmMessage>>[];
 
@@ -28,6 +31,7 @@ class ScriptedProvider implements LlmProvider {
     void Function(String delta)? onText,
   }) async {
     lastSystem = system;
+    systems.add(system);
     seen.add(messages.toList(growable: false));
     if (calls >= replies.length) return const LlmReply(text: '没有更多步骤。');
     return replies[calls++];
@@ -339,6 +343,66 @@ void main() {
     }
     // 一轮一刀的时候这个数几乎为零：每轮都会从头掉一条。
     expect(kept, greaterThanOrEqualTo((provider.seen.length - 1) ~/ 2));
+  });
+
+  test('一轮之内系统提示词只算一次，环境变了也不动前缀', () async {
+    int ticks = 0;
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      const LlmReply(
+        text: '先看一眼。',
+        calls: <LlmToolCall>[
+          LlmToolCall(id: 'c1', name: 'spy', args: <String, Object?>{'command': 'uptime'}),
+        ],
+      ),
+      const LlmReply(text: '好了。'),
+    ]);
+    final AgentLoop loop = AgentLoop(
+      llm: provider,
+      registry: registryWith(SpyTool()),
+      policy: ApprovalPolicy(),
+      journal: MemoryJournal(),
+      context: const ToolContext(workspace: '/tmp/carbide', desktop: true),
+      environment: () => '第 ${++ticks} 次环境',
+    );
+
+    await loop.send('看看');
+
+    expect(provider.systems.length, 2);
+    // 只取一次，后面每一步用的都是这一份：前缀不动，缓存才命中。
+    expect(ticks, 1);
+    expect(provider.systems.first, provider.systems.last);
+    expect(provider.systems.first.contains('第 1 次环境'), isTrue);
+  });
+
+  test('一个回合里上下文只往上长，不中途砍', () async {
+    final String blob = 'x' * 400;
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      for (int i = 0; i < 3; i += 1)
+        LlmReply(
+          text: '第 $i 步。',
+          calls: <LlmToolCall>[
+            LlmToolCall(id: 'c$i', name: 'spy', args: <String, Object?>{'command': 'ps'}),
+          ],
+        ),
+      const LlmReply(text: '看完了。'),
+    ]);
+    final AgentLoop loop = AgentLoop(
+      llm: provider,
+      registry: registryWith(SpyTool(output: blob)),
+      policy: ApprovalPolicy(),
+      journal: MemoryJournal(),
+      context: const ToolContext(workspace: '/tmp/carbide', desktop: true),
+      maxContextChars: 1000,
+    );
+
+    await loop.send('看看');
+
+    expect(provider.seen.length, 4);
+    // 第一条始终是这一轮说的话：中途没被砍掉。
+    for (final List<LlmMessage> window in provider.seen) {
+      expect(window.first.text.startsWith('看看'), isTrue);
+    }
+    expect(provider.seen.last.length, 7);
   });
 
   test('预算没满时上下文一条不掉', () async {
