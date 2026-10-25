@@ -62,6 +62,10 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
+
+  /// 输入框拿到焦点时边框亮一下，人就知道字往哪儿落。
+  final FocusNode _focus = FocusNode();
+  bool _typing = false;
   LiveSession? _live;
 
   /// 读者翻上去了：右下角给一个回到底部的按钮。
@@ -92,7 +96,13 @@ class _ChatPageState extends State<ChatPage> {
     super.initState();
     widget.hub.addListener(_refresh);
     _scroll.addListener(_onScroll);
+    _focus.addListener(_onFocus);
     _attach();
+  }
+
+  void _onFocus() {
+    if (_focus.hasFocus == _typing) return;
+    setState(() => _typing = _focus.hasFocus);
   }
 
   /// 拿到这个对话的活会话。已经有一个在跑就用那一个，不另起一份。
@@ -127,6 +137,7 @@ class _ChatPageState extends State<ChatPage> {
     widget.hub.removeListener(_refresh);
     _scroll.removeListener(_onScroll);
     _input.dispose();
+    _focus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -888,67 +899,133 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ),
           ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
-            decoration: BoxDecoration(
-              color: C.card,
-              borderRadius: BorderRadius.circular(C.radius),
-              border: Border.all(color: C.rule),
-              boxShadow: C.softShadow,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                GestureDetector(
-                  onTap: _attachSheet,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8, right: 6, left: 2),
-                    child: const Icon(Icons.add_circle_outline,
-                        size: 21, color: C.grey),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 9),
-                  child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    enabled: !_running && loop != null,
-                    style: const TextStyle(fontSize: 14.5, height: 1.5),
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(
-                      hintText: '交给它一件事',
-                      contentPadding: EdgeInsets.symmetric(vertical: 9),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: (_running || loop == null) ? null : _send,
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: (_running || loop == null) ? C.rule2 : C.blue,
-                      borderRadius: BorderRadius.circular(C.radiusSmall),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.arrow_upward, size: 19, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        _composer(loop),
       ],
+    );
+  }
+
+  /// 输入条。框跟着焦点亮，左边加东西，右边发或者停，写完没发可以一键清掉。
+  Widget _composer(AgentLoop? loop) {
+    final bool running = _running;
+    final bool canType = loop != null;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+        decoration: BoxDecoration(
+          color: C.card,
+          borderRadius: BorderRadius.circular(C.radius),
+          border: Border.all(color: _typing ? C.blue : C.rule),
+          boxShadow: C.softShadow,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            _composerKey(
+              Icons.add_circle_outline,
+              canType ? _attachSheet : null,
+              size: 21,
+            ),
+            const Padding(
+              padding: EdgeInsets.only(left: 2, bottom: 9),
+              child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _input,
+                focusNode: _focus,
+                enabled: canType,
+                style: const TextStyle(fontSize: 14.5, height: 1.5),
+                minLines: 1,
+                maxLines: 5,
+                // 跑的时候回车只管换行：先把下一句写下来，跑完再发。
+                textInputAction:
+                    running ? TextInputAction.newline : TextInputAction.send,
+                onSubmitted: (_) {
+                  if (!running) _send();
+                },
+                decoration: InputDecoration(
+                  hintText: running ? '这一轮还在跑，可以先写下一句' : '交给它一件事',
+                  contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _input,
+              builder: (BuildContext ctx, TextEditingValue value, Widget? child) {
+                final bool typed = value.text.trim().isNotEmpty || _images.isNotEmpty;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (value.text.isNotEmpty && !running)
+                      _composerKey(Icons.close, _input.clear, size: 16),
+                    _sendKey(running: running, canType: canType, typed: typed),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 输入条里的一个图标键：高度跟发送键对齐，文字一长也不会跑。
+  Widget _composerKey(IconData icon, VoidCallback? onTap, {double size = 18}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 30,
+        height: 38,
+        child: Icon(icon, size: size, color: onTap == null ? C.rule2 : C.grey),
+      ),
+    );
+  }
+
+  /// 右边那一颗：平时是发，跑的时候是停。
+  Widget _sendKey({
+    required bool running,
+    required bool canType,
+    required bool typed,
+  }) {
+    final bool on = running || (canType && typed);
+    return GestureDetector(
+      onTap: !on ? null : (running ? _stop : _send),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? C.blue : C.rule,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          child: running
+              ? Container(
+                  key: const ValueKey<String>('stop'),
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                )
+              : const Icon(
+                  Icons.arrow_upward,
+                  key: ValueKey<String>('send'),
+                  size: 19,
+                  color: Colors.white,
+                ),
+        ),
+      ),
     );
   }
 }
