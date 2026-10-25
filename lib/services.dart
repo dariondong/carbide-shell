@@ -15,6 +15,7 @@ import 'data/temp_files.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
+import 'tools/clock_tool.dart';
 import 'tools/host_tools.dart';
 import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
@@ -79,6 +80,7 @@ class AppServices {
       ..register(SshExecTool(pool, hosts))
       ..register(SshSftpTool(pool, hosts))
       ..register(HttpTool(settings))
+      ..register(ClockTool())
       ..register(FileTool())
       ..register(TempFileTool(files))
       ..register(TempUploadTool(files: files, pool: pool, hosts: hosts))
@@ -146,9 +148,10 @@ String environmentText(
   final DateTime now = DateTime.now();
   const List<String> week = <String>['一', '二', '三', '四', '五', '六', '日'];
   String two(int n) => n.toString().padLeft(2, '0');
-  b.writeln('- 现在：${now.year}-${two(now.month)}-${two(now.day)} '
-      '${two(now.hour)}:${two(now.minute)}，星期${week[now.weekday - 1]}（设备本地时间）。'
-      '排时间就按这个算。');
+  // 只写日期，不写几点几分：这一行在系统提示词里，每过一分钟就变一个字，
+  // 整段前缀的缓存每轮都作废。要准确时刻用 clock 工具。
+  b.writeln('- 今天是：${now.year}-${two(now.month)}-${two(now.day)}，'
+      '星期${week[now.weekday - 1]}（设备本地时间）。排日期按这个算，要几点几分用 clock 工具。');
 
   final List<HostEntry> visible = c.multiHost
       ? hosts.hosts
