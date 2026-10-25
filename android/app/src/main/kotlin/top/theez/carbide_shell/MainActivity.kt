@@ -76,6 +76,29 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // 临时文件下载到「下载」目录。Android 10 起走 MediaStore，不要权限。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "save" -> {
+                        val name = call.argument<String>("name").orEmpty()
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val mime = call.argument<String>("mime")
+                            ?: "application/octet-stream"
+                        if (name.isEmpty() || bytes == null) {
+                            result.error("bad-args", "缺少文件名或者内容", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            result.success(Downloads.save(this, name, bytes, mime))
+                        } catch (error: Throwable) {
+                            result.error("save-failed", error.message, null)
+                        }
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     /**
@@ -163,6 +186,7 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CHANNEL = "top.theez.carbide_shell/foreground"
+        const val FILES = "top.theez.carbide_shell/files"
         const val REQ_NOTIFICATIONS = 0xCB02
     }
 }
