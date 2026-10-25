@@ -508,6 +508,7 @@ class _UploadSheetState extends State<_UploadSheet> {
   @override
   Widget build(BuildContext context) {
     final List<HostEntry> hosts = widget.hosts.hosts;
+    final HostEntry? picked = widget.hosts.byId(_hostId);
     return SheetCard(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -528,7 +529,10 @@ class _UploadSheetState extends State<_UploadSheet> {
                 _hostChip(h, h.id == _hostId),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
+          Text(picked == null ? '还没选主机' : picked.host,
+              style: C.monoSmall.copyWith(color: picked == null ? C.grey2 : C.grey)),
+          const SizedBox(height: 16),
           const SectionLabel('远端路径'),
           const SizedBox(height: 8),
           Container(
