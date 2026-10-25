@@ -152,6 +152,11 @@ class ToolStepRow extends StatefulWidget {
 class _ToolStepRowState extends State<ToolStepRow> {
   bool _open = false;
 
+  /// 这条输出上一次是怎么分的行。命令跑完就不变了，不用每帧再分一次。
+  String? _measured;
+  String _head = '';
+  int _rest = 0;
+
   @override
   void didUpdateWidget(ToolStepRow old) {
     super.didUpdateWidget(old);
@@ -165,12 +170,20 @@ class _ToolStepRowState extends State<ToolStepRow> {
     return '${raw ?? ''}';
   }
 
+  /// 展开时才分：收着的行连切一次字符串都不用。
+  void _measure(String text) {
+    if (_measured == text) return;
+    _measured = text;
+    final List<String> lines = text.split('\n');
+    final int shown = lines.length > 200 ? 200 : lines.length;
+    _rest = lines.length - shown;
+    _head = lines.take(shown).join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     final String text = widget.output ?? '';
-    final List<String> lines = text.split('\n');
-    final int shownLines = lines.length > 200 ? 200 : lines.length;
-    final int rest = lines.length - shownLines;
+    if (_open && text.isNotEmpty) _measure(text);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,11 +234,11 @@ class _ToolStepRowState extends State<ToolStepRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(lines.take(shownLines).join('\n'), style: C.output),
-                if (rest > 0)
+                Text(_head, style: C.output),
+                if (_rest > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text('还有 $rest 行没有显示',
+                    child: Text('还有 $_rest 行没有显示',
                         style: C.monoSmall.copyWith(color: C.grey2, fontSize: 10.5)),
                   ),
               ],
