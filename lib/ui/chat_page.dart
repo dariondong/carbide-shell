@@ -494,12 +494,12 @@ class _ChatPageState extends State<ChatPage> {
     return out;
   }
 
-  String _runningId() {
+  String _runningId(Map<String, String> outputs) {
     if (!_running) return '';
     for (final LlmMessage m in _messages) {
       if (m.role != LlmRole.assistant) continue;
       for (final LlmToolCall c in m.calls) {
-        if (!_outputs().containsKey(c.id)) return c.id;
+        if (!outputs.containsKey(c.id)) return c.id;
       }
     }
     return '';
@@ -508,7 +508,7 @@ class _ChatPageState extends State<ChatPage> {
   List<Widget> _thread() {
     final List<Widget> out = <Widget>[];
     final Map<String, String> outputs = _outputs();
-    final String runningId = _runningId();
+    final String runningId = _runningId(outputs);
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
         out.add(_userTurn(m));
@@ -523,7 +523,10 @@ class _ChatPageState extends State<ChatPage> {
       out.add(_ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking));
     }
     if (out.isEmpty) out.add(_empty());
-    return out;
+    // 每一段各自成层：尾巴上那个字在长，其它段的字不用跟着重画。
+    return <Widget>[
+      for (final Widget w in out) RepaintBoundary(child: w),
+    ];
   }
 
   Widget _userTurn(LlmMessage message) {
