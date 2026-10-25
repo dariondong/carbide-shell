@@ -86,6 +86,14 @@ class AgentLoop {
   int promptTokens = 0;
   int cachedTokens = 0;
 
+  /// 上一次请求的命中情况。累计值被第一轮那个 0 一直拉着，看不出掉在哪一步。
+  int lastPromptTokens = 0;
+  int lastCachedTokens = 0;
+
+  double get lastCacheHitRate => lastPromptTokens <= 0
+      ? 0
+      : (lastCachedTokens / lastPromptTokens).clamp(0.0, 1.0);
+
   /// Tokens for the answer arriving right now, so the number keeps moving
   /// between provider reports.
   int get liveTokens => tokens + (partial.length / 3).round();
@@ -160,6 +168,15 @@ class AgentLoop {
       tokens += reply.usage.total;
       promptTokens += reply.usage.prompt;
       cachedTokens += reply.usage.cached;
+      lastPromptTokens = reply.usage.prompt;
+      lastCachedTokens = reply.usage.cached;
+      journal.add(<String, Object?>{
+        'event': 'llm',
+        'step': step,
+        'prompt': reply.usage.prompt,
+        'cached': reply.usage.cached,
+        'out': reply.usage.completion,
+      });
 
       if (!reply.wantsTools) {
         final String answer = reply.text.trim().isEmpty ? '（没有内容）' : reply.text.trim();

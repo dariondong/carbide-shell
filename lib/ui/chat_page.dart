@@ -702,10 +702,12 @@ class _ChatPageState extends State<ChatPage> {
   Widget _statusPill(AgentLoop? loop) {
     if (loop == null) return const SizedBox.shrink();
     final bool running = _running;
-    final double hit = loop.cacheHitRate;
+    // 看最近这一次请求命中多少：累计值把冷启动那一轮也算进去了，永远偏低。
+    final double hit =
+        loop.lastCacheHitRate > 0 ? loop.lastCacheHitRate : loop.cacheHitRate;
     final bool wide = MediaQuery.sizeOf(context).width >= 380;
     final String text = running
-        ? '${loop.step}/${loop.maxSteps}'
+        ? '${loop.step}/${loop.maxSteps}${wide && hit > 0 ? ' · ${(hit * 100).round()}%' : ''}'
         : '${_fmtTokens(loop.tokens)} tok${wide && hit > 0 ? ' · 命中 ${(hit * 100).round()}%' : ''}';
     return Container(
       height: 24,

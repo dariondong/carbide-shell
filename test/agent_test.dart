@@ -405,6 +405,28 @@ void main() {
     expect(provider.seen.last.length, 7);
   });
 
+  test('命中率看最近一次请求，累计值不背锅', () async {
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      const LlmReply(
+        text: '好',
+        usage: LlmUsage(prompt: 1000, completion: 20, cached: 0),
+      ),
+      const LlmReply(
+        text: '好',
+        usage: LlmUsage(prompt: 2000, completion: 20, cached: 1600),
+      ),
+    ]);
+    final AgentLoop loop = buildLoop(provider, registryWith(SpyTool()));
+
+    await loop.send('第一轮');
+    expect(loop.lastCacheHitRate, 0);
+
+    await loop.send('第二轮');
+    expect(loop.lastCacheHitRate, closeTo(0.8, 1e-9));
+    // 累计值把冷启动那一轮也算进去了，所以才另存最近一次的。
+    expect(loop.cacheHitRate, closeTo(1600 / 3000, 1e-9));
+  });
+
   test('预算没满时上下文一条不掉', () async {
     final String filler = 'z' * 300;
     final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
