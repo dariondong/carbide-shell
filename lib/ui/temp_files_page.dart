@@ -1,13 +1,17 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../core/html.dart';
+import '../data/export.dart';
 import '../data/hosts.dart';
 import '../data/temp_files.dart';
 import '../tools/ssh_tools.dart';
 import '../tools/temp_tools.dart';
 import 'components.dart';
+import 'md_text.dart';
 import 'motion.dart';
 import 'theme.dart';
 
@@ -158,94 +162,24 @@ class _TempFilesPageState extends State<TempFilesPage> {
     _toast('清空了。');
   }
 
+  /// 打开一个文件：图片放大看，Markdown 和 HTML 直接渲染，其余看原文，都能存到下载目录。
   Future<void> _preview(TempFile f) async {
-    if (f.isImage) {
-      final File? local = widget.files.fileOf(f.path);
-      if (local == null || !local.existsSync()) {
-        _toast('这个文件已经不在了。');
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        builder: (BuildContext ctx) => Dialog(
-          backgroundColor: C.paper,
-          insetPadding: const EdgeInsets.all(14),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(f.path,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: C.monoSmall.copyWith(color: C.ink)),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.of(ctx).pop(),
-                      behavior: HitTestBehavior.opaque,
-                      child: const SizedBox(
-                        width: 30,
-                        height: 30,
-                        child: Icon(Icons.close, size: 17, color: C.grey),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Flexible(
-                  child: InteractiveViewer(
-                    maxScale: 4,
-                    child: Image.file(local),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    final File? local = widget.files.fileOf(f.path);
+    if (local == null || !local.existsSync()) {
+      _toast('这个文件已经不在了。');
       return;
     }
-    final String? text = await widget.files.readText(f.path);
+    final String? text = f.isImage ? null : await widget.files.readText(f.path);
     if (!mounted) return;
-    if (text == null) {
-      _toast('${f.name} 是二进制文件，内容读不出来，只能传出去。');
-      return;
-    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       elevation: 0,
-      builder: (BuildContext ctx) => SheetCard(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(ctx).height * 0.68,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SheetHead(title: f.name, note: f.path),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                  decoration: BoxDecoration(
-                    color: C.paper2,
-                    borderRadius: BorderRadius.circular(C.radiusSmall),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      text.isEmpty ? '（空文件）' : text,
-                      style: C.mono.copyWith(fontSize: 11.5, height: 1.6),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (BuildContext ctx) => _PreviewSheet(
+        item: f,
+        local: local,
+        text: text,
       ),
     );
   }
@@ -313,37 +247,46 @@ class _TempFilesPageState extends State<TempFilesPage> {
               ),
             ),
             Expanded(
-              child: _items.isEmpty
-                  ? _empty()
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                      children: <Widget>[
-                        FadeSlideIn(
-                          child: CardBox(
-                            padding: EdgeInsets.zero,
-                            child: Column(
-                              children: <Widget>[
-                                for (int i = 0; i < _items.length; i += 1) ...<Widget>[
-                                  if (i > 0) const RuleLine(),
-                                  _row(_items[i]),
+              child: AnimatedSwitcher(
+                duration: Motion.swap,
+                switchInCurve: Motion.curve,
+                child: _items.isEmpty
+                    ? KeyedSubtree(key: const ValueKey<String>('empty'), child: _empty())
+                    : ListView(
+                        key: const ValueKey<String>('list'),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                        children: <Widget>[
+                          FadeSlideIn(
+                            child: CardBox(
+                              padding: EdgeInsets.zero,
+                              child: Column(
+                                children: <Widget>[
+                                  for (int i = 0; i < _items.length; i += 1) ...<Widget>[
+                                    if (i > 0) const RuleLine(),
+                                    FadeSlideIn(
+                                      delay: Motion.stagger * (i < 9 ? i : 9),
+                                      lift: 6,
+                                      child: _row(_items[i]),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        Center(
-                          child: TextButton(
-                            onPressed: _clearAll,
-                            style: TextButton.styleFrom(
-                              foregroundColor: C.grey,
-                              textStyle: const TextStyle(fontSize: 12.5),
+                          const SizedBox(height: 14),
+                          Center(
+                            child: TextButton(
+                              onPressed: _clearAll,
+                              style: TextButton.styleFrom(
+                                foregroundColor: C.grey,
+                                textStyle: const TextStyle(fontSize: 12.5),
+                              ),
+                              child: const Text('清空临时文件'),
                             ),
-                            child: const Text('清空临时文件'),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+              ),
             ),
           ],
         ),
@@ -413,9 +356,9 @@ class _TempFilesPageState extends State<TempFilesPage> {
   Widget _iconButton(IconData icon, String tooltip, VoidCallback onTap) {
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
+      child: PressScale(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
+        scale: 0.9,
         child: SizedBox(
           width: 34,
           height: 34,
@@ -427,6 +370,8 @@ class _TempFilesPageState extends State<TempFilesPage> {
 
   IconData _icon(TempFile f) {
     if (f.isImage) return Icons.image_outlined;
+    if (f.isMarkdown) return Icons.article_outlined;
+    if (f.isHtml) return Icons.language;
     if (f.isText) return Icons.description_outlined;
     return Icons.insert_drive_file_outlined;
   }
@@ -605,11 +550,17 @@ class _UploadSheetState extends State<_UploadSheet> {
             const SizedBox(height: 7),
             ClipRRect(
               borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: _pct / 100,
-                minHeight: 4,
-                backgroundColor: C.rule,
-                color: C.blue,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: _pct / 100),
+                duration: Motion.swap,
+                curve: Motion.curve,
+                builder: (BuildContext ctx, double value, Widget? child) =>
+                    LinearProgressIndicator(
+                  value: value,
+                  minHeight: 4,
+                  backgroundColor: C.rule,
+                  color: C.blue,
+                ),
               ),
             ),
           ],
@@ -664,6 +615,237 @@ class _UploadSheetState extends State<_UploadSheet> {
             fontWeight: on ? FontWeight.w600 : FontWeight.w400,
             color: on ? Colors.white : C.ink,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 看一个文件：图片放大、Markdown / HTML 渲染、其余看原文，右上角能存到下载目录。
+class _PreviewSheet extends StatefulWidget {
+  const _PreviewSheet({
+    required this.item,
+    required this.local,
+    required this.text,
+  });
+
+  final TempFile item;
+  final File local;
+
+  /// 文本内容；图片和读不出来的二进制是 null。
+  final String? text;
+
+  @override
+  State<_PreviewSheet> createState() => _PreviewSheetState();
+}
+
+class _PreviewSheetState extends State<_PreviewSheet> {
+  bool _rendered = true;
+  bool _saving = false;
+  String _where = '';
+  String _error = '';
+
+  bool get _canRender => widget.item.isMarkdown || widget.item.isHtml;
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _where = '';
+      _error = '';
+    });
+    try {
+      final Uint8List bytes = await widget.local.readAsBytes();
+      final String where = await saveToDownloads(
+        name: widget.item.name,
+        bytes: bytes,
+      );
+      if (!mounted) return;
+      setState(() => _where = '存到 $where');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '存不下来：$e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double height = MediaQuery.sizeOf(context).height * 0.82;
+    return SheetCard(
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SheetHead(
+              title: widget.item.name,
+              note: '${widget.item.path} · ${tempSize(widget.item.size)}',
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                if (_canRender) ...<Widget>[
+                  _tab('渲染', _rendered, () => setState(() => _rendered = true)),
+                  const SizedBox(width: 6),
+                  _tab('原文', !_rendered, () => setState(() => _rendered = false)),
+                ],
+                const Spacer(),
+                _downloadBtn(),
+              ],
+            ),
+            if (_where.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(_where, style: C.monoSmall.copyWith(color: C.blue)),
+            ],
+            if (_error.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(_error,
+                  style: const TextStyle(
+                      fontSize: 12, height: 1.5, color: Color(0xFFD7443E))),
+            ],
+            const SizedBox(height: 10),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: Motion.swap,
+                switchInCurve: Motion.curve,
+                child: KeyedSubtree(
+                  key: ValueKey<String>(
+                      '${widget.item.path}-${_rendered ? 'r' : 't'}'),
+                  child: _body(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tab(String label, bool on, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? C.blueSoft : C.card,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: on ? C.blue : C.rule2),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: on ? FontWeight.w600 : FontWeight.w400,
+            color: on ? C.blue : C.grey,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _downloadBtn() {
+    return GestureDetector(
+      onTap: _saving ? null : _save,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _saving ? C.rule : C.blue,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (_saving)
+              const SizedBox(
+                width: 11,
+                height: 11,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+              )
+            else
+              const Icon(Icons.download_rounded, size: 14, color: Colors.white),
+            const SizedBox(width: 5),
+            Text(
+              _saving ? '正在存' : '下载',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body() {
+    if (widget.item.isImage) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: InteractiveViewer(
+          maxScale: 5,
+          child: Center(
+            child: Image.file(widget.local, fit: BoxFit.contain, gaplessPlayback: true),
+          ),
+        ),
+      );
+    }
+    final String? text = widget.text;
+    if (text == null) {
+      return Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: const Text(
+          '这是二进制文件，内容读不出来。\n可以下载到手机上，或者传到服务器。',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12.5, height: 1.7, color: C.grey),
+        ),
+      );
+    }
+    final String body = text.isEmpty ? '（空文件）' : text;
+    if (_canRender && _rendered) {
+      final String md = widget.item.isHtml ? htmlToMarkdown(body) : body;
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: C.rule),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: MdText(text: md.isEmpty ? '（空文件）' : md),
+        ),
+      );
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: C.paper2,
+        borderRadius: BorderRadius.circular(C.radiusSmall),
+      ),
+      child: SingleChildScrollView(
+        child: SelectableText(
+          body,
+          style: C.mono.copyWith(fontSize: 11.5, height: 1.6),
         ),
       ),
     );
