@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
 import '../core/models.dart';
+import 'md_text.dart';
 import 'theme.dart';
 
 /// A white card. The only container shape this interface uses.
@@ -234,7 +235,7 @@ class _ToolStepRowState extends State<ToolStepRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(_head, style: C.output),
+                LinkText(text: _head, style: C.output),
                 if (_rest > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

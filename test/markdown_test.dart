@@ -101,4 +101,38 @@ void main() {
   test('行内代码里的星号不当作粗体', () {
     expect(_inline(parseInline('`a * b * c`')), 'code:a * b * c');
   });
+
+  test('裸地址也认，句末的句号不算地址', () {
+    expect(
+      _inline(parseInline('看 https://aprslocus.theez.top/hero.html 这一段')),
+      'plain:看  | link@https://aprslocus.theez.top/hero.html:'
+      'https://aprslocus.theez.top/hero.html | plain: 这一段',
+    );
+    expect(_inline(parseInline('见 https://x.y.')),
+        'plain:见  | link@https://x.y:https://x.y | plain:.');
+  });
+
+  test('没有协议的 www 也认，补上 https', () {
+    expect(
+      _inline(parseInline('www.qrz.com/db/BG7LZQ，后面')),
+      'link@https://www.qrz.com/db/BG7LZQ:www.qrz.com/db/BG7LZQ | plain:，后面',
+    );
+  });
+
+  test('地址后面的右括号不算进地址', () {
+    expect(
+      _inline(parseInline('（https://x.y/a?b=1&c=2）')),
+      'plain:（ | link@https://x.y/a?b=1&c=2:https://x.y/a?b=1&c=2 | plain:）',
+    );
+    expect(_inline(parseInline('窗口 https://x.y/a) 收尾')),
+        'plain:窗口  | link@https://x.y/a:https://x.y/a | plain:) 收尾');
+  });
+
+  test('等宽输出里只认地址，别的照原样', () {
+    expect(
+      _inline(linkifyPlain('好的：\nhttps://a.b/c\n还有 www.d.e 完')),
+      'plain:好的：\n | link@https://a.b/c:https://a.b/c | '
+      'plain:\n还有  | link@https://www.d.e:www.d.e | plain: 完',
+    );
+  });
 }

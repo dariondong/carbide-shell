@@ -210,7 +210,7 @@ class _MdTextState extends State<MdText> {
         );
       case MdSpanKind.link:
         final TapGestureRecognizer tap = TapGestureRecognizer()
-          ..onTap = () => _open(s.href);
+          ..onTap = () => openUrl(s.href);
         _taps.add(tap);
         return TextSpan(
           text: s.text,
@@ -220,13 +220,80 @@ class _MdTextState extends State<MdText> {
     }
   }
 
-  Future<void> _open(String href) async {
-    final Uri? uri = Uri.tryParse(href);
-    if (uri == null) return;
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // 打不开就算了，地址还在字里。
+}
+
+/// 打开一个地址：交给外面的浏览器；打不开就算了，字还留在原地。
+Future<void> openUrl(String href) async {
+  final Uri? uri = Uri.tryParse(href);
+  if (uri == null) return;
+  try {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {
+    // 打不开就算了，地址还在字里。
+  }
+}
+
+/// 一段不画 Markdown、只把地址认出来的字：工具输出那种等宽块用它。
+class LinkText extends StatefulWidget {
+  const LinkText({super.key, required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  State<LinkText> createState() => _LinkTextState();
+}
+
+class _LinkTextState extends State<LinkText> {
+  final List<TapGestureRecognizer> _taps = <TapGestureRecognizer>[];
+
+  /// 字没变就把上回那批 span 交回去，跟 [MdText] 一个路数。
+  List<InlineSpan>? _kids;
+  String? _source;
+  TextStyle? _style;
+
+  @override
+  void dispose() {
+    _dropTaps();
+    super.dispose();
+  }
+
+  void _dropTaps() {
+    for (final TapGestureRecognizer tap in _taps) {
+      tap.dispose();
     }
+    _taps.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_kids != null && _source == widget.text && _style == widget.style) {
+      return Text.rich(TextSpan(children: _kids), style: widget.style);
+    }
+    _dropTaps();
+    final TextStyle base = widget.style;
+    final List<InlineSpan> kids = <InlineSpan>[];
+    for (final MdSpan s in linkifyPlain(widget.text)) {
+      if (s.kind != MdSpanKind.link) {
+        kids.add(TextSpan(text: s.text, style: base));
+        continue;
+      }
+      final TapGestureRecognizer tap = TapGestureRecognizer()
+        ..onTap = () => openUrl(s.href);
+      _taps.add(tap);
+      kids.add(TextSpan(
+        text: s.text,
+        style: base.copyWith(
+          color: C.blue,
+          decoration: TextDecoration.underline,
+          decorationColor: C.blue,
+        ),
+        recognizer: tap,
+      ));
+    }
+    _kids = kids;
+    _source = widget.text;
+    _style = base;
+    return Text.rich(TextSpan(children: kids), style: base);
   }
 }

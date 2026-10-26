@@ -247,6 +247,21 @@ List<MdSpan> parseInline(String source) {
         }
       }
     }
+    // 裸地址也认：回话里直接甩出来的 https://… 点一下就能打开。
+    if (source.startsWith('https://', i) ||
+        source.startsWith('http://', i) ||
+        (rest.startsWith('www.') && !wordBefore(i))) {
+      final int end = _bareUrlEnd(source, i);
+      final String url = source.substring(i, end);
+      if (_looksLikeUrl(url)) {
+        flush();
+        out.add(MdSpan(url,
+            kind: MdSpanKind.link,
+            href: url.startsWith('www.') ? 'https://$url' : url));
+        i = end;
+        continue;
+      }
+    }
     if (rest.startsWith('*') || (rest.startsWith('_') && !wordBefore(i))) {
       final String mark = source[i];
       int end = source.indexOf(mark, i + 1);
@@ -264,4 +279,65 @@ List<MdSpan> parseInline(String source) {
   }
   flush();
   return out;
+}
+
+/// 只认地址的一段：等宽输出这类不画 Markdown 的地方用它。
+List<MdSpan> linkifyPlain(String source) {
+  final List<MdSpan> out = <MdSpan>[];
+  int plainFrom = 0;
+  int i = 0;
+  while (i < source.length) {
+    final bool head = source.startsWith('https://', i) ||
+        source.startsWith('http://', i) ||
+        (source.startsWith('www.', i) && !_wordBefore(source, i));
+    if (!head) {
+      i += 1;
+      continue;
+    }
+    final int end = _bareUrlEnd(source, i);
+    final String url = source.substring(i, end);
+    if (!_looksLikeUrl(url)) {
+      i += 1;
+      continue;
+    }
+    if (i > plainFrom) out.add(MdSpan(source.substring(plainFrom, i)));
+    out.add(MdSpan(url,
+        kind: MdSpanKind.link, href: url.startsWith('www.') ? 'https://$url' : url));
+    plainFrom = end;
+    i = end;
+  }
+  if (plainFrom < source.length) out.add(MdSpan(source.substring(plainFrom)));
+  return out;
+}
+
+/// 光秃秃的 http:// 不算；www 开头的短一点也算数。
+bool _looksLikeUrl(String url) {
+  if (url.startsWith('www.')) return url.length >= 5;
+  return url.length >= 10;
+}
+
+bool _wordBefore(String s, int at) {
+  if (at <= 0) return false;
+  return RegExp(r'[0-9A-Za-z]').hasMatch(s[at - 1]);
+}
+
+/// 裸地址到哪儿为止：空白、中文标点、收尾的括号引号都算断处；
+/// 句末那几个 . , ; : ! ? 一并去掉，地址里的 / ? = & # 留着。
+int _bareUrlEnd(String s, int start) {
+  const String stop = ' \t\r\n<>"`，。；：！？、）】》”’';
+  int i = start;
+  while (i < s.length) {
+    final String ch = s[i];
+    if (stop.contains(ch) || ch == ')' || ch == ']' || ch == '}') break;
+    i += 1;
+  }
+  while (i > start) {
+    final String ch = s[i - 1];
+    if (ch == '.' || ch == ',' || ch == ';' || ch == ':' || ch == '!' || ch == '?') {
+      i -= 1;
+    } else {
+      break;
+    }
+  }
+  return i;
 }
