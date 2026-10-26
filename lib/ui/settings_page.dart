@@ -195,7 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.settings.value
       ..baseUrl = _base.text.trim()
       ..model = _model.text.trim()
-      ..maxSteps = _intOf(_steps.text, 12, 1, 50)
+      ..maxSteps = _intOf(_steps.text, 12, 1, 200)
       ..temperature = _temperature
       ..approvalMode = _mode
       ..stream = _stream
