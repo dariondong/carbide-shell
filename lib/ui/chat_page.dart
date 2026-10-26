@@ -71,6 +71,9 @@ class _ChatPageState extends State<ChatPage> {
   /// 读者翻上去了：右下角给一个回到底部的按钮。
   bool _atBottom = true;
 
+  /// 正在往底跳：这几帧里滚动位置一直在变，别把它当成读者往上翻。
+  bool _settling = false;
+
   /// 刚进来时先跳到最新那条，不用等人先往下翻。
   bool _opened = false;
   Timer? _openJump;
@@ -127,8 +130,33 @@ class _ChatPageState extends State<ChatPage> {
 
   void _toEnd() {
     if (!mounted || !_scroll.hasClients) return;
-    _scroll.jumpTo(_scroll.position.maxScrollExtent);
-    if (!_atBottom) setState(() => _atBottom = true);
+    _settle(0);
+  }
+
+  /// 懒表只知道已经排过的行有多高，末尾那段是先估出来的：跳一次到不了底，
+  /// 就等这一帧排完再跳。跳到底之前不去动「翻上去了」那个按钮。
+  void _settle(int round) {
+    if (!mounted || !_scroll.hasClients) return;
+    _settling = true;
+    final ScrollPosition p = _scroll.position;
+    if (p.maxScrollExtent > p.pixels) p.jumpTo(p.maxScrollExtent);
+    if (round >= 40) {
+      _settling = false;
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) {
+        _settling = false;
+        return;
+      }
+      final ScrollPosition q = _scroll.position;
+      if (q.maxScrollExtent - q.pixels <= 1) {
+        _settling = false;
+        if (!_atBottom) setState(() => _atBottom = true);
+        return;
+      }
+      _settle(round + 1);
+    });
   }
 
   @override
@@ -143,7 +171,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _onScroll() {
-    if (!_scroll.hasClients) return;
+    if (_settling || !_scroll.hasClients) return;
     final bool atBottom = _scroll.position.maxScrollExtent - _scroll.position.pixels < 200;
     if (atBottom == _atBottom) return;
     setState(() => _atBottom = atBottom);
@@ -151,11 +179,15 @@ class _ChatPageState extends State<ChatPage> {
 
   void _jumpToBottom() {
     if (!_scroll.hasClients) return;
-    _scroll.animateTo(
-      _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+    _scroll
+        .animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        )
+        .then((_) {
+      if (mounted) _settle(0);
+    });
   }
 
   void _refresh() {
@@ -167,11 +199,11 @@ class _ChatPageState extends State<ChatPage> {
   /// 跟着尾巴走，但读者往上翻看旧内容时不要把他拽回来。
   void _followTail() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
+      if (!mounted || !_scroll.hasClients) return;
       final ScrollPosition p = _scroll.position;
       // 刚打开的那几帧不看他翻到哪儿了，直接落到最新一条。
       if (_opened && p.maxScrollExtent - p.pixels > 180) return;
-      _scroll.jumpTo(p.maxScrollExtent);
+      _settle(0);
     });
   }
 
@@ -505,28 +537,45 @@ class _ChatPageState extends State<ChatPage> {
     return '';
   }
 
-  List<Widget> _thread() {
-    final List<Widget> out = <Widget>[];
-    final Map<String, String> outputs = _outputs();
-    final String runningId = _runningId(outputs);
+  /// 这一屏有哪几行。只算行，不拆字也不排版：几万字的记录按需才画。
+  List<_Row> _rows() {
+    final List<_Row> rows = <_Row>[];
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
-        out.add(_userTurn(m));
+        rows.add(_Row(_RowKind.user, message: m));
       } else if (m.role == LlmRole.assistant) {
-        if (m.text.trim().isNotEmpty) out.add(_answer(m.text));
-        if (m.calls.isNotEmpty) out.add(_toolTurn(m.calls, outputs, runningId));
+        if (m.text.trim().isNotEmpty) {
+          rows.add(_Row(_RowKind.answer, message: m, text: m.text));
+        }
+        if (m.calls.isNotEmpty) rows.add(_Row(_RowKind.tool, message: m));
       }
     }
     final String partial = _loop?.partial ?? '';
-    if (partial.isNotEmpty) out.add(_answer(partial, streaming: true));
-    if (_running && partial.isEmpty) {
-      out.add(_ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking));
+    if (partial.isNotEmpty) {
+      rows.add(_Row(_RowKind.streaming, text: partial));
+    } else if (_running) {
+      rows.add(const _Row(_RowKind.thinking));
     }
-    if (out.isEmpty) out.add(_empty());
-    // 每一段各自成层：尾巴上那个字在长，其它段的字不用跟着重画。
-    return <Widget>[
-      for (final Widget w in out) RepaintBoundary(child: w),
-    ];
+    if (rows.isEmpty) rows.add(const _Row(_RowKind.empty));
+    return rows;
+  }
+
+  /// 一行长什么样。列表只叫它要看得见的那几行，翻到哪儿画到哪儿。
+  Widget _row(_Row r, Map<String, String> outputs, String runningId) {
+    switch (r.kind) {
+      case _RowKind.user:
+        return _userTurn(r.message!);
+      case _RowKind.answer:
+        return _answer(r.text);
+      case _RowKind.tool:
+        return _toolTurn(r.message!.calls, outputs, runningId);
+      case _RowKind.streaming:
+        return _answer(r.text, streaming: true);
+      case _RowKind.thinking:
+        return _ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking);
+      case _RowKind.empty:
+        return _empty();
+    }
   }
 
   Widget _userTurn(LlmMessage message) {
@@ -749,6 +798,9 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final AgentLoop? loop = _loop;
+    final List<_Row> rows = _rows();
+    final Map<String, String> outputs = _outputs();
+    final String runningId = _runningId(outputs);
     return Column(
       children: <Widget>[
         Container(
@@ -791,13 +843,15 @@ class _ChatPageState extends State<ChatPage> {
               // 对话里的字都能选中，长按就能复制。
               Positioned.fill(
                 child: SelectionArea(
-                  child: SingleChildScrollView(
+                  child: ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(18, 20, 18, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _thread(),
-                    ),
+                    // 按需建行：打开长对话只排看得见的那几十行，键盘弹起、
+                    // 输入框亮一下也不会把整份记录重排一遍。
+                    cacheExtent: 800,
+                    itemCount: rows.length,
+                    itemBuilder: (BuildContext ctx, int i) =>
+                        _row(rows[i], outputs, runningId),
                   ),
                 ),
               ),
@@ -1034,6 +1088,17 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
+}
+
+/// 一行的身份与内容。不拿 Widget 当缓存，状态一变也不必把整份记录重造。
+enum _RowKind { user, answer, tool, streaming, thinking, empty }
+
+class _Row {
+  const _Row(this.kind, {this.message, this.text = ''});
+
+  final _RowKind kind;
+  final LlmMessage? message;
+  final String text;
 }
 
 /// 模型问人的那张卡。有选项就点，没有就自己写，答完它接着干。
