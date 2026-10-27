@@ -115,7 +115,8 @@ HtmlReport checkHtml(String html, {bool email = true}) {
   }
 
   final List<String> wide = <String>[];
-  final RegExp fixed = RegExp('width\\s*[:=]\\s*$_q(\\d{3,4})', caseSensitive: false);
+  final RegExp fixed =
+      RegExp('width\\s*[:=]\\s*$_q(\\d{3,4})', caseSensitive: false);
   for (final RegExpMatch m in fixed.allMatches(html)) {
     final int value = int.tryParse(m.group(1) ?? '') ?? 0;
     if (value > 640) wide.add('${m.group(1)}px');
@@ -146,7 +147,7 @@ HtmlReport checkHtml(String html, {bool email = true}) {
 /// 把体检结果写成人看的一段话。
 String htmlReportText(HtmlReport report, {String path = ''}) {
   final StringBuffer b = StringBuffer();
-  if (path.isNotEmpty) b.writeln('$path');
+  if (path.isNotEmpty) b.writeln(path);
   b.writeln(
     '${report.bytes} 字符 · ${report.elements} 个标签 · '
     '其中 ${report.inlineStyled} 个带行内样式（${(report.inlineRate * 100).round()}%）',

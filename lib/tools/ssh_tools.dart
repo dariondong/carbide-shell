@@ -197,18 +197,18 @@ class SshExecTool extends Tool {
         '密码不写进命令里，也不要贴在对话里。',
       );
     }
+    SSHSession? session;
     try {
       final SSHClient client = await pool.connect(entry);
-      final SSHProcess proc =
-          await client.execute('sudo -S -p "" -- sh -c ${_shellQuote(command)}');
+      session = await client.execute('sudo -S -p "" -- sh -c ${_shellQuote(command)}');
       // 先把两个输出口接上再喂密码，不然两边一起堵。
-      final Future<String> out = _collect(proc.stdout);
-      final Future<String> err = _collect(proc.stderr);
-      proc.stdin.add(utf8.encode('$password\n'));
-      await proc.stdin.close();
+      final Future<String> out = _collect(session.stdout);
+      final Future<String> err = _collect(session.stderr);
+      session.stdin.add(utf8.encode('$password\n'));
+      await session.stdin.close();
       final String stdout = await out.timeout(wait);
       final String stderr = await err.timeout(wait);
-      final int code = await proc.exitCode.timeout(wait);
+      final int? code = await session.waitForExit(timeout: wait);
       return ToolOutcome.success(
         stdout: stdout,
         stderr: stderr.replaceAll(RegExp(r'\[sudo\] password for .*?:?\s*'), ''),
@@ -216,9 +216,11 @@ class SshExecTool extends Tool {
         meta: <String, Object?>{'host': entry.name, 'sudo': true},
       );
     } on TimeoutException {
+      session?.close();
       await pool.drop(entry.id);
       return ToolOutcome.failure('sudo 命令 ${wait.inSeconds} 秒没回音，连接已断开。');
     } catch (e) {
+      session?.close();
       await pool.drop(entry.id);
       return ToolOutcome.failure('sudo 没跑起来：$e');
     }

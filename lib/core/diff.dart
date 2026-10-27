@@ -178,9 +178,8 @@ String _render(
       if (lines[i].op != _Op.ins) aCount += 1;
       if (lines[i].op != _Op.del) bCount += 1;
     }
-    out
-      ..write('@@ -${aCount == 0 ? aLine - 1 : aLine},$aCount '
-          '+${bCount == 0 ? bLine - 1 : bLine},$bCount @@\n');
+    out.write('@@ -${aCount == 0 ? aLine - 1 : aLine},$aCount '
+        '+${bCount == 0 ? bLine - 1 : bLine},$bCount @@\n');
     for (int i = from; i <= to; i += 1) {
       final _Line line = lines[i];
       final String mark = switch (line.op) {
