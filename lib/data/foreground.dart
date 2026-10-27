@@ -99,6 +99,53 @@ class ForegroundTask {
   /// 系统的通知设置页。权限拒过之后只能在这里打开。
   static Future<void> openNotificationSettings() => _call('notifSettings', '');
 
+  /// 人在通知里写完那一句，原生把字送过来。
+  static void Function(String text)? _handler;
+
+  /// 字先到了、界面还没接上：先摆在这里，接上再递。
+  static String? _held;
+
+  static bool _wired = false;
+
+  /// 接上「从通知里回一句」这条线。启动时装一次就够。
+  ///
+  /// 先把处理器装上，再问一句有没有早到的那句，两边都不丢。
+  static Future<void> install() async {
+    if (!supported || _wired) return;
+    _wired = true;
+    _channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method == 'reply') _deliver('${call.arguments ?? ''}');
+      return null;
+    });
+    try {
+      final String? early = await _channel.invokeMethod<String>('takePendingReply');
+      if (early != null) _deliver(early);
+    } on MissingPluginException {
+      // 没有原生那一段（桌面、测试环境）：当没这个能力。
+    } on PlatformException {
+      // 同上。
+    }
+  }
+
+  /// 换一个收话的人；传 null 就是不要了。手上还攒着的那句会当场递过去。
+  static void listen(void Function(String text)? handler) {
+    _handler = handler;
+    final String? held = _held;
+    _held = null;
+    if (handler != null && held != null) handler(held);
+  }
+
+  static void _deliver(String raw) {
+    final String text = raw.trim();
+    if (text.isEmpty) return;
+    final void Function(String text)? handler = _handler;
+    if (handler == null) {
+      _held = text;
+      return;
+    }
+    handler(text);
+  }
+
   /// 问原生要一个 map，原生那段不在就当没有。
   static Future<Map<Object?, Object?>?> _ask(String method) async {
     try {

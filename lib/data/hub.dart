@@ -156,6 +156,29 @@ class SessionHub extends ChangeNotifier {
     return live;
   }
 
+  /// 通知里写的那句：这个对话还在跑就先排在后面，跑完接着发。
+  final Map<String, List<String>> _queued = <String, List<String>>{};
+
+  void enqueue(String conversationId, String text) {
+    final String body = text.trim();
+    if (body.isEmpty) return;
+    _queued.putIfAbsent(conversationId, () => <String>[]).add(body);
+    changed();
+  }
+
+  /// 排着还没发出去的几句，界面上按它提示一下。
+  List<String> queued(String conversationId) =>
+      List<String>.unmodifiable(_queued[conversationId] ?? const <String>[]);
+
+  /// 这一轮跑完，排着的那句接着发。
+  void _drain(LiveSession live) {
+    final List<String>? queue = _queued[live.conversation.id];
+    if (queue == null || queue.isEmpty) return;
+    final String next = queue.removeAt(0);
+    if (queue.isEmpty) _queued.remove(live.conversation.id);
+    unawaited(send(live, next));
+  }
+
   /// 让它跑一轮。同一个对话不会叠两轮。
   Future<String> send(
     LiveSession live,
@@ -195,6 +218,7 @@ class SessionHub extends ChangeNotifier {
       board.done('c:${live.conversation.id}',
           summary: '${live.conversation.title} · ${summaryOf(live)}');
       changed();
+      _drain(live);
     }
   }
 

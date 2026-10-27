@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'core/conversation.dart';
+import 'data/foreground.dart';
 import 'data/hosts.dart';
 import 'data/hub.dart';
+import 'data/notice_reply.dart';
 import 'data/tasks.dart';
 import 'data/temp_files.dart';
 import 'data/update.dart';
@@ -26,11 +28,15 @@ class CarbideApp extends StatelessWidget {
     required this.services,
     required this.hub,
     required this.scheduler,
+    required this.replies,
   });
 
   final AppServices services;
   final SessionHub hub;
   final TaskScheduler scheduler;
+
+  /// 通知里回的那句话往哪儿送。
+  final NoticeReply replies;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +44,12 @@ class CarbideApp extends StatelessWidget {
       title: 'Carbide Shell',
       debugShowCheckedModeBanner: false,
       theme: C.theme(),
-      home: HomeShell(services: services, hub: hub, scheduler: scheduler),
+      home: HomeShell(
+        services: services,
+        hub: hub,
+        scheduler: scheduler,
+        replies: replies,
+      ),
     );
   }
 }
@@ -49,11 +60,13 @@ class HomeShell extends StatefulWidget {
     required this.services,
     required this.hub,
     required this.scheduler,
+    required this.replies,
   });
 
   final AppServices services;
   final SessionHub hub;
   final TaskScheduler scheduler;
+  final NoticeReply replies;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -70,6 +83,8 @@ class _HomeShellState extends State<HomeShell> {
     widget.scheduler.start();
     // 有几个对话在跑、在等确认，列表要跟着变；正文的增量不重画整个外壳。
     widget.hub.addListener(_onHub);
+    // 通知上那颗回复：字到了就往对话里送。
+    ForegroundTask.listen(_onReply);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
   }
 
@@ -77,7 +92,18 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     widget.scheduler.stop();
     widget.hub.removeListener(_onHub);
+    ForegroundTask.listen(null);
     super.dispose();
+  }
+
+  /// 通知里写的那句：交给它去发，然后把那个对话摆到眼前。
+  Future<void> _onReply(String text) async {
+    final String id = await widget.replies.deliver(text);
+    if (!mounted || id.isEmpty) return;
+    if (_open?.id == id) return;
+    final Conversation? c = widget.services.conversations.byId(id);
+    if (c == null) return;
+    setState(() => _open = c);
   }
 
   /// Once a day, ask GitHub for a newer release. Offline is fine: a failed

@@ -5,11 +5,13 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.RemoteInput
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 
@@ -108,6 +110,11 @@ class TaskService : Service() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_STYLE = "style"
         const val EXTRA_LINES = "lines"
+
+        /** 通知上那一格字，以及点了发出去之后走过来的那个 action。 */
+        const val REPLY_KEY = "reply_text"
+        const val ACTION_REPLY = "top.theez.carbide_shell.ACTION_REPLY"
+        private const val REPLY_REQUEST = 0xCB04
         private const val CHANNEL_ID = "carbide_task"
         private const val DONE_CHANNEL_ID = "carbide_done"
         private const val NOTIFICATION_ID = 0xCB01
@@ -306,6 +313,7 @@ class TaskService : Service() {
                 .setShowWhen(false)
                 .setContentIntent(tap(context))
             styleOf(context, text)?.let { builder.setStyle(it) }
+            tryAddReply(context, builder)
             return builder.build()
         }
 
@@ -320,6 +328,7 @@ class TaskService : Service() {
             val rich = styleOf(context, body)
                 ?: Notification.BigTextStyle().bigText(tails(body, lines).joinToString("\n"))
             builder.setStyle(rich)
+            tryAddReply(context, builder)
             return builder.build()
         }
 
@@ -368,6 +377,41 @@ class TaskService : Service() {
                 chatStyle.addMessage(line, now - (ordered.size - index) * 1000L, sender)
             }
             return chatStyle
+        }
+
+        /** 通知上那颗「回复」。加不上就只发通知，不影响任务。 */
+        private fun tryAddReply(context: Context, builder: Notification.Builder) {
+            try {
+                builder.addAction(replyAction(context))
+            } catch (error: Throwable) {
+                // 系统太老或者厂商改过：这颗键就不出了。
+            }
+        }
+
+        /** 写完点发送，字回到应用里当下一句。 */
+        private fun replyAction(context: Context): Notification.Action {
+            val remote = RemoteInput.Builder(REPLY_KEY)
+                .setLabel(context.getString(R.string.task_reply_hint))
+                .build()
+            return Notification.Action.Builder(
+                Icon.createWithResource(context, R.drawable.ic_carbide_stat),
+                context.getString(R.string.task_reply_action),
+                replyIntent(context),
+            ).addRemoteInput(remote).build()
+        }
+
+        /**
+         * 回复要一个可变（mutable）的 PendingIntent：那一格字是系统填进来的，
+         * 写成不可变的在安卓 12 起会让回复直接丢掉。
+         */
+        private fun replyIntent(context: Context): PendingIntent {
+            val open = Intent(context, MainActivity::class.java).apply {
+                action = ACTION_REPLY
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            return PendingIntent.getActivity(context, REPLY_REQUEST, open, flags)
         }
 
         private fun ensureChannel(

@@ -1,10 +1,12 @@
 package top.theez.carbide_shell
 
 import android.Manifest
+import android.app.RemoteInput
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -16,12 +18,63 @@ class MainActivity : FlutterActivity() {
     /// 设置页问权限时先挂在这里，回调里再回话。
     private var pendingNotification: MethodChannel.Result? = null
 
+    /// 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。
+    private var replyChannel: MethodChannel? = null
+
+    /// 人在通知里写的那句。Dart 那边还没接上就先挂在这里。
+    private var pendingReply: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        readReply(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readReply(intent)
+    }
+
+    /** 通知上写的那句就在 intent 里，取出来交给 Dart。 */
+    private fun readReply(intent: Intent?) {
+        val text = try {
+            val results = RemoteInput.getResultsFromIntent(intent) ?: return
+            results.getCharSequence(TaskService.REPLY_KEY)?.toString()?.trim().orEmpty()
+        } catch (error: Throwable) {
+            ""
+        }
+        if (text.isEmpty()) return
+        pendingReply = text
+        flushReply()
+    }
+
+    /** 递一句给 Dart。那边还没接好就留着等它来取。 */
+    private fun flushReply() {
+        val channel = replyChannel ?: return
+        val text = pendingReply ?: return
+        pendingReply = null
+        channel.invokeMethod("reply", text, object : MethodChannel.Result {
+            override fun success(result: Any?) {
+                // 已经到 Dart 手上了。
+            }
+
+            override fun error(code: String, message: String?, details: Any?) {
+                if (pendingReply == null) pendingReply = text
+            }
+
+            override fun notImplemented() {
+                if (pendingReply == null) pendingReply = text
+            }
+        })
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // 三条通知渠道建好，第一条通知就不会因为渠道不存在被系统静默丢掉。
         TaskService.ensureChannels(this)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
+        val foreground = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        replyChannel = foreground
+        foreground.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "begin" -> {
                         askNotifications()
@@ -88,9 +141,17 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "takePendingReply" -> {
+                        val text = pendingReply
+                        pendingReply = null
+                        result.success(text)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
+        // 通知里的回复可能比 Dart 那边接上得早，再接一次。
+        flushReply()
         // 临时文件下载到「下载」目录。Android 10 起走 MediaStore，不要权限。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES)
             .setMethodCallHandler { call, result ->

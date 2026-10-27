@@ -858,6 +858,11 @@ class _SettingsPageState extends State<SettingsPage> {
             '长回合与定时任务依赖这个前台服务。系统清掉应用后两者都会停止。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
+          const SizedBox(height: 6),
+          const Text(
+            '通知上那一下「回复」写的就是下一句，发出去跟在这里说一样。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
         ];
     }
     return const <Widget>[];

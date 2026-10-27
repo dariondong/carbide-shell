@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,10 +11,12 @@ import 'core/models.dart';
 import 'core/memory.dart';
 import 'core/policy.dart';
 import 'data/activity.dart';
+import 'data/foreground.dart';
 import 'data/hosts.dart';
 import 'data/hub.dart';
 import 'data/llm_settings.dart';
 import 'data/mail.dart';
+import 'data/notice_reply.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
@@ -81,15 +84,20 @@ Future<void> main() async {
     files: TempFiles(workspace),
   );
 
+  final SessionHub hub = SessionHub(services: services, board: board);
+  // 通知里有回复的时候，字就从这条路上来。
+  unawaited(ForegroundTask.install());
+
   runApp(CarbideApp(
     services: services,
-    hub: SessionHub(services: services, board: board),
+    hub: hub,
     scheduler: TaskScheduler(
       services: services,
       tasks: tasks,
       watches: watches,
       board: board,
     ),
+    replies: NoticeReply(services: services, hub: hub, board: board),
   ));
 }
 
