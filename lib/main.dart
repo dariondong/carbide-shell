@@ -63,7 +63,7 @@ Future<void> main() async {
   await mail.load();
 
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
-  final ActivityBoard board = ActivityBoard();
+  final ActivityBoard board = ActivityBoard(styleOf: () => settings.value.notifStyle);
 
   final AppServices services = AppServices(
     hosts: hosts,

@@ -36,16 +36,30 @@ class ForegroundTask {
   static bool get supported => Platform.isAndroid;
 
   /// 开始跑：通知上写现在在干什么。
-  static Future<void> begin(String text) => _call('begin', text);
+  ///
+  /// [style] 是通知长什么样（`simple` / `big` / `list` / `chat`），
+  /// [lines] 是最近说过的几句，大文本和会话样式拿它铺开。
+  static Future<void> begin(
+    String text, {
+    String style = 'simple',
+    List<String> lines = const <String>[],
+  }) =>
+      _call('begin', text, style: style, lines: lines);
 
   /// 跑完了，把通知收掉。
   static Future<void> end() => _call('end', '');
 
   /// 换通知上那句话。服务没起来就等于再 begin 一次。
-  static Future<void> update(String text) => _call('update', text);
+  static Future<void> update(String text, {List<String> lines = const <String>[]}) =>
+      _call('update', text, lines: lines);
 
   /// 跑完了，把通知收掉。人不在这个应用里时留一条「跑完了」，点一下回来。
-  static Future<void> finish(String text) => _call('finish', text);
+  static Future<void> finish(
+    String text, {
+    String style = 'simple',
+    List<String> lines = const <String>[],
+  }) =>
+      _call('finish', text, style: style, lines: lines);
 
   /// 一条提示：不常驻，点一下回到应用。资源监听过线、模型要提醒人时用。
   ///
@@ -106,13 +120,25 @@ class ForegroundTask {
     }
   }
 
-  static Future<void> _call(String method, String text,
-      {String title = '', int slot = 0}) async {
+  static Future<void> _call(
+    String method,
+    String text, {
+    String title = '',
+    int slot = 0,
+    String style = '',
+    List<String> lines = const <String>[],
+  }) async {
     if (!supported) return;
     try {
       await _channel.invokeMethod<void>(
         method,
-        <String, Object?>{'text': text, 'title': title, 'slot': slot},
+        <String, Object?>{
+          'text': text,
+          'title': title,
+          'slot': slot,
+          'style': style,
+          'lines': lines,
+        },
       );
     } on MissingPluginException {
       // 没有原生那一段（桌面、测试环境）：当没这个能力。

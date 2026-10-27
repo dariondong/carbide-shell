@@ -29,6 +29,9 @@ class TaskService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty().ifBlank { DEFAULT_TEXT }
+        // 样式和最近几句跟着 intent 进来，服务被重起一次也不会回到默认样子。
+        intent?.getStringExtra(EXTRA_STYLE)?.takeIf { it.isNotEmpty() }?.let { style = it }
+        intent?.getStringArrayListExtra(EXTRA_LINES)?.let { lines = it }
         if (!declare(text)) {
             // 系统不让起前台服务（缺权限、被后台限制）：这个任务照常在界面里跑，
             // 只是没有通知保护，别让服务挂在那儿。
@@ -103,6 +106,8 @@ class TaskService : Service() {
 
     companion object {
         const val EXTRA_TEXT = "text"
+        const val EXTRA_STYLE = "style"
+        const val EXTRA_LINES = "lines"
         private const val CHANNEL_ID = "carbide_task"
         private const val DONE_CHANNEL_ID = "carbide_done"
         private const val NOTIFICATION_ID = 0xCB01
@@ -111,6 +116,20 @@ class TaskService : Service() {
         private const val ALERT_CHANNEL_ID = "carbide_alert"
         private const val ALERT_ID = 0xCB03
         private const val WAKE_LIMIT_MS = 30L * 60 * 1000
+
+        /** 通知长什么样：一行、折开、一行一条、像聊天。 */
+        const val STYLE_SIMPLE = "simple"
+        const val STYLE_BIG = "big"
+        const val STYLE_LIST = "list"
+        const val STYLE_CHAT = "chat"
+
+        /** 现在这条通知用的样式，跑完那条也跟着用。 */
+        @Volatile
+        private var style: String = STYLE_SIMPLE
+
+        /** 最近说过的几句，大文本和会话样式拿它铺开。 */
+        @Volatile
+        private var lines: List<String> = emptyList()
 
         @Volatile
         private var instance: TaskService? = null
@@ -136,8 +155,18 @@ class TaskService : Service() {
         }
 
         /** 起服务（或更新已在跑的那条通知）。 */
-        fun start(context: Context, text: String) {
-            val intent = Intent(context, TaskService::class.java).putExtra(EXTRA_TEXT, text)
+        fun start(
+            context: Context,
+            text: String,
+            style: String = STYLE_SIMPLE,
+            lines: List<String> = emptyList(),
+        ) {
+            TaskService.style = style
+            TaskService.lines = lines
+            val intent = Intent(context, TaskService::class.java)
+                .putExtra(EXTRA_TEXT, text)
+                .putExtra(EXTRA_STYLE, style)
+                .putStringArrayListExtra(EXTRA_LINES, ArrayList(lines))
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -151,10 +180,11 @@ class TaskService : Service() {
         }
 
         /** 更新通知上那句进度。服务没起来就换成 start，起不来就算了。 */
-        fun update(context: Context, text: String) {
+        fun update(context: Context, text: String, lines: List<String> = emptyList()) {
+            TaskService.lines = lines
             val live = instance
             if (live == null) {
-                start(context, text)
+                start(context, text, style, lines)
             } else {
                 live.relabel(text)
             }
@@ -184,7 +214,14 @@ class TaskService : Service() {
         }
 
         /** 跑完了：收掉常驻通知，留一句结果，点一下回到对话。 */
-        fun finish(context: Context, text: String) {
+        fun finish(
+            context: Context,
+            text: String,
+            style: String = STYLE_SIMPLE,
+            lines: List<String> = emptyList(),
+        ) {
+            TaskService.style = style
+            TaskService.lines = lines
             stop(context)
             try {
                 ensureChannel(
@@ -260,7 +297,7 @@ class TaskService : Service() {
                 R.string.task_channel_name, R.string.task_channel_desc,
                 NotificationManager.IMPORTANCE_LOW,
             )
-            return Notification.Builder(context, CHANNEL_ID)
+            val builder = Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_carbide_stat)
                 .setContentTitle(context.getString(R.string.task_notification_title))
                 .setContentText(text)
@@ -268,19 +305,69 @@ class TaskService : Service() {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
                 .setContentIntent(tap(context))
-                .build()
+            styleOf(context, text)?.let { builder.setStyle(it) }
+            return builder.build()
         }
 
         private fun done(context: Context, text: String): Notification {
             val body = text.ifBlank { context.getString(R.string.task_done_title) }
-            return Notification.Builder(context, DONE_CHANNEL_ID)
+            val builder = Notification.Builder(context, DONE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_carbide_stat)
                 .setContentTitle(context.getString(R.string.task_done_title))
                 .setContentText(body)
-                .setStyle(Notification.BigTextStyle().bigText(body))
                 .setAutoCancel(true)
                 .setContentIntent(tap(context))
-                .build()
+            val rich = styleOf(context, body)
+                ?: Notification.BigTextStyle().bigText(tails(body, lines).joinToString("\n"))
+            builder.setStyle(rich)
+            return builder.build()
+        }
+
+        /** 最新一句在前，重复的不要，最多四行。 */
+        private fun tails(text: String, more: List<String>): List<String> {
+            val out = ArrayList<String>()
+            if (text.isNotBlank()) out.add(text.trim())
+            for (line in more) {
+                val clean = line.trim()
+                if (clean.isEmpty() || out.contains(clean)) continue
+                out.add(clean)
+                if (out.size >= 4) break
+            }
+            return out
+        }
+
+        /** 按设置里的样式铺开。认不出来就不加样式，回到一行。 */
+        private fun styleOf(context: Context, text: String): Notification.Style? {
+            val body = tails(text, lines)
+            return try {
+                when (style) {
+                    STYLE_BIG -> Notification.BigTextStyle().bigText(body.joinToString("\n"))
+                    STYLE_LIST -> {
+                        val inbox = Notification.InboxStyle()
+                        for (line in body) inbox.addLine(line)
+                        inbox
+                    }
+                    STYLE_CHAT -> chat(context, body)
+                    else -> null
+                }
+            } catch (error: Throwable) {
+                null
+            }
+        }
+
+        /** 会话样式：像一条一条聊过来的。系统太老就退回一行。 */
+        private fun chat(context: Context, body: List<String>): Notification.Style? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null
+            val sender = context.getString(R.string.task_chat_sender)
+            @Suppress("DEPRECATION")
+            val chatStyle = Notification.MessagingStyle(context.getString(R.string.task_chat_me))
+            val now = System.currentTimeMillis()
+            val ordered = body.reversed()
+            ordered.forEachIndexed { index, line ->
+                @Suppress("DEPRECATION")
+                chatStyle.addMessage(line, now - (ordered.size - index) * 1000L, sender)
+            }
+            return chatStyle
         }
 
         private fun ensureChannel(

@@ -90,6 +90,9 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 现在能不能弹通知，进页时问一次原生。
   NotifyState _notify = const NotifyState();
 
+  /// 通知长什么样：一行、折开、一行一条、像聊天。
+  String _notifStyle = 'simple';
+
   late final TextEditingController _mailHost;
   late final TextEditingController _mailPort;
   late final TextEditingController _mailUser;
@@ -131,6 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _context = s.contextChars;
     _stream = s.stream;
     _autoUpdate = s.autoCheckUpdate;
+    _notifStyle = s.notifStyle;
     widget.secrets.read(modelSecretKey()).then((String key) {
       if (mounted && key.isNotEmpty) setState(() => _key.text = key);
     });
@@ -206,6 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ..systemPrompt = _sys.text.trim()
       ..answerFont = _font
       ..autoCheckUpdate = _autoUpdate
+      ..notifStyle = _notifStyle
       ..allowedDomains = _domains.text
           .split(RegExp(r'[\s,]+'))
           .map((String d) => d.trim())
@@ -233,8 +238,15 @@ class _SettingsPageState extends State<SettingsPage> {
     _setSaved('已保存');
   }
 
-  static int _intOf(String text, int fallback, int low, int high) {
-    final int? n = int.tryParse(text.trim());
+  /// 通知样式的名字。设置里选的、列表上写的都是这一份。
+  static String _styleName(String value) => switch (value) {
+        'big' => '大文本',
+        'list' => '列表',
+        'chat' => '会话',
+        _ => '简洁',
+      };
+
+  static int _intOf(String text, int fallback, int low, int high) {    final int? n = int.tryParse(text.trim());
     if (n == null) return fallback;
     return n < low ? low : (n > high ? high : n);
   }
@@ -523,7 +535,7 @@ class _SettingsPageState extends State<SettingsPage> {
       case 'update':
         return _autoUpdate ? '启动时查' : '不自动查';
       case 'power':
-        return '允许后台运行';
+        return '通知 ${_styleName(_notifStyle)}';
     }
     return '';
   }
@@ -820,9 +832,17 @@ class _SettingsPageState extends State<SettingsPage> {
       case 'power':
         return <Widget>[
           CardBox(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
             child: Column(
               children: <Widget>[
+                _choices<String>(
+                  '通知样式',
+                  AppSettings.notifStyles,
+                  _notifStyle,
+                  _styleName,
+                  (String v) => _apply(() => _notifStyle = v),
+                ),
+                const RuleLine(),
                 _action(
                   '系统通知',
                   _notify.ready ? '开着' : '${_notify.text}，点一下打开',

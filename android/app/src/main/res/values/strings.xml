@@ -9,4 +9,8 @@
     <string name="alert_channel_name">资源提醒</string>
     <string name="alert_channel_desc">监听的指标过了线就告诉你一句。</string>
     <string name="alert_title">Carbide Shell 提醒</string>
+    <string name="task_chat_sender">Carbide Shell</string>
+    <string name="task_chat_me">你</string>
+    <string name="task_reply_action">回复</string>
+    <string name="task_reply_hint">下一步</string>
 </resources>

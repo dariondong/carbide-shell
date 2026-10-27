@@ -17,6 +17,7 @@ class AppSettings {
     this.systemPrompt = '',
     this.answerFont = 13.5,
     this.autoCheckUpdate = true,
+    this.notifStyle = 'simple',
   });
 
   String baseUrl;
@@ -51,6 +52,11 @@ class AppSettings {
   /// Ask GitHub for a newer release on launch.
   bool autoCheckUpdate;
 
+  /// 前台通知长什么样：`simple` 一行、`big` 折开、`list` 一行一条、`chat` 像聊天。
+  String notifStyle;
+
+  static const List<String> notifStyles = <String>['simple', 'big', 'list', 'chat'];
+
   Map<String, Object?> toJson() => <String, Object?>{
         'baseUrl': baseUrl,
         'model': model,
@@ -65,6 +71,7 @@ class AppSettings {
         'systemPrompt': systemPrompt,
         'answerFont': answerFont,
         'autoCheckUpdate': autoCheckUpdate,
+        'notifStyle': notifStyle,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -82,6 +89,9 @@ class AppSettings {
       systemPrompt: '${json['systemPrompt'] ?? ''}',
       answerFont: (json['answerFont'] as num?)?.toDouble() ?? 13.5,
       autoCheckUpdate: json['autoCheckUpdate'] != false,
+      notifStyle: notifStyles.contains('${json['notifStyle'] ?? ''}')
+          ? '${json['notifStyle']}'
+          : 'simple',
       allowedDomains: domains is List
           ? domains.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],

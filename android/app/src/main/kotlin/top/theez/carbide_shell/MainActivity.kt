@@ -25,12 +25,21 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "begin" -> {
                         askNotifications()
-                        TaskService.start(this, call.argument<String>("text").orEmpty())
+                        TaskService.start(
+                            this,
+                            call.argument<String>("text").orEmpty(),
+                            call.argument<String>("style").orEmpty().ifBlank { "simple" },
+                            call.argument<List<String>>("lines") ?: emptyList(),
+                        )
                         result.success(null)
                     }
 
                     "update" -> {
-                        TaskService.update(this, call.argument<String>("text").orEmpty())
+                        TaskService.update(
+                            this,
+                            call.argument<String>("text").orEmpty(),
+                            call.argument<List<String>>("lines") ?: emptyList(),
+                        )
                         result.success(null)
                     }
 
@@ -40,7 +49,12 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "finish" -> {
-                        TaskService.finish(this, call.argument<String>("text").orEmpty())
+                        TaskService.finish(
+                            this,
+                            call.argument<String>("text").orEmpty(),
+                            call.argument<String>("style").orEmpty().ifBlank { "simple" },
+                            call.argument<List<String>>("lines") ?: emptyList(),
+                        )
                         result.success(null)
                     }
 
