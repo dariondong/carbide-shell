@@ -60,10 +60,14 @@ class LlmMessage {
         calls = const <LlmToolCall>[],
         toolCallId = '',
         toolName = '',
-        failed = false;
+        failed = false,
+        usage = const LlmUsage();
 
-  const LlmMessage.assistant(this.text, {this.calls = const <LlmToolCall>[]})
-      : role = LlmRole.assistant,
+  const LlmMessage.assistant(
+    this.text, {
+    this.calls = const <LlmToolCall>[],
+    this.usage = const LlmUsage(),
+  })  : role = LlmRole.assistant,
         images = const <String>[],
         toolCallId = '',
         toolName = '',
@@ -76,7 +80,8 @@ class LlmMessage {
     this.failed = false,
   })  : role = LlmRole.tool,
         calls = const <LlmToolCall>[],
-        images = const <String>[];
+        images = const <String>[],
+        usage = const LlmUsage();
 
   final LlmRole role;
   final String text;
@@ -87,6 +92,10 @@ class LlmMessage {
 
   /// Data URLs (`data:image/png;base64,…`) the model should look at.
   final List<String> images;
+
+  /// 这条回答花了多少 token：进去的、回来的、其中命中缓存的。
+  /// 提问和工具结果是空的；系统提示词之类不会再算到这里。
+  final LlmUsage usage;
 
   bool get isTool => role == LlmRole.tool;
 }

@@ -180,7 +180,7 @@ class AgentLoop {
 
       if (!reply.wantsTools) {
         final String answer = reply.text.trim().isEmpty ? '（没有内容）' : reply.text.trim();
-        history.add(LlmMessage.assistant(answer));
+        history.add(LlmMessage.assistant(answer, usage: reply.usage));
         partial = '';
         phase = AgentPhase.idle;
         journal.add(<String, Object?>{'event': 'final', 'text': answer});
@@ -188,7 +188,8 @@ class AgentLoop {
         return answer;
       }
 
-      history.add(LlmMessage.assistant(reply.text, calls: reply.calls));
+      history.add(
+          LlmMessage.assistant(reply.text, calls: reply.calls, usage: reply.usage));
       partial = '';
       _notify();
 

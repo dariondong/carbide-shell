@@ -108,7 +108,30 @@ Map<String, Object?> messageToJson(LlmMessage m) => <String, Object?>{
       if (m.toolCallId.isNotEmpty) 'toolCallId': m.toolCallId,
       if (m.toolName.isNotEmpty) 'toolName': m.toolName,
       if (m.failed) 'failed': true,
+      if (m.usage.total > 0) 'usage': usageToJson(m.usage),
     };
+
+Map<String, Object?> usageToJson(LlmUsage u) => <String, Object?>{
+      'prompt': u.prompt,
+      'completion': u.completion,
+      if (u.cached > 0) 'cached': u.cached,
+    };
+
+LlmUsage usageFromJson(Object? raw) {
+  if (raw is! Map) return const LlmUsage();
+  int read(String key) {
+    final Object? v = raw[key];
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
+  return LlmUsage(
+    prompt: read('prompt'),
+    completion: read('completion'),
+    cached: read('cached'),
+  );
+}
 
 LlmMessage? messageFromJson(Map<String, Object?> json) {
   final String role = '${json['role'] ?? ''}';
@@ -134,7 +157,8 @@ LlmMessage? messageFromJson(Map<String, Object?> json) {
           : const <String>[];
       return LlmMessage.user(text, images: images);
     case 'assistant':
-      return LlmMessage.assistant(text, calls: calls);
+      return LlmMessage.assistant(text,
+          calls: calls, usage: usageFromJson(json['usage']));
     case 'tool':
       return LlmMessage.toolResult(
         text: text,

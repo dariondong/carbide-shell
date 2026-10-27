@@ -567,9 +567,26 @@ class _ChatPageState extends State<ChatPage> {
       case _RowKind.user:
         return _userTurn(r.message!);
       case _RowKind.answer:
-        return _answer(r.text);
+        // 这条回答花了多少 token，就写在它下面。
+        final LlmUsage used = r.message?.usage ?? const LlmUsage();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _answer(r.text, bottom: used.total > 0 ? 5 : 18),
+            if (used.total > 0) _usageLine(used),
+          ],
+        );
       case _RowKind.tool:
-        return _toolTurn(r.message!.calls, outputs, runningId);
+        final LlmUsage spent = r.message?.usage ?? const LlmUsage();
+        // 既有回答又有工具时，token 挂在回答那边，这里不重复一遍。
+        final bool show = spent.total > 0 && r.message!.text.trim().isEmpty;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _toolTurn(r.message!.calls, outputs, runningId),
+            if (show) _usageLine(spent),
+          ],
+        );
       case _RowKind.streaming:
         return _answer(r.text, streaming: true);
       case _RowKind.thinking:
@@ -677,9 +694,22 @@ class _ChatPageState extends State<ChatPage> {
     ));
   }
 
-  Widget _answer(String text, {bool streaming = false}) {
+  /// 一条回答下面那行小字：进多少、出多少、命中多少。
+  Widget _usageLine(LlmUsage usage) {
+    final String hit =
+        usage.cached > 0 ? ' · 命中 ${(usage.cacheHitRate * 100).round()}%' : '';
     return Padding(
-      padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : 18),
+      padding: const EdgeInsets.only(left: 34, bottom: 16),
+      child: Text(
+        '${_fmtTokens(usage.prompt)} 进 · ${_fmtTokens(usage.completion)} 出$hit',
+        style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
+      ),
+    );
+  }
+
+  Widget _answer(String text, {bool streaming = false, double bottom = 18}) {
+    return Padding(
+      padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : bottom),
       child: MdText(
         text: text,
         streaming: streaming,
