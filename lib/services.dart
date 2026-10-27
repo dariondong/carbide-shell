@@ -16,6 +16,7 @@ import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
 import 'tools/clock_tool.dart';
+import 'tools/diff_tool.dart';
 import 'tools/host_tools.dart';
 import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
@@ -94,6 +95,7 @@ class AppServices {
       ..register(MailSendTool(mail, files: files))
       ..register(ReportRenderTool(files))
       ..register(ProbeTool())
+      ..register(RemoteDiffTool(pool: pool, hosts: hosts, files: files))
       ..register(TaskAddTool(tasks: tasks, hosts: hosts))
       ..register(WatchAddTool(watches: watches, hosts: hosts))
       // 已经排好的东西得看得见、停得掉、删得掉，不然模型只能一直往里加
