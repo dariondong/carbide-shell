@@ -15,7 +15,7 @@ void main() {
     expect(out.error, contains('host'));
   });
 
-  test('端口越界就说越界，不去连', () {
+  test('端口越界就说越界，不去连', () async {
     final ToolOutcome out = await tool.run(<String, Object?>{
       'host': '127.0.0.1',
       'port': 70000,
