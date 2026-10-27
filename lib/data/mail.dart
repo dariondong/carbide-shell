@@ -54,17 +54,20 @@ class Mailer {
 
   bool get ready => store.value.ready;
 
-  Future<SmtpResult> send(String subject, String body) async {
+  /// [html] 非空就用它当富文本版（比如一整页排好的报告），空着就按正文自己排。
+  /// 设置里把 HTML 版关掉时，两个都不带。
+  Future<SmtpResult> send(String subject, String body, {String html = ''}) async {
     final SmtpConfig config = store.value;
     if (!config.ready) {
       return SmtpResult(error: config.missing.isEmpty ? '邮件没配全' : config.missing);
     }
+    final String supplied = html.trim();
     return sendMail(
       config,
       await store.password(),
       subject: subject,
       body: body,
-      html: config.html ? mailHtml(body) : '',
+      html: config.html ? (supplied.isEmpty ? mailHtml(body) : supplied) : '',
     );
   }
 }

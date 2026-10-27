@@ -22,6 +22,7 @@ import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/mail_tool.dart';
 import 'tools/notify_tool.dart';
+import 'tools/report_tool.dart';
 import 'tools/ssh_tools.dart';
 import 'tools/status_tools.dart';
 import 'tools/temp_tools.dart';
@@ -89,7 +90,8 @@ class AppServices {
       ..register(RememberTool(store))
       ..register(AskTool())
       ..register(NotifyTool())
-      ..register(MailSendTool(mail))
+      ..register(MailSendTool(mail, files: files))
+      ..register(ReportRenderTool(files))
       ..register(TaskAddTool(tasks: tasks, hosts: hosts))
       ..register(WatchAddTool(watches: watches, hosts: hosts))
       // 已经排好的东西得看得见、停得掉、删得掉，不然模型只能一直往里加
