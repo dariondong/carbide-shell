@@ -157,7 +157,11 @@ String environmentText(
       '- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
   b.writeln('- 工作目录也是临时文件区：$workspace');
   b.writeln(
-      '  写、列、读、删文件用 temp_file；要把这里的文件传到主机上用 temp_upload。');
+      '  写、列、读、删文件用 temp_file；传给主机用 temp_upload，从主机拉回来用 temp_download。');
+  b.writeln(
+      '- 一条命令能问完的别拆成几次；输出先筛再取（-q、--no-legend、awk 只留要的列），别把整张表刷进来。');
+  b.writeln(
+      '- 同一件事这一场里确认过就不再复核，除非有理由怀疑它变了。');
   final DateTime now = DateTime.now();
   const List<String> week = <String>['一', '二', '三', '四', '五', '六', '日'];
   String two(int n) => n.toString().padLeft(2, '0');
