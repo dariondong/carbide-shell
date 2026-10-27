@@ -90,6 +90,7 @@ class AppServices {
       ..register(FileTool())
       ..register(TempFileTool(files))
       ..register(TempUploadTool(files: files, pool: pool, hosts: hosts))
+      ..register(TempDownloadTool(files: files, pool: pool, hosts: hosts))
       ..register(RememberTool(store))
       ..register(AskTool())
       ..register(NotifyTool())

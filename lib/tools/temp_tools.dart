@@ -87,6 +87,119 @@ HostEntry? hostForUpload(HostStore hosts, String name) {
   return null;
 }
 
+/// 把主机上的一个文件拉进临时文件区。
+///
+/// 一块一块落盘，整份不进内存；超过临时区上限就当场停手，不留下半个文件。
+Future<int> sftpDownload(
+  SshPool pool,
+  HostEntry entry,
+  String remote,
+  File target, {
+  int maxBytes = TempFiles.maxBytes,
+}) async {
+  final SSHClient client = await pool.connect(entry);
+  final SftpClient sftp = await client.sftp();
+  final SftpFile file = await sftp.open(remote);
+  await target.parent.create(recursive: true);
+  final RandomAccessFile raf = await target.open(mode: FileMode.write);
+  int total = 0;
+  try {
+    await for (final Uint8List chunk in file.read()) {
+      total += chunk.length;
+      if (total > maxBytes) {
+        throw StateError('超过 ${maxBytes ~/ (1024 * 1024)} MB，临时文件区不收。');
+      }
+      await raf.writeFrom(chunk);
+    }
+  } catch (e) {
+    await raf.close();
+    await file.close();
+    try {
+      if (target.existsSync()) target.deleteSync();
+    } catch (_) {
+      // 半份留着也没用，删不掉就算了。
+    }
+    rethrow;
+  }
+  await raf.close();
+  await file.close();
+  return total;
+}
+
+/// 把主机上的一个文件拉回临时文件区。
+///
+/// 上行的对面：分析服务器上的大日志不该靠 cat 进对话，落到本地之后按段读。
+class TempDownloadTool extends Tool {
+  TempDownloadTool({required this.files, required this.pool, required this.hosts});
+
+  final TempFiles files;
+  final SshPool pool;
+  final HostStore hosts;
+
+  @override
+  String get name => 'temp_download';
+
+  @override
+  String get description =>
+      '把主机上一个文件拉进临时文件区，8 MB 以内。'
+      '大日志不要 cat 进对话，拉下来再用 temp_file 的 read 分段看。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'remote': <String, Object?>{
+            'type': 'string',
+            'description': '主机上的绝对路径，比如 /var/log/auth.log',
+          },
+          'host': <String, Object?>{'type': 'string', 'description': '主机名，来自主机列表'},
+          'path': <String, Object?>{
+            'type': 'string',
+            'description': '临时区里存成什么，留空就放 downloads/ 下用原文件名',
+          },
+        },
+        'required': <String>['remote'],
+      };
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) => ToolRisk.read;
+
+  @override
+  String summarize(Map<String, Object?> args) {
+    final String remote = readString(args, 'remote');
+    final String host = readString(args, 'host', fallback: 'default');
+    return '从 $host 拉 $remote';
+  }
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    final String remote = readString(args, 'remote').trim();
+    if (remote.isEmpty) return const ToolOutcome.failure('要给一个 remote 路径。');
+    final HostEntry? entry = hostForUpload(hosts, readString(args, 'host'));
+    if (entry == null) {
+      return ToolOutcome.failure(
+        readString(args, 'host').isEmpty ? '没有指定主机，而且主机列表里不止一台。' : '主机列表里没有这台。',
+      );
+    }
+    final String name = remote.split('/').last.trim();
+    final String target = readString(args, 'path').trim().isNotEmpty
+        ? readString(args, 'path').trim()
+        : 'downloads/${name.isEmpty ? 'file' : name}';
+    final File? local = files.fileOf(target);
+    if (local == null) return const ToolOutcome.failure('路径要在临时文件区里面。');
+    try {
+      final int bytes = await sftpDownload(pool, entry, remote, local);
+      return ToolOutcome.success(
+        stdout: '拉下来了：$target（${tempSize(bytes)}，来自 ${entry.name}:$remote）\n'
+            '要分段看就用 temp_file 的 op=read。',
+        meta: <String, Object?>{'host': entry.name, 'bytes': bytes, 'path': target},
+      );
+    } catch (e) {
+      return ToolOutcome.failure('拉不下来 $remote：$e');
+    }
+  }
+}
+
 /// 临时文件区：列、读、写、删。图片和压缩包只列得出来，内容读不了。
 class TempFileTool extends Tool {
   TempFileTool(this.files);
