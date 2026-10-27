@@ -61,6 +61,7 @@ class AppSettings {
     this.answerFont = 13.5,
     this.autoCheckUpdate = true,
     this.notifStyle = 'simple',
+    this.enabledTools = const <String>[],
   }) {
     _profiles = List<ModelProfile>.of(profiles);
     _dedupeIds();
@@ -180,6 +181,18 @@ class AppSettings {
 
   static const List<String> notifStyles = <String>['simple', 'big', 'list', 'chat'];
 
+  /// 开着的那几项扩展工具，见 `data/tool_groups.dart`。空着就一个都不给。
+  List<String> enabledTools;
+
+  bool toolOn(String id) => enabledTools.contains(id);
+
+  /// 开或关一项。开关变了下一轮就生效，不用重开应用。
+  void setTool(String id, bool on) {
+    final List<String> next = List<String>.of(enabledTools)..remove(id);
+    if (on) next.add(id);
+    enabledTools = next;
+  }
+
   Map<String, Object?> toJson() => <String, Object?>{
         'profiles': _profiles.map((ModelProfile p) => p.toJson()).toList(),
         'activeProfile': _active,
@@ -198,10 +211,12 @@ class AppSettings {
         'answerFont': answerFont,
         'autoCheckUpdate': autoCheckUpdate,
         'notifStyle': notifStyle,
+        'enabledTools': enabledTools,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
     final Object? domains = json['allowedDomains'];
+    final Object? tools = json['enabledTools'];
     final Object? raw = json['profiles'];
     final List<ModelProfile> profiles = raw is List
         ? raw
@@ -230,6 +245,9 @@ class AppSettings {
           : 'simple',
       allowedDomains: domains is List
           ? domains.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
+          : const <String>[],
+      enabledTools: tools is List
+          ? tools.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],
     );
   }

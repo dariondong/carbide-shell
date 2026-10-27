@@ -195,6 +195,8 @@ class SessionHub extends ChangeNotifier {
     loop.extraSystem = services.settings.value.extraPrompt;
     // 设置里的提示词改了，下一轮就用新的；对话自己那份照旧优先。
     loop.systemPrompt = promptFor(services.settings, live.conversation);
+    // 刚打开或关掉的扩展，这一轮就按新的清单来。
+    services.syncTools(live.session);
     final int wasPrompt = loop.promptTokens;
     final int wasTokens = loop.tokens;
     final int wasCached = loop.cachedTokens;

@@ -35,6 +35,11 @@ class ToolRegistry {
 
   Tool? byName(String name) => _byName[name];
 
+  /// 把一件工具从清单里拿下来。扩展关掉时用得上。
+  void unregister(String name) {
+    _byName.remove(name);
+  }
+
   bool contains(String name) => _byName.containsKey(name);
 
   List<String> get names => _byName.keys.toList(growable: false);

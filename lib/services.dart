@@ -5,6 +5,7 @@ import 'core/memory.dart';
 import 'core/models.dart';
 import 'core/policy.dart';
 import 'core/tools.dart';
+import 'data/device.dart';
 import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/mail.dart';
@@ -16,6 +17,7 @@ import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
 import 'tools/clock_tool.dart';
+import 'tools/device_tools.dart';
 import 'tools/diff_tool.dart';
 import 'tools/host_tools.dart';
 import 'tools/task_tools.dart';
@@ -54,7 +56,8 @@ class AppServices {
     required this.mail,
     required this.workspace,
     required this.files,
-  });
+    DeviceApi? device,
+  }) : device = device ?? const PhoneDevice();
 
   final HostStore hosts;
   final SecretStore secrets;
@@ -77,6 +80,34 @@ class AppServices {
 
   /// 临时文件区：模型写文件、用户往里放文件、两个都把文件传到主机。
   final TempFiles files;
+
+  /// 手机那一侧的能力。测试里换成假的，工具就不用碰原生。
+  final DeviceApi device;
+
+  /// 一项扩展 = 一组工具。哪一项开了，那一组才进模型的清单。
+  late final Map<String, List<Tool>> _groupTools = <String, List<Tool>>{
+    'device': <Tool>[DeviceInfoTool(device)],
+    'clipboard': <Tool>[ClipboardTool(device)],
+    'launch': <Tool>[OpenUrlTool(), ShareTool(device)],
+    'location': <Tool>[WhereAmITool(device)],
+    'contacts': <Tool>[FindContactTool(device)],
+    'sms': <Tool>[SmsSendTool(device)],
+  };
+
+  /// 按现在的开关把扩展的工具挂上或摘下来。
+  /// 每轮开跑前叫一次，设置里一改，下一句话就生效。
+  void syncTools(AgentSession session) {
+    for (final MapEntry<String, List<Tool>> e in _groupTools.entries) {
+      final bool on = settings.value.toolOn(e.key);
+      for (final Tool t in e.value) {
+        if (on) {
+          session.loop.registry.register(t);
+        } else {
+          session.loop.registry.unregister(t.name);
+        }
+      }
+    }
+  }
 
   /// Tools are per session: `remember` must write into this conversation's
   /// memory file, and a single-host conversation only ever sees that host.
@@ -131,7 +162,9 @@ class AppServices {
     );
     loop.extraSystem = settings.value.extraPrompt;
     loop.systemPrompt = promptFor(settings, c);
-    return AgentSession(loop: loop, memory: store);
+    final AgentSession session = AgentSession(loop: loop, memory: store);
+    syncTools(session);
+    return session;
   }
 
   /// Rebuild the transcript on disk. Called after every turn.
