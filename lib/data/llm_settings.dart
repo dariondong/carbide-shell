@@ -18,7 +18,7 @@ class SettingsLlmProvider implements LlmProvider {
   final SecretStore secrets;
 
   @override
-  String get label => settings.value.model.isEmpty ? '未填模型' : settings.value.model;
+  String get label => settings.value.active.label;
 
   @override
   Future<LlmReply> chat({
@@ -28,11 +28,14 @@ class SettingsLlmProvider implements LlmProvider {
     CancelToken? cancel,
     void Function(String delta)? onText,
   }) async {
-    final String key = await secrets.read(modelSecretKey());
+    final ModelProfile profile = settings.value.active;
+    String key = await secrets.read(modelSecretKeyFor(profile.id));
+    // 老的单一密钥只在还没搬过来之前顶一下。
+    if (key.isEmpty) key = await secrets.read(modelSecretKey());
     final OpenAiProvider provider = OpenAiProvider(
-      baseUrl: settings.value.baseUrl,
+      baseUrl: profile.baseUrl,
       apiKey: key,
-      model: settings.value.model,
+      model: profile.model,
       temperature: settings.value.temperature,
     );
     try {

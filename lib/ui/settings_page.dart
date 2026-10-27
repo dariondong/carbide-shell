@@ -69,6 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _base;
   late final TextEditingController _model;
   late final TextEditingController _key;
+  late final TextEditingController _profileName;
   late final TextEditingController _steps;
   late final TextEditingController _prompt;
   late final TextEditingController _sys;
@@ -111,6 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     final AppSettings s = widget.settings.value;
+    _profileName = TextEditingController(text: s.active.name);
     _base = TextEditingController(text: s.baseUrl);
     _model = TextEditingController(text: s.model);
     _key = TextEditingController();
@@ -135,9 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _stream = s.stream;
     _autoUpdate = s.autoCheckUpdate;
     _notifStyle = s.notifStyle;
-    widget.secrets.read(modelSecretKey()).then((String key) {
-      if (mounted && key.isNotEmpty) setState(() => _key.text = key);
-    });
+    _loadKey(s.activeProfile);
     _readNotify();
     widget.mail.password().then((String p) {
       if (mounted && p.isNotEmpty) setState(() => _mailPass.text = p);
@@ -167,6 +167,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _base.dispose();
     _model.dispose();
     _key.dispose();
+    _profileName.dispose();
     _steps.dispose();
     _prompt.dispose();
     _sys.dispose();
@@ -198,7 +199,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _persist() async {
+    // 自己就是那个定时器的回调；别的路径直接叫它的时候也得把待发的定时器收掉，
+    // 否则切配置之后那次落盘会把旧输入写进新的那一套。
+    _debounce?.cancel();
     widget.settings.value
+      ..active.name = _profileName.text.trim()
       ..baseUrl = _base.text.trim()
       ..model = _model.text.trim()
       ..maxSteps = _intOf(_steps.text, 12, 1, 200)
@@ -217,7 +222,8 @@ class _SettingsPageState extends State<SettingsPage> {
           .where((String d) => d.isNotEmpty)
           .toList();
     await widget.settings.save();
-    await widget.secrets.write(modelSecretKey(), _key.text.trim());
+    await widget.secrets
+        .write(modelSecretKeyFor(widget.settings.value.activeProfile), _key.text.trim());
     widget.mail.value = SmtpConfig(
       enabled: _mailOn,
       host: _mailHost.text.trim(),
@@ -505,6 +511,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _summary(String key) {
     switch (key) {
       case 'model':
+        final String own = _profileName.text.trim();
+        if (own.isNotEmpty) return own;
         final String name = _model.text.trim();
         return name.isEmpty ? '还没填' : name;
       case 'approval':
@@ -563,6 +571,22 @@ class _SettingsPageState extends State<SettingsPage> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
+                  children: <Widget>[
+                    for (final ModelProfile p in widget.settings.value.profiles)
+                      _profileChip(p),
+                    _newProfileChip(),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                RuleField(
+                  controller: _profileName,
+                  label: '这套的名字',
+                  hint: '自己认得出就行',
+                  onChanged: (_) => _touch(),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: kLlmPresets.map(_presetChip).toList(),
                 ),
                 if (_picked.isNotEmpty) ...<Widget>[
@@ -602,6 +626,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   keyboard: TextInputType.number,
                   onChanged: (_) => _touch(),
                 ),
+                if (widget.settings.value.profiles.length > 1)
+                  _action('删掉这套配置', '地址与密钥一起清掉', _deleteProfile),
               ],
             ),
           ),
@@ -866,6 +892,118 @@ class _SettingsPageState extends State<SettingsPage> {
         ];
     }
     return const <Widget>[];
+  }
+
+  /// 读一套配置自己的密钥。进页和切配置都走这里。
+  Future<void> _loadKey(String profileId) async {
+    final String key = await widget.secrets.read(modelSecretKeyFor(profileId));
+    if (!mounted) return;
+    setState(() => _key.text = key);
+  }
+
+  /// 先把手上这套写回去，再把另一套读到输入框里。
+  Future<void> _switchProfile(String id) async {
+    _debounce?.cancel();
+    final AppSettings s = widget.settings.value;
+    if (id == s.activeProfile) return;
+    await _persist();
+    s.switchProfile(id);
+    _profileName.text = s.active.name;
+    _base.text = s.baseUrl;
+    _model.text = s.model;
+    _picked = '';
+    await widget.settings.save();
+    await _loadKey(s.activeProfile);
+    if (!mounted) return;
+    _setSaved('已切换');
+  }
+
+  /// 新建一套空的，地址与模型名都不预填。
+  Future<void> _newProfile() async {
+    _debounce?.cancel();
+    await _persist();
+    final AppSettings s = widget.settings.value;
+    s.addProfile();
+    _profileName.text = '';
+    _base.text = '';
+    _model.text = '';
+    _key.text = '';
+    _picked = '';
+    await widget.settings.save();
+    if (!mounted) return;
+    _setSaved('新建了一套');
+  }
+
+  /// 删掉当前这套：清单和它的密钥一起清。只剩一套时不动。
+  Future<void> _deleteProfile() async {
+    _debounce?.cancel();
+    final AppSettings s = widget.settings.value;
+    if (s.profiles.length <= 1) return;
+    final String gone = s.activeProfile;
+    if (!s.removeProfile(gone)) return;
+    await widget.secrets.delete(modelSecretKeyFor(gone));
+    _profileName.text = s.active.name;
+    _base.text = s.baseUrl;
+    _model.text = s.model;
+    _picked = '';
+    await widget.settings.save();
+    await _loadKey(s.activeProfile);
+    if (!mounted) return;
+    _setSaved('删掉了这一套');
+  }
+
+  /// 芯片上写什么：正在改名字的那套跟着输入框走，其余的写存下的名字。
+  String _profileLabel(ModelProfile p) {
+    if (p.id == widget.settings.value.activeProfile) {
+      final String typing = _profileName.text.trim();
+      if (typing.isNotEmpty) return typing;
+    }
+    return p.label;
+  }
+
+  /// 一套配置的芯片，点一下就切过去。
+  Widget _profileChip(ModelProfile p) {
+    final bool on = p.id == widget.settings.value.activeProfile;
+    return GestureDetector(
+      onTap: () => _switchProfile(p.id),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? C.blue : C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: on ? C.blue : C.rule2),
+        ),
+        child: Text(
+          _profileLabel(p),
+          style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink),
+        ),
+      ),
+    );
+  }
+
+  Widget _newProfileChip() {
+    return GestureDetector(
+      onTap: _newProfile,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: C.rule2),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.add, size: 14, color: C.grey),
+            SizedBox(width: 4),
+            Text('新建一套', style: TextStyle(fontSize: 12, color: C.ink)),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _presetChip(LlmPreset p) {

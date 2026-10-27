@@ -25,3 +25,6 @@ String hostSecretKey(String hostId) => 'host:$hostId:secret';
 /// 单独存的 sudo 密码：登录用密钥、提权要密码的主机很多，别逼人用密码登录。
 String hostSudoKey(String hostId) => 'host:$hostId:sudo';
 String modelSecretKey() => 'model:apiKey';
+
+/// 一套模型配置一把密钥，按配置 id 分开存。
+String modelSecretKeyFor(String profileId) => 'model:$profileId:apiKey';

@@ -54,6 +54,8 @@ Future<void> main() async {
   await conversations.load();
 
   const SecretStore secrets = SecureSecretStore();
+  // 老版本只有一套模型配置，密钥存在一个固定键下。现在一套一把，启时搬一次。
+  await settings.migrateLegacyKey(secrets);
   final SshPool pool = SshPool(hosts: hosts, secrets: secrets);
 
   final TaskStore tasks = TaskStore(File('${dir.path}/tasks.json'));
