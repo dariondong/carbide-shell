@@ -1186,6 +1186,8 @@ class _SettingsPageState extends State<SettingsPage> {
         final bool ok = await phone.has(perm);
         if (!mounted) return;
         setState(() => _permOk[g.id] = ok);
+        // 打开着的子页只跟着 _tick 重画，所以要 bump 一下。
+        _bump();
       } on DeviceError {
         // 问不出来就先不写，界面上也不多说一句。
       }
