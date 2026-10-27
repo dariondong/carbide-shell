@@ -47,7 +47,14 @@ void main() {
     test('上下文写 0 就只回变化的行', () {
       final DiffResult d = unifiedDiff(a, b, context: 0);
       expect(d.text, contains('@@'));
-      expect(d.text, isNot(contains(' b\n')));
+      final List<String> body = d.text
+          .split('\n')
+          .skip(2) // --- 和 +++ 两行头
+          .where((String line) => line.isNotEmpty)
+          .toList();
+      expect(body.any((String line) => line.startsWith(' ')), isFalse, reason: body.join('|'));
+      expect(body, contains('-c'));
+      expect(body, contains('+C'));
     });
 
     test('一边是空的也认', () {
