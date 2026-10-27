@@ -11,7 +11,7 @@ const ToolContext _ctx = ToolContext(workspace: '/tmp', desktop: true);
 class FakeDevice implements DeviceApi {
   FakeDevice({
     this.supported = true,
-    this.granted = <DevicePerm>{},
+    this.granted = const <DevicePerm>{},
     this.fix,
     this.book = const <DeviceContact>[],
     this.clip = '',

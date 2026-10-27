@@ -17,7 +17,7 @@ String _short(String text, [int max = 40]) {
 
 /// `device_info`：机型、电量、网络、剩余存储。不要权限。
 class DeviceInfoTool extends Tool {
-  const DeviceInfoTool(this.device);
+  DeviceInfoTool(this.device);
 
   final DeviceApi device;
 
@@ -55,7 +55,7 @@ class DeviceInfoTool extends Tool {
 
 /// `clipboard`：读一段、写一段。
 class ClipboardTool extends Tool {
-  const ClipboardTool(this.device);
+  ClipboardTool(this.device);
 
   final DeviceApi device;
 
@@ -117,7 +117,7 @@ class ClipboardTool extends Tool {
 
 /// `open_url`：交给浏览器。
 class OpenUrlTool extends Tool {
-  const OpenUrlTool();
+  OpenUrlTool();
 
   @override
   String get name => 'open_url';
@@ -162,7 +162,7 @@ class OpenUrlTool extends Tool {
 
 /// `share_text`：交给系统的分享面板。
 class ShareTool extends Tool {
-  const ShareTool(this.device);
+  ShareTool(this.device);
 
   final DeviceApi device;
 
@@ -205,7 +205,7 @@ class ShareTool extends Tool {
 
 /// `where_am_i`：最近一次定位。
 class WhereAmITool extends Tool {
-  const WhereAmITool(this.device);
+  WhereAmITool(this.device);
 
   final DeviceApi device;
 
@@ -251,7 +251,7 @@ class WhereAmITool extends Tool {
 
 /// `find_contact`：按名字找号码。
 class FindContactTool extends Tool {
-  const FindContactTool(this.device);
+  FindContactTool(this.device);
 
   final DeviceApi device;
 
@@ -308,7 +308,7 @@ class FindContactTool extends Tool {
 
 /// `sms_send`：发一条短信。
 class SmsSendTool extends Tool {
-  const SmsSendTool(this.device);
+  SmsSendTool(this.device);
 
   final DeviceApi device;
 
