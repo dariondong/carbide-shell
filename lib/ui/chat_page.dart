@@ -17,6 +17,7 @@ import 'md_text.dart';
 import 'motion.dart';
 import 'temp_files_page.dart';
 import 'theme.dart';
+import 'trace_page.dart';
 
 /// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。
 final Map<String, Uint8List> _photoCache = <String, Uint8List>{};
@@ -789,6 +790,16 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// 这一路模型叫什么工具、花了多久、回来什么，都在这一页。
+  void _openTrace() {
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (BuildContext ctx) => TracePage(
+        file: widget.services.conversations.journalOf(widget.conversation),
+        live: _running,
+      ),
+    ));
+  }
+
   static String _fmtTokens(int n) {
     if (n < 1000) return '$n';
     final double k = n / 1000;
@@ -825,6 +836,15 @@ class _ChatPageState extends State<ChatPage> {
               Expanded(child: _heading()),
               _statusPill(loop),
               const SizedBox(width: 4),
+              GestureDetector(
+                onTap: _openTrace,
+                behavior: HitTestBehavior.opaque,
+                child: const SizedBox(
+                  width: 34,
+                  height: 56,
+                  child: Icon(Icons.timeline, size: 17, color: C.grey),
+                ),
+              ),
               GestureDetector(
                 onTap: _editPrompt,
                 behavior: HitTestBehavior.opaque,
