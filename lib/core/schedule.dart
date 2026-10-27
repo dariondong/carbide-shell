@@ -148,15 +148,13 @@ class ScheduledTask {
     this.onceAt,
     DateTime? createdAt,
     this.nextAt,
-    List<TaskRule>? rules,
-    this.rulesAll = true,
+    this.condition,
     this.gateRetryMinutes = 5,
     this.gateWindowMinutes = 60,
     this.gateAt,
     List<TaskRun>? runs,
   })  : weekdays = weekdays ?? <int>[1],
         createdAt = createdAt ?? DateTime.now(),
-        rules = rules ?? <TaskRule>[],
         runs = runs ?? <TaskRun>[];
 
   final String id;
@@ -182,11 +180,8 @@ class ScheduledTask {
   /// 下一次该跑的时刻。null 表示不会再有下一次。
   DateTime? nextAt;
 
-  /// 到点先判断这几条，全过了才叫模型。空表示到点就跑。
-  final List<TaskRule> rules;
-
-  /// true 全要满足（且），false 满足一条就够（或）。
-  bool rulesAll;
+  /// 到点先判的这棵树：一条判断，或者几组判断。null 表示到点就跑。
+  RuleNode? condition;
 
   /// 条件还没满足时，隔多少分钟再看一次。
   int gateRetryMinutes;
@@ -215,13 +210,13 @@ class ScheduledTask {
       ? 0
       : (gateWindowMinutes > 1440 ? 1440 : gateWindowMinutes);
 
-  bool get gated => rules.isNotEmpty;
+  bool get gated => condition != null && condition!.leaves > 0;
 
   /// 正在等条件（到点了，但条件还没满足）。
   bool get waitingGate => gateAt != null;
 
   /// `磁盘 > 90 且 CPU > 80`。没有条件就是空串。
-  String get conditionText => rulesText(rules, all: rulesAll);
+  String get conditionText => conditionTextOf(condition);
 
   /// 按间隔排的时候，间隔写成「2 小时」比「120 分钟」好读。
   String get intervalText {
@@ -324,10 +319,9 @@ class ScheduledTask {
         if (onceAt != null) 'onceAt': onceAt!.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         if (nextAt != null) 'nextAt': nextAt!.toIso8601String(),
-        if (rules.isNotEmpty) 'rules': rules.map((TaskRule r) => r.toJson()).toList(),
-        if (rules.isNotEmpty) 'rulesAll': rulesAll,
-        if (rules.isNotEmpty) 'gateRetryMinutes': gateRetryStep,
-        if (rules.isNotEmpty) 'gateWindowMinutes': gateWindowStep,
+        if (gated) 'condition': condition!.toJson(),
+        if (gated) 'gateRetryMinutes': gateRetryStep,
+        if (gated) 'gateWindowMinutes': gateWindowStep,
         if (gateAt != null) 'gateAt': gateAt!.toIso8601String(),
         'runs': runs.map((TaskRun r) => r.toJson()).toList(),
       };
@@ -335,14 +329,7 @@ class ScheduledTask {
   static ScheduledTask fromJson(Map<String, Object?> json) {
     final Object? rawDays = json['weekdays'];
     final Object? rawRuns = json['runs'];
-    final Object? rawRules = json['rules'];
-    final List<TaskRule> rules = <TaskRule>[];
-    if (rawRules is List) {
-      for (final Object? raw in rawRules) {
-        final TaskRule? rule = TaskRule.fromJson(raw);
-        if (rule != null) rules.add(rule);
-      }
-    }
+    final RuleNode? condition = _conditionOf(json);
     final List<TaskRun> runs = <TaskRun>[];
     if (rawRuns is List) {
       for (final Object? raw in rawRuns) {
@@ -367,12 +354,29 @@ class ScheduledTask {
       onceAt: DateTime.tryParse('${json['onceAt'] ?? ''}'),
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
       nextAt: DateTime.tryParse('${json['nextAt'] ?? ''}'),
-      rules: rules,
-      rulesAll: json['rulesAll'] != false,
+      condition: condition,
       gateRetryMinutes: (json['gateRetryMinutes'] as num?)?.toInt() ?? 5,
       gateWindowMinutes: (json['gateWindowMinutes'] as num?)?.toInt() ?? 60,
       gateAt: DateTime.tryParse('${json['gateAt'] ?? ''}'),
       runs: runs,
+    );
+  }
+
+  /// 新格式一棵树；旧格式是平的一条条加一个「都满足 / 满足一条」。
+  static RuleNode? _conditionOf(Map<String, Object?> json) {
+    final RuleNode? tree = RuleNode.fromJson(json['condition']);
+    if (tree != null) return tree;
+    final Object? rawRules = json['rules'];
+    if (rawRules is! List) return null;
+    final List<RuleNode> children = <RuleNode>[];
+    for (final Object? raw in rawRules) {
+      final TaskRule? rule = TaskRule.fromJson(raw);
+      if (rule != null) children.add(RuleNode.rule(rule));
+    }
+    if (children.isEmpty) return null;
+    return RuleNode.group(
+      logic: json['rulesAll'] == false ? RuleLogic.any : RuleLogic.all,
+      children: children,
     );
   }
 

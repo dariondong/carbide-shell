@@ -242,7 +242,7 @@ class TaskScheduler {
     } else {
       try {
         final HostMetrics metrics = await _probe.read(host);
-        check = checkRules(task.rules, all: task.rulesAll, metrics: metrics);
+        check = checkCondition(task.condition, metrics: metrics);
       } catch (e) {
         check = RuleCheck(
             met: false, text: '读不到：${'$e'.replaceFirst('Exception: ', '')}');

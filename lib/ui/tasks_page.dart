@@ -719,10 +719,12 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
   late List<int> _weekdays;
   DateTime? _onceAt;
 
-  /// 到点先看哪几项数字，全过了才叫模型。
-  List<TaskRule> _rules = <TaskRule>[];
-  final List<TextEditingController> _ruleValues = <TextEditingController>[];
-  bool _rulesAll = true;
+  /// 到点先判的这棵树：可以是几条判断，也可以再套一层「或」。
+  RuleNode? _condition;
+
+  /// 每个叶子上那个数字框，跟着节点走。
+  final Map<RuleNode, TextEditingController> _values =
+      <RuleNode, TextEditingController>{};
 
   @override
   void initState() {
@@ -737,11 +739,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     _minuteOfDay = t?.minuteOfDay ?? 180;
     _weekdays = List<int>.of(t?.weekdays ?? <int>[1]);
     _onceAt = t?.onceAt;
-    _rules = List<TaskRule>.of(t?.rules ?? <TaskRule>[]);
-    _rulesAll = t?.rulesAll ?? true;
-    for (final TaskRule r in _rules) {
-      _ruleValues.add(TextEditingController(text: ruleNumber(r.value)));
-    }
+    _condition = t?.condition?.deepCopy();
   }
 
   @override
@@ -749,9 +747,10 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     _title.dispose();
     _prompt.dispose();
     _interval.dispose();
-    for (final TextEditingController c in _ruleValues) {
+    for (final TextEditingController c in _values.values) {
       c.dispose();
     }
+    _values.clear();
     super.dispose();
   }
 
@@ -777,18 +776,15 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       );
       return;
     }
-    final List<TaskRule> rules = <TaskRule>[];
-    for (int i = 0; i < _rules.length; i += 1) {
-      final double? value = double.tryParse(_ruleValues[i].text.trim());
-      if (value == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('条件里的数要填一个数字。')),
-        );
-        return;
-      }
-      rules.add(TaskRule(metric: _rules[i].metric, op: _rules[i].op, value: value));
+    final Object built = _treeForSave();
+    if (built is String) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(built)),
+      );
+      return;
     }
-    if (rules.isNotEmpty && _hostId.isEmpty) {
+    final RuleNode? condition = built is RuleNode ? built : null;
+    if (condition != null && _hostId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('要看条件就得先选一台主机。')),
       );
@@ -811,10 +807,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     task.weekdays = days;
     task.intervalMinutes = minutes < 5 ? 5 : minutes;
     task.onceAt = _onceAt;
-    task.rules
-      ..clear()
-      ..addAll(rules);
-    task.rulesAll = _rulesAll;
+    task.condition = condition;
     task.reschedule(DateTime.now());
     await widget.store.upsert(task);
     if (!mounted) return;
@@ -975,42 +968,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
                   const SizedBox(height: 10),
-                  if (_rules.isNotEmpty) ...<Widget>[
-                    Row(
-                      children: <Widget>[
-                        _chip('都满足', _rulesAll, () => setState(() => _rulesAll = true)),
-                        const SizedBox(width: 8),
-                        _chip('满足一条', !_rulesAll, () => setState(() => _rulesAll = false)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    for (int i = 0; i < _rules.length; i += 1)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _ruleRow(i),
-                      ),
-                  ],
-                  GestureDetector(
-                    onTap: _addRule,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(C.radiusSmall),
-                        border: Border.all(color: C.rule2),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          const Icon(Icons.add, size: 15, color: C.blue),
-                          const SizedBox(width: 6),
-                          Text(
-                            _rules.isEmpty ? '加一条条件（不加就到点直接跑）' : '再加一条',
-                            style: const TextStyle(fontSize: 12, color: C.blue),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _conditionEditor(),
                   const SizedBox(height: 22),
                   CardBox(
                     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -1068,66 +1026,125 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     );
   }
 
-  void _addRule() {
-    setState(() {
-      _rules.add(TaskRule(metric: RuleMetric.disk, value: 90));
-      _ruleValues.add(TextEditingController(text: '90'));
-    });
+  /// 条件那一块：树上几条判断、几组判断，都在这里改。
+  Widget _conditionEditor() {
+    final RuleNode? root = _condition;
+    if (root == null) {
+      return _addButton('加一条条件（不加就到点直接跑）', _addRule);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _nodeEditor(root, null, 1),
+        // 根上只有一条时，还得有地方接着加。
+        if (!root.isGroup)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _addButton('再加一条', _addRule),
+              _addButton('加一组', _addGroup),
+            ],
+          ),
+      ],
+    );
   }
 
-  void _removeRule(int index) {
-    setState(() {
-      _rules.removeAt(index);
-      _ruleValues.removeAt(index).dispose();
-    });
-  }
+  /// 一层最多套这么深，再深就不好点了。
+  static const int _maxDepth = 3;
 
-  /// 一条条件：指标、比法、数值。
-  Widget _ruleRow(int index) {
-    final TaskRule rule = _rules[index];
+  Widget _nodeEditor(RuleNode node, RuleNode? parent, int depth) {
+    if (!node.isGroup) return _leafRow(node, parent);
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
       decoration: BoxDecoration(
         color: C.card,
         borderRadius: BorderRadius.circular(C.radiusSmall),
         border: Border.all(color: C.rule),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              _chip('全部满足', node.logic == RuleLogic.all,
+                  () => setState(() => node.logic = RuleLogic.all)),
+              const SizedBox(width: 8),
+              _chip('满足一条', node.logic == RuleLogic.any,
+                  () => setState(() => node.logic = RuleLogic.any)),
+              const Spacer(),
+              if (parent != null)
+                GestureDetector(
+                  onTap: () => _removeNode(node, parent),
+                  child: const SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: Icon(Icons.close, size: 14, color: C.grey2),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final RuleNode child in node.children)
+            _nodeEditor(child, node, depth + 1),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _addButton('加一条', () => _addRuleTo(node)),
+              if (depth < _maxDepth) _addButton('加一组', () => _addGroupTo(node)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一条判断：指标、比法、数值。
+  Widget _leafRow(RuleNode node, RuleNode? parent) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: C.paper2,
+        borderRadius: BorderRadius.circular(C.radiusSmall),
+        border: Border.all(color: C.rule2),
+      ),
       child: Row(
         children: <Widget>[
           _menu<RuleMetric>(
-            value: rule.metric,
+            value: node.rule!.metric,
             items: RuleMetric.values,
             label: (RuleMetric m) => kRuleMetricNames[m]!,
-            onPick: (RuleMetric m) => setState(() =>
-                _rules[index] = TaskRule(metric: m, op: rule.op, value: rule.value)),
+            onPick: (RuleMetric m) => setState(() => node.rule = TaskRule(
+                metric: m, op: node.rule!.op, value: node.rule!.value)),
           ),
           const SizedBox(width: 8),
           _menu<RuleOp>(
-            value: rule.op,
+            value: node.rule!.op,
             items: RuleOp.values,
             label: (RuleOp o) => kRuleOpNames[o]!,
-            onPick: (RuleOp o) => setState(() =>
-                _rules[index] = TaskRule(metric: rule.metric, op: o, value: rule.value)),
+            onPick: (RuleOp o) => setState(() => node.rule = TaskRule(
+                metric: node.rule!.metric, op: o, value: node.rule!.value)),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
-              controller: _ruleValues[index],
+              controller: _ctlOf(node),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: C.mono.copyWith(fontSize: 13.5),
               decoration: const InputDecoration(hintText: '90', isDense: true),
               onChanged: (String text) {
                 final double? v = double.tryParse(text.trim());
                 if (v == null) return;
-                _rules[index] = TaskRule(
-                    metric: _rules[index].metric,
-                    op: _rules[index].op,
-                    value: v);
+                setState(() => node.rule = TaskRule(
+                    metric: node.rule!.metric, op: node.rule!.op, value: v));
               },
             ),
           ),
           GestureDetector(
-            onTap: () => _removeRule(index),
+            onTap: () => _removeNode(node, parent),
             child: const SizedBox(
               width: 30,
               height: 30,
@@ -1138,6 +1155,121 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       ),
     );
   }
+
+  Widget _addButton(String label, VoidCallback tap) {
+    return GestureDetector(
+      onTap: tap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: C.rule2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.add, size: 15, color: C.blue),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 12, color: C.blue)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  TextEditingController _ctlOf(RuleNode leaf) {
+    final TextEditingController? have = _values[leaf];
+    if (have != null) return have;
+    final TextEditingController made =
+        TextEditingController(text: ruleNumber(leaf.rule?.value ?? 0));
+    _values[leaf] = made;
+    return made;
+  }
+
+  void _addRule() => setState(() => _attach(RuleNode.rule(
+      TaskRule(metric: RuleMetric.disk, value: 90))));
+
+  void _addRuleTo(RuleNode group) => setState(() => group.children
+      .add(RuleNode.rule(TaskRule(metric: RuleMetric.disk, value: 90))));
+
+  void _addGroupTo(RuleNode group) => setState(() => group.children.add(
+      RuleNode.group(logic: RuleLogic.any, children: <RuleNode>[
+        RuleNode.rule(TaskRule(metric: RuleMetric.cpu, value: 80)),
+      ])));
+
+  /// 根上的「加一组」：整棵树变成一组，新来的那一组并进去。
+  void _addGroup() => setState(() => _attach(RuleNode.group(
+        logic: RuleLogic.any,
+        children: <RuleNode>[
+          RuleNode.rule(TaskRule(metric: RuleMetric.cpu, value: 80)),
+        ],
+      )));
+
+  /// 往根上加一个节点：没有根就它当根，根是一组就并进去，根只有一条就包成一组。
+  void _attach(RuleNode node) {
+    final RuleNode? root = _condition;
+    if (root == null) {
+      _condition = node;
+      return;
+    }
+    if (root.isGroup) {
+      root.children.add(node);
+      return;
+    }
+    _condition = RuleNode.group(children: <RuleNode>[root, node]);
+  }
+
+  void _removeNode(RuleNode node, RuleNode? parent) {
+    setState(() {
+      _dropControllers(node);
+      if (parent == null) {
+        _condition = null;
+        return;
+      }
+      parent.children.remove(node);
+      _prune();
+    });
+  }
+
+  void _dropControllers(RuleNode node) {
+    _values.remove(node)?.dispose();
+    for (final RuleNode child in node.children) {
+      _dropControllers(child);
+    }
+  }
+
+  /// 删空了的那一组顺手收掉，省得界面上留一个空框。
+  void _prune() {
+    final RuleNode? root = _condition;
+    if (root == null) return;
+    _pruneNode(root);
+    if (root.isGroup && root.children.isEmpty) _condition = null;
+  }
+
+  void _pruneNode(RuleNode node) {
+    if (!node.isGroup) return;
+    for (final RuleNode child in List<RuleNode>.of(node.children)) {
+      _pruneNode(child);
+    }
+    node.children.removeWhere((RuleNode c) => c.isGroup && c.children.isEmpty);
+  }
+
+  /// 存之前把每个数字收一遍。哪个填得不对就回一句话。
+  Object _treeForSave() {
+    final RuleNode? root = _condition;
+    if (root == null) return null;
+    for (final RuleNode leaf in _leavesOf(root)) {
+      final double? value = double.tryParse(_ctlOf(leaf).text.trim());
+      if (value == null) return '条件里的数要填一个数字。';
+      leaf.rule =
+          TaskRule(metric: leaf.rule!.metric, op: leaf.rule!.op, value: value);
+    }
+    return root.deepCopy().collapse();
+  }
+
+  List<RuleNode> _leavesOf(RuleNode node) => node.isGroup
+      ? <RuleNode>[for (final RuleNode c in node.children) ..._leavesOf(c)]
+      : <RuleNode>[node];
 
   /// 一个只有几个选项的小下拉，选完就换那一格的字。
   Widget _menu<T>({
@@ -1284,9 +1416,8 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     );
     final DateTime now = DateTime.now();
     final DateTime? next = probe.nextRunAfter(now);
-    final String gate = _rules.isEmpty
-        ? ''
-        : ' · 满足 ${rulesText(<TaskRule>[for (int i = 0; i < _rules.length; i += 1) TaskRule(metric: _rules[i].metric, op: _rules[i].op, value: double.tryParse(_ruleValues[i].text.trim()) ?? _rules[i].value)], all: _rulesAll)} 才跑';
+    final String shown = conditionTextOf(_condition);
+    final String gate = shown.isEmpty ? '' : ' · 满足 $shown 才跑';
     if (!_enabled) return '${probe.when}$gate · 已停用';
     if (next == null) return '${probe.when}$gate · 时间已经过去了';
     return '${probe.when}$gate · 下次 ${stampText(next, now: now)}';

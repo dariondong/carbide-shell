@@ -23,7 +23,8 @@ class TaskAddTool extends Tool {
   @override
   String get description =>
       '排一条定时任务：到点让助手自己去做一件事。要写清楚做什么（会原样当成那一轮的指令）。'
-      '要「磁盘超过 90% 才清」这种判断，就把条件写进 conditions，到点先读数字，符合了才叫模型。';
+      '要「磁盘超过 90% 才清」这种判断，就把条件写进 conditions，到点先读数字，符合了才叫模型。'
+      '条件可以是几条判断用 且 / 或 和括号连起来，比如 disk>90 且 (cpu>80 或 memory>=85)。';
 
   @override
   Map<String, Object?> get schema => <String, Object?>{
@@ -46,15 +47,16 @@ class TaskAddTool extends Tool {
           'once_at': <String, Object?>{'type': 'string', 'description': 'once 用，本地时间 2026-10-26 09:00'},
           'host': <String, Object?>{'type': 'string', 'description': '只管一台时写主机名，留空表示全部主机'},
           'conditions': <String, Object?>{
-            'type': 'array',
-            'items': <String, Object?>{'type': 'string'},
-            'description': '先看条件：disk>90、cpu>80、memory>=85、load>4、swap>50 这样写，'
-                '到点先读这些数字，符合了才动手。空表示到点直接跑',
+            'description': '先看条件，空表示到点直接跑。三种写法都认：'
+                '一整句 disk>90 且 (cpu>80 或 memory>=85)；'
+                '一组句子 ["disk>90", "cpu>80"] 按 condition_logic 连；'
+                '或者一棵树 {"logic":"any","children":[{...}]}，树上的叶子写成 '
+                '{"metric":"disk","op":"gt","value":90}，metric 认 cpu/memory/disk/swap/load',
           },
           'condition_logic': <String, Object?>{
             'type': 'string',
             'enum': <String>['all', 'any'],
-            'description': 'all 全部满足（默认），any 满足一条就够',
+            'description': 'conditions 给了几条平的条件时怎么连：all 全部满足（默认），any 满足一条就够',
           },
           'gate_retry_minutes': <String, Object?>{
             'type': 'integer',
@@ -88,30 +90,49 @@ class TaskAddTool extends Tool {
 
   /// 审批卡上把条件一并念出来。
   static String _conditionsBrief(Map<String, Object?> args) {
-    final List<TaskRule> rules = _rulesOf(args);
-    if (rules.isEmpty) return '';
-    final bool all = readString(args, 'condition_logic', fallback: 'all') != 'any';
-    return ' · 满足 ${rulesText(rules, all: all)} 才跑';
+    final Object read = _conditionOf(args);
+    if (read is! RuleNode) return '';
+    return ' · 满足 ${conditionTextOf(read)} 才跑';
   }
 
-  /// 把 `disk>90` 这样的句子读成规则。读不出的丢掉，run 里再报错。
-  static List<TaskRule> _rulesOf(Map<String, Object?> args) {
+  /// 把 conditions 读成一棵树。读不出来返回一句说明（String）。
+  ///
+  /// 三种写法：一整句带 且/或/括号，一组句子，或者一棵树。
+  static Object _conditionOf(Map<String, Object?> args) {
     final Object? raw = args['conditions'];
-    final List<TaskRule> out = <TaskRule>[];
-    if (raw is List) {
-      for (final Object? item in raw) {
-        if (item is! String) continue;
-        final TaskRule? rule = parseRule(item);
-        if (rule != null) out.add(rule);
+    final RuleLogic logic =
+        readString(args, 'condition_logic', fallback: 'all') == 'any'
+            ? RuleLogic.any
+            : RuleLogic.all;
+    if (raw == null) return null;
+    if (raw is String) {
+      final String text = raw.trim();
+      if (text.isEmpty) return null;
+      final RuleNode? node = parseCondition(text);
+      return node ?? '条件写得认不出来：$text。写成 disk>90 且 (cpu>80 或 memory>=85) 这样。';
+    }
+    if (raw is Map) {
+      final RuleNode? node = RuleNode.fromJson(raw);
+      return node ?? '条件这棵树读不出来，叶子要写 metric/op/value。';
+    }
+    if (raw is! List) return '条件要写成一句、一组或者一棵树。';
+    final List<RuleNode> children = <RuleNode>[];
+    for (final Object? item in raw) {
+      if (item is String) {
+        final RuleNode? node = parseCondition(item);
+        if (node == null) return '条件「$item」读不出来，写成 disk>90 这样。';
+        children.add(node);
+        continue;
       }
-    } else if (raw is String && raw.trim().isNotEmpty) {
-      // 有的模型把几条写成一行，认一下。
-      for (final String part in raw.split(RegExp(r'[，,;；]|\s+(?:and|和|且)\s+'))) {
-        final TaskRule? rule = parseRule(part);
-        if (rule != null) out.add(rule);
+      if (item is Map) {
+        final RuleNode? node = RuleNode.fromJson(item);
+        if (node == null) return '条件里的这一项读不出来：$item';
+        children.add(node);
       }
     }
-    return out;
+    if (children.isEmpty) return null;
+    if (children.length == 1) return children.first;
+    return RuleNode.group(logic: logic, children: children);
   }
   @override
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
@@ -137,13 +158,10 @@ class TaskAddTool extends Tool {
     }
 
     // 条件：写得出来的才算条件。
-    final Object? rawConditions = args['conditions'];
-    final List<TaskRule> rules = _rulesOf(args);
-    if (rawConditions is List && rawConditions.isNotEmpty && rules.isEmpty) {
-      return const ToolOutcome.failure(
-          '条件写得认不出来。写成 disk>90、cpu>80、load>4 这样。');
-    }
-    if (rules.isNotEmpty && hostId.isEmpty) {
+    final Object read = _conditionOf(args);
+    if (read is String) return ToolOutcome.failure(read);
+    final RuleNode? condition = read is RuleNode ? read.collapse() : null;
+    if (condition != null && hostId.isEmpty) {
       return const ToolOutcome.failure('要看条件就得写一个主机名，条件读的是那一台机器。');
     }
 
@@ -183,8 +201,7 @@ class TaskAddTool extends Tool {
       weekdays: weekdays.isEmpty ? <int>[1] : weekdays,
       intervalMinutes: readInt(args, 'interval_minutes', fallback: 60),
       onceAt: onceAt,
-      rules: rules,
-      rulesAll: readString(args, 'condition_logic', fallback: 'all') != 'any',
+      condition: condition,
       gateRetryMinutes: readInt(args, 'gate_retry_minutes', fallback: 5),
       gateWindowMinutes: readInt(args, 'gate_window_minutes', fallback: 60),
     );
@@ -193,11 +210,11 @@ class TaskAddTool extends Tool {
       return const ToolOutcome.failure('这条排不出下一次：时间已经过去了，或者没写时刻。');
     }
     await tasks.upsert(task);
-    final String condition = rules.isEmpty
+    final String gate = condition == null
         ? ''
-        : '\n条件：${rulesText(rules, all: task.rulesAll)}，到点先读，符合了才动手。';
+        : '\n条件：${conditionTextOf(condition)}，到点先读，符合了才动手。';
     return ToolOutcome.success(
-      stdout: '排好了：${task.title} · ${task.when}$condition\n'
+      stdout: '排好了：${task.title} · ${task.when}$gate\n'
           '下次 ${stampText(task.nextAt!)}。要不要现在先试一次，让用户自己决定。',
     );
   }

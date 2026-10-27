@@ -110,18 +110,36 @@ void main() {
         title: '磁盘',
         prompt: '清一下',
         hostId: 'h1',
-        rules: <TaskRule>[parseRule('disk>90')!, parseRule('load>2')!],
-        rulesAll: false,
+        condition: RuleNode.group(logic: RuleLogic.any, children: <RuleNode>[
+          RuleNode.rule(parseRule('disk>90')!),
+          RuleNode.rule(parseRule('load>2')!),
+        ]),
         gateRetryMinutes: 15,
         gateWindowMinutes: 120,
       );
       final ScheduledTask back = ScheduledTask.fromJson(t.toJson());
-      expect(back.rules.length, 2);
-      expect(back.rules.first.metric, RuleMetric.disk);
-      expect(back.rulesAll, isFalse);
+      expect(back.condition!.leaves, 2);
+      expect(back.condition!.children.first.rule!.metric, RuleMetric.disk);
+      expect(back.condition!.logic, RuleLogic.any);
       expect(back.gateRetryStep, 15);
       expect(back.gateWindowStep, 120);
       expect(back.conditionText, '磁盘 > 90 或 负载 > 2');
+    });
+
+    test('旧条目里平的条件读成一棵树', () {
+      final ScheduledTask back = ScheduledTask.fromJson(<String, Object?>{
+        'id': 'k4',
+        'title': '旧',
+        'prompt': '看看',
+        'rules': <Object?>[
+          <String, Object?>{'metric': 'disk', 'op': 'gt', 'value': 90},
+          <String, Object?>{'metric': 'cpu', 'op': 'gt', 'value': 80},
+        ],
+        'rulesAll': false,
+      });
+      expect(back.gated, isTrue);
+      expect(back.condition!.logic, RuleLogic.any);
+      expect(back.conditionText, '磁盘 > 90 或 CPU > 80');
     });
 
     test('没有条件的旧条目照旧读得出来', () {
@@ -131,7 +149,7 @@ void main() {
         'prompt': '看看',
         'kind': 'daily',
       });
-      expect(back.rules, isEmpty);
+      expect(back.condition, isNull);
       expect(back.gated, isFalse);
       expect(back.gateWindowStep, 60);
     });
@@ -141,12 +159,74 @@ void main() {
         id: 'k3',
         title: 'x',
         prompt: 'y',
-        rules: <TaskRule>[parseRule('disk>90')!],
+        condition: RuleNode.rule(parseRule('disk>90')!),
         nextAt: DateTime(2026, 10, 24, 3),
         gateAt: DateTime(2026, 10, 24, 3, 5),
       );
       t.reschedule(DateTime(2026, 10, 24, 4));
       expect(t.gateAt, isNull);
+    });
+
+    test('一串带括号的条件读成一棵树', () {
+      final RuleNode? node = parseCondition('disk>90 且 (cpu>80 或 memory>=85)');
+      expect(node, isNotNull);
+      expect(node!.logic, RuleLogic.all);
+      expect(node.children.length, 2);
+      expect(node.children[1].logic, RuleLogic.any);
+      expect(node.depth, 3);
+      expect(node.leaves, 3);
+      expect(conditionTextOf(node), '磁盘 > 90 且 （CPU > 80 或 内存 ≥ 85）');
+    });
+
+    test('and / or 也认，且比或紧一层', () {
+      final RuleNode? node = parseCondition('disk>90 and cpu>80 or load>4');
+      expect(node, isNotNull);
+      expect(node!.logic, RuleLogic.any);
+      expect(node.children.first.logic, RuleLogic.all);
+    });
+
+    test('读不出来的条件给 null', () {
+      expect(parseCondition(''), isNull);
+      expect(parseCondition('磁盘快满了'), isNull);
+      expect(parseCondition('disk>90 且'), isNull);
+      expect(parseCondition('(disk>90'), isNull);
+    });
+
+    test('一棵树按自己的连接词判', () {
+      final RuleNode node = parseCondition('disk>90 且 (cpu>80 或 memory>=85)')!;
+      // 磁盘没过，整条就不过。
+      final RuleCheck low = checkCondition(
+          node, metrics: metrics(cpu: 95, memAvail: 800000));
+      expect(low.met, isFalse);
+      expect(low.misses.any((String m) => m.contains('磁盘')), isTrue);
+      // 磁盘过了，括号里 CPU 也过。
+      expect(
+        checkCondition(node, metrics: metrics(cpu: 95, diskUsed: 95000)).met,
+        isTrue,
+      );
+      // 磁盘过了，括号里两条都不过。
+      expect(
+        checkCondition(node, metrics: metrics(cpu: 10, memAvail: 7900000, diskUsed: 95000))
+            .met,
+        isFalse,
+      );
+    });
+
+    test('树上只装一条时收成那一条', () {
+      final RuleNode node = RuleNode.group(children: <RuleNode>[
+        RuleNode.rule(parseRule('disk>90')!),
+      ]);
+      expect(node.collapse().isGroup, isFalse);
+      final RuleNode deep = parseCondition('(disk>90)')!;
+      expect(conditionTextOf(deep.collapse()), '磁盘 > 90');
+    });
+
+    test('树存下来读回来形状不变', () {
+      final RuleNode node = parseCondition('disk>90 且 (cpu>80 或 load>4)')!;
+      final RuleNode? back = RuleNode.fromJson(node.toJson());
+      expect(back, isNotNull);
+      expect(conditionTextOf(back), conditionTextOf(node));
+      expect(back!.leaves, node.leaves);
     });
 
     test('跳过的那一轮记得住原因', () {
