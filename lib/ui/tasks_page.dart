@@ -776,7 +776,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       );
       return;
     }
-    final Object built = _treeForSave();
+    final Object? built = _treeForSave();
     if (built is String) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(built)),
@@ -1255,7 +1255,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
   }
 
   /// 存之前把每个数字收一遍。哪个填得不对就回一句话。
-  Object _treeForSave() {
+  Object? _treeForSave() {
     final RuleNode? root = _condition;
     if (root == null) return null;
     for (final RuleNode leaf in _leavesOf(root)) {

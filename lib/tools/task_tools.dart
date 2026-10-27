@@ -90,7 +90,7 @@ class TaskAddTool extends Tool {
 
   /// 审批卡上把条件一并念出来。
   static String _conditionsBrief(Map<String, Object?> args) {
-    final Object read = _conditionOf(args);
+    final Object? read = _conditionOf(args);
     if (read is! RuleNode) return '';
     return ' · 满足 ${conditionTextOf(read)} 才跑';
   }
@@ -98,7 +98,7 @@ class TaskAddTool extends Tool {
   /// 把 conditions 读成一棵树。读不出来返回一句说明（String）。
   ///
   /// 三种写法：一整句带 且/或/括号，一组句子，或者一棵树。
-  static Object _conditionOf(Map<String, Object?> args) {
+  static Object? _conditionOf(Map<String, Object?> args) {
     final Object? raw = args['conditions'];
     final RuleLogic logic =
         readString(args, 'condition_logic', fallback: 'all') == 'any'
@@ -158,7 +158,7 @@ class TaskAddTool extends Tool {
     }
 
     // 条件：写得出来的才算条件。
-    final Object read = _conditionOf(args);
+    final Object? read = _conditionOf(args);
     if (read is String) return ToolOutcome.failure(read);
     final RuleNode? condition = read is RuleNode ? read.collapse() : null;
     if (condition != null && hostId.isEmpty) {
