@@ -210,6 +210,7 @@ class _HostsPageState extends State<HostsPage> {
     final TextEditingController port = TextEditingController(text: '${entry?.port ?? 22}');
     final TextEditingController user = TextEditingController(text: entry?.user ?? '');
     final TextEditingController secret = TextEditingController();
+    final TextEditingController sudoPass = TextEditingController();
     String auth = entry?.auth ?? 'password';
 
     final String? action = await showDialog<String>(
@@ -260,6 +261,12 @@ class _HostsPageState extends State<HostsPage> {
                         maxLines: 6,
                         hint: entry == null ? '' : '留空表示不改',
                       ),
+                      RuleField(
+                        controller: sudoPass,
+                        label: 'sudo 密码',
+                        obscure: true,
+                        hint: '需要提权才填。填一次就存着，命令里不会出现密码',
+                      ),
                     ],
                   ),
                 ),
@@ -270,6 +277,7 @@ class _HostsPageState extends State<HostsPage> {
                     onPressed: () async {
                       await widget.hosts.remove(entry.id);
                       await widget.secrets.delete(hostSecretKey(entry.id));
+                      await widget.secrets.delete(hostSudoKey(entry.id));
                       if (ctx.mounted) Navigator.of(ctx).pop('delete');
                     },
                     child: const Text('删除', style: TextStyle(fontSize: 13, color: C.grey)),
@@ -312,6 +320,9 @@ class _HostsPageState extends State<HostsPage> {
     await widget.hosts.upsert(next);
     if (secret.text.isNotEmpty) {
       await widget.secrets.write(hostSecretKey(next.id), secret.text);
+    }
+    if (sudoPass.text.isNotEmpty) {
+      await widget.secrets.write(hostSudoKey(next.id), sudoPass.text);
     }
     if (!mounted) return;
     setState(() {});

@@ -40,6 +40,10 @@ class AddHostTool extends Tool {
             'description': 'password 用密码，key 用私钥',
           },
           'secret': <String, Object?>{'type': 'string', 'description': '密码，或者整份私钥 PEM'},
+          'sudo_password': <String, Object?>{
+            'type': 'string',
+            'description': '只需要 sudo 时才填。会单独存着，以后 ssh_exec 的 sudo=true 直接用它',
+          },
         },
         'required': <String>['name', 'host', 'secret'],
       };
@@ -54,7 +58,8 @@ class AddHostTool extends Tool {
     final int port = readInt(args, 'port', fallback: 22);
     final String user = readString(args, 'user', fallback: 'root');
     final bool key = readString(args, 'auth', fallback: 'password') == 'key';
-    return '加主机 $name = $user@$host:$port（${key ? '私钥' : '密码'}）';
+    final bool sudo = readString(args, 'sudo_password').trim().isNotEmpty;
+    return '加主机 $name = $user@$host:$port（${key ? '私钥' : '密码'}${sudo ? '，带 sudo' : ''}）';
   }
 
   @override
@@ -63,6 +68,7 @@ class AddHostTool extends Tool {
     final String host = readString(args, 'host').trim();
     final String user = readString(args, 'user', fallback: 'root').trim();
     final String secret = readString(args, 'secret').trim();
+    final String sudoPassword = readString(args, 'sudo_password').trim();
     final bool byKey = readString(args, 'auth', fallback: 'password') == 'key';
     final int port = readInt(args, 'port', fallback: 22);
 
@@ -91,6 +97,9 @@ class AddHostTool extends Tool {
       auth: byKey ? 'key' : 'password',
     );
     await secrets.write(hostSecretKey(entry.id), secret);
+    if (sudoPassword.isNotEmpty) {
+      await secrets.write(hostSudoKey(entry.id), sudoPassword);
+    }
     await hosts.upsert(entry);
 
     final SshPool? probe = pool;
@@ -104,6 +113,7 @@ class AddHostTool extends Tool {
       } catch (e) {
         await hosts.remove(entry.id);
         await secrets.delete(hostSecretKey(entry.id));
+        await secrets.delete(hostSudoKey(entry.id));
         return ToolOutcome.failure('连不上 ${entry.address}：$e');
       }
     }
@@ -155,6 +165,7 @@ class RemoveHostTool extends Tool {
     }
     await hosts.remove(entry.id);
     await secrets.delete(hostSecretKey(entry.id));
+    await secrets.delete(hostSudoKey(entry.id));
     return ToolOutcome.success(stdout: '删掉了 ${entry.name}（${entry.address}），密钥也一起删了。');
   }
 }

@@ -21,4 +21,7 @@ class MemorySecretStore implements SecretStore {
 }
 
 String hostSecretKey(String hostId) => 'host:$hostId:secret';
+
+/// 单独存的 sudo 密码：登录用密钥、提权要密码的主机很多，别逼人用密码登录。
+String hostSudoKey(String hostId) => 'host:$hostId:sudo';
 String modelSecretKey() => 'model:apiKey';

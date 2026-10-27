@@ -134,6 +134,10 @@ class SshExecTool extends Tool {
             'type': 'integer',
             'description': '最长等多少秒，默认 15，最多 600。装东西、编译这种慢的往上加',
           },
+          'sudo': <String, Object?>{
+            'type': 'boolean',
+            'description': '用 root 跑这条命令。密码由底层从这台主机的记录里取，不写进命令里',
+          },
         },
         'required': <String>['command'],
       };
@@ -145,7 +149,8 @@ class SshExecTool extends Tool {
   @override
   String summarize(Map<String, Object?> args) {
     final String host = readString(args, 'host', fallback: 'default');
-    return '$host\$ ${readString(args, 'command')}';
+    final bool sudo = args['sudo'] == true;
+    return '$host\$ ${sudo ? 'sudo ' : ''}${readString(args, 'command')}';
   }
 
   @override
@@ -160,6 +165,9 @@ class SshExecTool extends Tool {
     }
     final int limit = readInt(args, 'timeout_seconds', fallback: context.timeout.inSeconds);
     final Duration wait = Duration(seconds: limit < 1 ? 1 : (limit > 600 ? 600 : limit));
+    if (args['sudo'] == true) {
+      return _runSudo(entry, command, wait);
+    }
     try {
       final SSHClient client = await pool.connect(entry);
       final SSHRunResult result = await client.runWithResult(command).timeout(wait);
@@ -180,6 +188,47 @@ class SshExecTool extends Tool {
     }
   }
 
+  /// 用 root 跑一条命令。密码只从这台主机的记录里取，走 stdin，不进命令行。
+  Future<ToolOutcome> _runSudo(HostEntry entry, String command, Duration wait) async {
+    final String password = await pool.secrets.read(hostSudoKey(entry.id));
+    if (password.isEmpty) {
+      return ToolOutcome.failure(
+        '${entry.name} 还没有存 sudo 密码：在主机设置里填一次，或者主机页里把 sudo 密码填上；'
+        '密码不写进命令里，也不要贴在对话里。',
+      );
+    }
+    try {
+      final SSHClient client = await pool.connect(entry);
+      final SSHProcess proc =
+          await client.execute('sudo -S -p "" -- sh -c ${_shellQuote(command)}');
+      // 先把两个输出口接上再喂密码，不然两边一起堵。
+      final Future<String> out = _collect(proc.stdout);
+      final Future<String> err = _collect(proc.stderr);
+      proc.stdin.add(utf8.encode('$password\n'));
+      await proc.stdin.close();
+      final String stdout = await out.timeout(wait);
+      final String stderr = await err.timeout(wait);
+      final int code = await proc.exitCode.timeout(wait);
+      return ToolOutcome.success(
+        stdout: stdout,
+        stderr: stderr.replaceAll(RegExp(r'\[sudo\] password for .*?:?\s*'), ''),
+        exitCode: code,
+        meta: <String, Object?>{'host': entry.name, 'sudo': true},
+      );
+    } on TimeoutException {
+      await pool.drop(entry.id);
+      return ToolOutcome.failure('sudo 命令 ${wait.inSeconds} 秒没回音，连接已断开。');
+    } catch (e) {
+      await pool.drop(entry.id);
+      return ToolOutcome.failure('sudo 没跑起来：$e');
+    }
+  }
+
+  Future<String> _collect(Stream<List<int>> stream) =>
+      stream.transform(const Utf8Decoder(allowMalformed: true)).join();
+
+  /// 把整条命令包成 sh -c 的一个参数，引号里的东西原样留着。
+  String _shellQuote(String command) => "'${command.replaceAll("'", "'\\''")}'";
 }
 
 class SshSftpTool extends Tool {
