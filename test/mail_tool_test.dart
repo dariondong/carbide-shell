@@ -4,6 +4,7 @@ import 'package:carbide_shell/core/models.dart';
 import 'package:carbide_shell/core/smtp.dart';
 import 'package:carbide_shell/data/mail.dart';
 import 'package:carbide_shell/data/secrets.dart';
+import 'package:carbide_shell/data/temp_files.dart';
 import 'package:carbide_shell/tools/mail_tool.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +53,23 @@ void main() {
       final String text = MailSendTool(store)
           .summarize(<String, Object?>{'subject': '备份完成', 'body': '好了'});
       expect(text, contains('备份完成'));
+    });
+
+    test('html_path 指错了就直说，不把一封信发出去', () async {
+      store.value = const SmtpConfig(
+        enabled: true,
+        host: 'smtp.example.com',
+        from: 'me@example.com',
+        to: 'a@example.com',
+      );
+      final TempFiles files = TempFiles(Directory('${dir.path}/temp'));
+      files.ensure();
+      final ToolOutcome out = await MailSendTool(store, files: files).run(
+        <String, Object?>{'body': '磁盘满了', 'html_path': 'reports/none.html'},
+        _ctx,
+      );
+      expect(out.ok, isFalse);
+      expect(out.error, contains('html_path'));
     });
   });
 }
