@@ -111,7 +111,7 @@ class ReportRenderTool extends Tool {
       footer: readString(args, 'footer'),
     );
     final String path = readString(args, 'path').trim();
-    final bool inline = args['inline'] is bool ? args['inline']! as bool : kind == 'plain';
+    final bool inline = args['inline'] == null ? kind == 'plain' : args['inline'] == true;
     final String target = path.isNotEmpty
         ? path
         : 'reports/${_slug(title)}.${kind == 'plain' ? 'md' : 'html'}';

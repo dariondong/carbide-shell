@@ -15,7 +15,7 @@ void main() {
     expect(out.error, contains('host'));
   });
 
-  test('端口越界就说越界，不去连', () async {
+  test('端口越界就说越界，不去连', () {
     final ToolOutcome out = await tool.run(<String, Object?>{
       'host': '127.0.0.1',
       'port': 70000,
@@ -62,7 +62,7 @@ void main() {
     expect((out.meta['error'] as String).isNotEmpty, isTrue);
   });
 
-  test('审批卡上念得出测的是哪个端口', () async {
+  test('审批卡上念得出测的是哪个端口', () {
     expect(tool.summarize(<String, Object?>{'host': 'a.example', 'port': 443}), contains('443'));
   });
 

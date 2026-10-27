@@ -50,7 +50,7 @@ class RenderCheckTool extends Tool {
   @override
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
     final String path = readString(args, 'path').trim();
-    final bool email = args['email'] is bool ? args['email']! as bool : true;
+    final bool email = args['email'] != false;
     String html = readString(args, 'html');
     if (path.isNotEmpty) {
       final String? text = await files.readText(path);
