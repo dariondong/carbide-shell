@@ -90,4 +90,61 @@ void main() {
       expect(text.contains('aaaaaaaaaa…'), isTrue);
     });
   });
+
+  group('HTML 正文', () {
+    test('带 HTML 时是两段，两段都解码得回来', () {
+      final String message = composeMessage(_config, '跑完了', '结论一行',
+          html: '<p>结论一行</p>');
+      expect(message.contains('multipart/alternative'), isTrue);
+      expect(message.contains('boundary="$kMailBoundary"'), isTrue);
+      expect(message.contains('--$kMailBoundary--'), isTrue);
+      final List<String> parts = _parts(message);
+      expect(parts.length, 2);
+      expect(utf8.decode(base64.decode(parts[0])), '结论一行');
+      expect(utf8.decode(base64.decode(parts[1])), '<p>结论一行</p>');
+      expect(message.endsWith('.\r\n'), isTrue);
+    });
+
+    test('不给 HTML 就还是单段纯文本', () {
+      final String message = composeMessage(_config, 's', 'b');
+      expect(message.contains('multipart'), isFalse);
+      expect(message.contains('Content-Type: text/plain; charset=UTF-8'), isTrue);
+    });
+
+    test('HTML 版把标签转义，断行留着', () {
+      final String html = mailHtml('磁盘 <90%\n第二行 & 别的 <b>');
+      expect(html.startsWith('<!DOCTYPE html>'), isTrue);
+      expect(html.contains('&lt;90%'), isTrue);
+      expect(html.contains('&amp; 别的 &lt;b&gt;'), isTrue);
+      expect(html.contains('white-space:pre-wrap'), isTrue);
+    });
+
+    test('结论那段加粗，机器和时间收成小字', () {
+      final String html = mailHtml(mailBody(line: '磁盘体检', detail: '磁盘 92%'));
+      expect(html.contains('font-size:16px;font-weight:600'), isTrue);
+      expect(html.contains('font-size:12.5px'), isTrue);
+      expect(html.contains('磁盘 92%'), isTrue);
+    });
+
+    test('设置里 HTML 默认开着，关得掉也存得住', () {
+      expect(_config.html, isTrue);
+      expect(SmtpConfig.fromJson(_config.toJson()).html, isTrue);
+      final SmtpConfig off =
+          SmtpConfig.fromJson(<String, Object?>{..._config.toJson(), 'html': false});
+      expect(off.html, isFalse);
+    });
+  });
+}
+
+/// multipart 里那两段 base64 正文，按顺序拿出来。
+List<String> _parts(String message) {
+  final List<String> out = <String>[];
+  for (final String chunk in message.split('--$kMailBoundary')) {
+    final int at = chunk.indexOf('\r\n\r\n');
+    if (at < 0) continue;
+    final String body = chunk.substring(at + 4).trim();
+    if (body.isEmpty) continue;
+    out.add(body.replaceAll('\r\n', ''));
+  }
+  return out;
 }

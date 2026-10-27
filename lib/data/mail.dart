@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/mail_html.dart';
 import '../core/smtp.dart';
 import 'secrets.dart';
+
+export '../core/mail_html.dart';
 
 /// 邮件通知的设置：一个 JSON 文件，密码单独放安全存储。
 class MailStore {
@@ -56,7 +59,13 @@ class Mailer {
     if (!config.ready) {
       return SmtpResult(error: config.missing.isEmpty ? '邮件没配全' : config.missing);
     }
-    return sendMail(config, await store.password(), subject: subject, body: body);
+    return sendMail(
+      config,
+      await store.password(),
+      subject: subject,
+      body: body,
+      html: config.html ? mailHtml(body) : '',
+    );
   }
 }
 

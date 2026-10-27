@@ -18,6 +18,7 @@ class SmtpConfig {
     this.user = '',
     this.from = '',
     this.to = '',
+    this.html = true,
   });
 
   final bool enabled;
@@ -27,6 +28,9 @@ class SmtpConfig {
   /// true 直接 TLS（465），false 明文（25，多用于内网中转）。
   final bool secure;
   final String user;
+
+  /// 带一份 HTML 排版的正文，同时留一份纯文本给不认 HTML 的客户端。
+  final bool html;
 
   /// 发件人地址。多数服务器要求它和账号一致。
   final String from;
@@ -61,6 +65,7 @@ class SmtpConfig {
         'user': user,
         'from': from,
         'to': to,
+        'html': html,
       };
 
   static SmtpConfig fromJson(Map<String, Object?> json) => SmtpConfig(
@@ -71,6 +76,7 @@ class SmtpConfig {
         user: '${json['user'] ?? ''}',
         from: '${json['from'] ?? ''}',
         to: '${json['to'] ?? ''}',
+        html: json['html'] != false,
       );
 }
 
@@ -91,12 +97,15 @@ class SmtpError implements Exception {
   String toString() => message;
 }
 
-/// 发一封纯文本邮件。[password] 留空表示服务器不要登录。
+/// 发一封邮件。[password] 留空表示服务器不要登录。
+///
+/// [html] 非空就多带一份 HTML 版；不填就是纯文本一封。
 Future<SmtpResult> sendMail(
   SmtpConfig config,
   String password, {
   required String subject,
   required String body,
+  String html = '',
   Duration timeout = const Duration(seconds: 25),
 }) async {
   if (!config.ready) {
@@ -121,7 +130,8 @@ Future<SmtpResult> sendMail(
       await session.command('RCPT TO:<$to>', timeout: timeout, allow: <String>['250', '251']);
     }
     await session.command('DATA', timeout: timeout, allow: <String>['354']);
-    await session.write(composeMessage(config, subject, body), timeout: timeout);
+    await session.write(composeMessage(config, subject, body, html: html),
+        timeout: timeout);
     _expect(await session.reply(timeout: timeout), <String>['250']);
     try {
       await session.command('QUIT', timeout: timeout, allow: <String>['221']);
@@ -144,28 +154,56 @@ Future<SmtpResult> sendMail(
   }
 }
 
+/// 两段之间的分界线。两段都是 base64，这串字不可能出现在正文里。
+const String kMailBoundary = '=_carbide_shell_1';
+
 /// 信的内容：头 + base64 正文，中文不用管编码。
-String composeMessage(SmtpConfig config, String subject, String body) {
+///
+/// [html] 非空时写成 multipart/alternative：先纯文本，后 HTML，
+/// 由收信的客户端自己挑一份显示。
+String composeMessage(SmtpConfig config, String subject, String body,
+    {String html = ''}) {
   final String subjectText = _encodeHeader(subject);
-  final String payload = base64.encode(utf8.encode(body)).replaceAllMapped(
-        RegExp(r'.{1,76}'),
-        (Match m) => '${m.group(0)}\r\n',
-      );
   final StringBuffer b = StringBuffer()
     ..write('From: <${config.from.trim()}>\r\n')
     ..write('To: <${config.recipients.join('>, <')}>\r\n')
     ..write('Subject: $subjectText\r\n')
     ..write('Date: ${HttpDate.format(DateTime.now().toUtc())}\r\n')
-    ..write('MIME-Version: 1.0\r\n')
-    ..write('Content-Type: text/plain; charset=UTF-8\r\n')
-    ..write('Content-Transfer-Encoding: base64\r\n')
-    ..write('\r\n')
-    ..write(payload);
+    ..write('MIME-Version: 1.0\r\n');
+  final String rich = html.trim();
+  if (rich.isEmpty) {
+    b
+      ..write('Content-Type: text/plain; charset=UTF-8\r\n')
+      ..write('Content-Transfer-Encoding: base64\r\n')
+      ..write('\r\n')
+      ..write(_base64Block(body));
+  } else {
+    b
+      ..write('Content-Type: multipart/alternative; boundary="$kMailBoundary"\r\n')
+      ..write('\r\n')
+      ..write('--$kMailBoundary\r\n')
+      ..write('Content-Type: text/plain; charset=UTF-8\r\n')
+      ..write('Content-Transfer-Encoding: base64\r\n')
+      ..write('\r\n')
+      ..write(_base64Block(body))
+      ..write('--$kMailBoundary\r\n')
+      ..write('Content-Type: text/html; charset=UTF-8\r\n')
+      ..write('Content-Transfer-Encoding: base64\r\n')
+      ..write('\r\n')
+      ..write(_base64Block(rich))
+      ..write('--$kMailBoundary--\r\n');
+  }
   // DATA 的结束标记，前面必须是空行。
   if (!b.toString().endsWith('\r\n')) b.write('\r\n');
   b.write('.\r\n');
   return b.toString();
 }
+
+/// base64 折到 76 列，每段后面都带回车。
+String _base64Block(String text) => base64.encode(utf8.encode(text)).replaceAllMapped(
+      RegExp(r'.{1,76}'),
+      (Match m) => '${m.group(0)}\r\n',
+    );
 
 /// 主题里的中文走 RFC 2047，一行放得下就不用折。
 String _encodeHeader(String text) {

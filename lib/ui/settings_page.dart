@@ -98,6 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _mailTo;
   bool _mailOn = false;
   bool _mailSecure = true;
+  bool _mailHtml = true;
   String _mailNote = '';
 
   /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
@@ -123,6 +124,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailTo = TextEditingController(text: m.to);
     _mailOn = m.enabled;
     _mailSecure = m.secure;
+    _mailHtml = m.html;
     _mode = s.approvalMode;
     _temperature = s.temperature;
     _font = s.answerFont;
@@ -219,6 +221,7 @@ class _SettingsPageState extends State<SettingsPage> {
       user: _mailUser.text.trim(),
       from: _mailFrom.text.trim(),
       to: _mailTo.text.trim(),
+      html: _mailHtml,
     );
     await widget.mail.save();
     await widget.mail.setPassword(_mailPass.text.trim());
@@ -796,6 +799,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   label: '收件人',
                   hint: '多个用逗号分开',
                   onChanged: (_) => _touch(),
+                ),
+                _toggle(
+                  'HTML 排版',
+                  _mailHtml,
+                  _mailHtml ? '同时带一份纯文本，不认的客户端拿它' : '只发纯文本',
+                  (bool v) => _apply(() => _mailHtml = v),
                 ),
                 const RuleLine(),
                 _action('发一封试试', _mailNote.isEmpty ? '按上面的设置发' : _mailNote, _testMail),
