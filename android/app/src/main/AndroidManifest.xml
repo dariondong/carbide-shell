@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- 扩展工具的权限：设置里逐项打开时才向系统要一次，平时不碰 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.SEND_SMS"/>
     <!-- 临时文件存到下载目录：Android 10 起走 MediaStore 不要权限，更早的系统才要 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

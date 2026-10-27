@@ -15,8 +15,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var askedNotifications = false
 
-    /// 设置页问权限时先挂在这里，回调里再回话。
+    /**
+     * 设置页问权限时先挂在这里，回调里再回话。
+     */
     private var pendingNotification: MethodChannel.Result? = null
+
+    /** 正在等系统回话的扩展权限请求，按请求号存着。 */
+    private val deviceWaits = HashMap<Int, MethodChannel.Result>()
 
     /// 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。
     private var replyChannel: MethodChannel? = null
@@ -175,6 +180,82 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // 手机这一侧：设备信息、位置、联系人、短信、分享。用之前先看权限。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "info" -> result.success(Device.info(this))
+
+                    "has" -> result.success(
+                        Device.has(this, call.argument<String>("perm").orEmpty()),
+                    )
+
+                    "request" -> requestDevice(
+                        call.argument<String>("perm").orEmpty(),
+                        result,
+                    )
+
+                    "location" -> {
+                        if (!Device.has(this, "location")) {
+                            result.error("no-permission", "没有位置的权限", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(Device.location(this))
+                    }
+
+                    "contacts" -> {
+                        if (!Device.has(this, "contacts")) {
+                            result.error("no-permission", "没有读取联系人的权限", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            result.success(
+                                Device.contacts(
+                                    this,
+                                    call.argument<String>("query").orEmpty(),
+                                    (call.argument<Int>("limit") ?: 20).coerceIn(1, 50),
+                                ),
+                            )
+                        } catch (error: Throwable) {
+                            result.error("contacts-failed", error.message, null)
+                        }
+                    }
+
+                    "sms" -> {
+                        if (!Device.has(this, "sms")) {
+                            result.error("no-permission", "没有发短信的权限", null)
+                            return@setMethodCallHandler
+                        }
+                        val to = call.argument<String>("to").orEmpty().trim()
+                        val text = call.argument<String>("text").orEmpty()
+                        if (to.isEmpty() || text.isEmpty()) {
+                            result.error("bad-args", "号码和内容都得写", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            Device.sendSms(this, to, text)
+                            result.success(true)
+                        } catch (error: Throwable) {
+                            result.error("sms-failed", error.message, null)
+                        }
+                    }
+
+                    "share" -> {
+                        try {
+                            Device.share(
+                                this,
+                                call.argument<String>("text").orEmpty(),
+                                call.argument<String>("subject").orEmpty(),
+                            )
+                            result.success(true)
+                        } catch (error: Throwable) {
+                            result.error("share-failed", error.message, null)
+                        }
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     /**
@@ -257,12 +338,40 @@ class MainActivity : FlutterActivity() {
         if (requestCode == REQ_NOTIFICATIONS) {
             pendingNotification?.success(TaskService.state(this))
             pendingNotification = null
+            return
         }
+        val waiting = deviceWaits.remove(requestCode) ?: return
+        val code = DEVICE_REQ.entries.firstOrNull { it.value == requestCode }?.key
+        waiting.success(code != null && Device.has(this, code))
+    }
+
+    /** 设置里打开一项扩展时问一次权限，结果照实回话。 */
+    private fun requestDevice(code: String, result: MethodChannel.Result) {
+        val perm = Device.PERMS[code]
+        val requestCode = DEVICE_REQ[code]
+        if (perm == null || requestCode == null) {
+            result.error("bad-args", "没有这一项权限", null)
+            return
+        }
+        if (Device.has(this, code) || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            result.success(true)
+            return
+        }
+        deviceWaits[requestCode] = result
+        requestPermissions(arrayOf(perm), requestCode)
     }
 
     private companion object {
         const val CHANNEL = "top.theez.carbide_shell/foreground"
         const val FILES = "top.theez.carbide_shell/files"
+        const val DEVICE = "top.theez.carbide_shell/device"
         const val REQ_NOTIFICATIONS = 0xCB02
+
+        /** 每一项扩展权限问一次用的号。 */
+        val DEVICE_REQ: Map<String, Int> = mapOf(
+            "sms" to 0xCB21,
+            "location" to 0xCB22,
+            "contacts" to 0xCB23,
+        )
     }
 }
