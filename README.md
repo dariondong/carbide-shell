@@ -7,6 +7,9 @@
 - 临时文件区：模型用 `temp_file` 列、读、写、删，用 `temp_upload` 传到主机；界面上能预览、加文件、传服务器
 - 任务与监听：`task_add` / `task_list` / `task_control`、`watch_add` / `watch_list` / `watch_control`
 - 主机：`host_list`，Advance Master 另有 `host_add` / `host_remove`
+- 手机上的扩展：设置 → 扩展 里逐项打开，开了才给模型。
+  设备信息 `device_info`、剪贴板 `clipboard`、打开与分享 `open_url` / `share_text`、
+  定位 `where_am_i`、联系人 `find_contact`、短信 `sms_send`。默认全关。
 - 跑长任务时挂一条前台通知，切出去、锁屏也继续跑
 - 附件：图片进多模态，纯文本与 Word（.docx）抽成文字拼进对话
 - 审批：只读自动放行，写操作弹确认卡，命中危险规则直接拒

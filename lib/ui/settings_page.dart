@@ -8,11 +8,13 @@ import '../core/models.dart';
 import '../core/policy.dart';
 import '../core/smtp.dart';
 import '../core/usage.dart';
+import '../data/device.dart';
 import '../data/foreground.dart';
 import '../data/mail.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
 import '../data/settings.dart';
+import '../data/tool_groups.dart';
 import '../data/usage.dart';
 import '../data/update.dart';
 import '../version.dart';
@@ -90,6 +92,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// 现在能不能弹通知，进页时问一次原生。
   NotifyState _notify = const NotifyState();
+
+  /// 每一项扩展要的权限系统给不给。还没问过就不在这个表里。
+  final Map<String, bool> _permOk = <String, bool>{};
 
   /// 通知长什么样：一行、折开、一行一条、像聊天。
   String _notifStyle = 'simple';
@@ -521,6 +526,11 @@ class _SettingsPageState extends State<SettingsPage> {
             : _mode == 'askAll'
                 ? '全部确认'
                 : '写操作确认';
+      case 'tools':
+        final int on = kToolGroups
+            .where((ToolGroup g) => widget.settings.value.toolOn(g.id))
+            .length;
+        return on == 0 ? '都关着' : '开 $on 项';
       case 'prompt':
         final String own = _sys.text.trim().isEmpty ? '内置' : '自定';
         return _prompt.text.trim().isEmpty ? own : '$own + 附加';
@@ -549,6 +559,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _open(_Module module) async {
+    if (module.key == 'tools') unawaited(_readPerms());
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _SettingsModulePage(parent: this, module: module),
@@ -666,6 +677,37 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 14),
           const Text(
             '危险命令不因档位放行。定时任务执行时无人确认，除危险命令外一律放行。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'tools':
+        return <Widget>[
+          if (!const PhoneDevice().supported)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                '这些扩展只在安卓上有，这台机器上开不开都一样。',
+                style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+              ),
+            ),
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final ToolGroup g in kToolGroups) _toolRow(g),
+                _action('打开系统的应用设置', '权限被拒过之后，要在那里改', openAppSettings),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '开着的那几项才进模型的工具清单，关着的它看不见。改完下一句话就生效。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '定位、联系人、短信在打开时向系统要一次权限。工具不会自己弹框，也不会替你发消息。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
@@ -1089,6 +1131,67 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _mailNote = result.ok ? '发出去了' : '没发出去：${result.error}');
   }
 
+  /// 一项扩展一行：名字、能干什么、系统给不给权限。
+  Widget _toolRow(ToolGroup g) {
+    final bool on = widget.settings.value.toolOn(g.id);
+    String note = g.note;
+    final DevicePerm? perm = g.perm;
+    if (perm != null) {
+      final bool? ok = _permOk[g.id];
+      if (ok == false) {
+        note = '$note。系统没给${perm.label}权限，这一项用不了';
+      } else if (ok == true) {
+        note = '$note。系统已允许';
+      }
+    }
+    return _toggle(g.name, on, note, (bool v) => _setTool(g, v));
+  }
+
+  /// 打开一项扩展。要权限的先去要一次，系统不给就不打开。
+  Future<void> _setTool(ToolGroup g, bool on) async {
+    if (!on) {
+      _apply(() => widget.settings.value.setTool(g.id, false));
+      return;
+    }
+    final DevicePerm? perm = g.perm;
+    if (perm != null) {
+      const DeviceApi phone = PhoneDevice();
+      bool ok = _permOk[g.id] ?? false;
+      try {
+        if (!ok) ok = await phone.has(perm);
+        if (!ok) ok = await phone.request(perm);
+      } on DeviceError catch (e) {
+        if (!mounted) return;
+        _setSaved(e.message);
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _permOk[g.id] = ok);
+      if (!ok) {
+        _setSaved('系统没给${perm.label}权限，这一项没打开');
+        return;
+      }
+    }
+    _apply(() => widget.settings.value.setTool(g.id, true));
+  }
+
+  /// 进扩展那一页时，先问一遍各项权限现在给不给。
+  Future<void> _readPerms() async {
+    const DeviceApi phone = PhoneDevice();
+    if (!phone.supported) return;
+    for (final ToolGroup g in kToolGroups) {
+      final DevicePerm? perm = g.perm;
+      if (perm == null) continue;
+      try {
+        final bool ok = await phone.has(perm);
+        if (!mounted) return;
+        setState(() => _permOk[g.id] = ok);
+      } on DeviceError {
+        // 问不出来就先不写，界面上也不多说一句。
+      }
+    }
+  }
+
   Widget _toggle(String label, bool value, String note, void Function(bool) onChanged) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -1151,6 +1254,7 @@ class _Module {
 const List<_Module> kSettingsModules = <_Module>[
   _Module('model', '模型'),
   _Module('approval', '审批'),
+  _Module('tools', '扩展'),
   _Module('prompt', '提示词'),
   _Module('talk', '对话'),
   _Module('net', '网络'),

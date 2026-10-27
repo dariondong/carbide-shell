@@ -8,11 +8,13 @@ import android.location.Location
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.telephony.SmsManager
 
 /**
@@ -158,5 +160,13 @@ object Device {
         val chooser = Intent.createChooser(send, subject.ifEmpty { "分享" })
         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(chooser)
+    }
+
+    /** 这个应用在系统里的那一页。权限被拒过之后，只能去那里改。 */
+    fun appSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(Uri.parse("package:${context.packageName}"))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
     }
 }

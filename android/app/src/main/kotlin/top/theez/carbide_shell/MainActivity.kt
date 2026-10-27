@@ -253,6 +253,15 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    "appSettings" -> {
+                        try {
+                            Device.appSettings(this)
+                            result.success(true)
+                        } catch (error: Throwable) {
+                            result.error("settings-failed", error.message, null)
+                        }
+                    }
+
                     else -> result.notImplemented()
                 }
             }

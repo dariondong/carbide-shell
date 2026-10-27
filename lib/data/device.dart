@@ -154,6 +154,19 @@ class DeviceContact {
   String get line => name.isEmpty ? phone : '$name $phone';
 }
 
+/// 打开这个应用在系统里的那一页。权限被拒过之后，只能去那里改。
+/// 别的平台什么都不做。
+Future<void> openAppSettings() async {
+  if (!Platform.isAndroid) return;
+  try {
+    await _channel.invokeMethod<Object?>('appSettings');
+  } on MissingPluginException {
+    // 没有这条通道就算了，用户自己去系统设置里找。
+  } on PlatformException {
+    // 系统没接住也不报错，这一下本来就是帮忙。
+  }
+}
+
 /// 手机能力的入口。测试里换成假的，工具就不用碰原生。
 abstract class DeviceApi {
   const DeviceApi();
