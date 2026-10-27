@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
                             this,
                             call.argument<String>("title").orEmpty(),
                             call.argument<String>("text").orEmpty(),
+                            call.argument<Int>("slot") ?: 0,
                         )
                         result.success(null)
                     }

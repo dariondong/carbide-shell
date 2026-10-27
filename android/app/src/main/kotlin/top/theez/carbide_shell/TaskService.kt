@@ -200,7 +200,9 @@ class TaskService : Service() {
         }
 
         /** 一条提示：不常驻，点一下回到应用。资源监听过线时用，不占常驻那条。 */
-        fun alert(context: Context, title: String, text: String) {
+        /// [slot] 是要占的那一格：同一格后一条盖掉前一条，不同格并排留着。
+        /// 0 留给资源监听过线那一条，其余从 1 起。
+        fun alert(context: Context, title: String, text: String, slot: Int = 0) {
             try {
                 ensureChannel(
                     context, ALERT_CHANNEL_ID,
@@ -217,7 +219,7 @@ class TaskService : Service() {
                     .setContentIntent(tap(context))
                     .build()
                 val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.notify(ALERT_ID, note)
+                manager.notify(ALERT_ID + slot.coerceIn(0, 63), note)
             } catch (error: Throwable) {
                 // 通知发不出去也就算了，数据已经记下。
             }
