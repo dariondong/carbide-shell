@@ -1,3 +1,4 @@
+import 'conversation.dart';
 import 'journal.dart';
 import 'llm_base.dart';
 import 'models.dart';
@@ -323,6 +324,8 @@ class AgentLoop {
   /// [hard] 是回合中间那次检查：只按预算的一点五倍算，一回合里上下文只往上长，
   /// 前缀不被弄断，缓存还能命中。
   List<LlmMessage> _window({bool hard = false}) {
+    // 记录可能刚被收过，起点要跟着回到范围内，不然 sublist 会越界。
+    if (_cut < 0 || _cut > history.length) _cut = 0;
     final int limit =
         hard ? (maxContextChars * _hardFactor).round() : maxContextChars;
     if (_charsFrom(_cut) > limit) {
@@ -333,6 +336,25 @@ class AgentLoop {
     while (kept.isNotEmpty && kept.first.role == LlmRole.tool) {
       kept.removeAt(0);
     }
+    return _oneImageAtMost(kept);
+  }
+
+  /// 图片是整个上下文里最重的一段：只留最近那一组，更早的图片不带进请求。
+  /// 每一步都把几兆的 base64 再发一遍，手机会先卡后崩。
+  List<LlmMessage> _oneImageAtMost(List<LlmMessage> kept) {
+    int newest = -1;
+    for (int i = kept.length - 1; i >= 0; i -= 1) {
+      if (kept[i].images.isNotEmpty) {
+        newest = i;
+        break;
+      }
+    }
+    if (newest <= 0) return kept;
+    for (int i = 0; i < newest; i += 1) {
+      final LlmMessage m = kept[i];
+      if (m.images.isEmpty) continue;
+      kept[i] = LlmMessage.user(m.text.trim().isEmpty ? '（图片已收起）' : m.text);
+    }
     return kept;
   }
 
@@ -340,7 +362,7 @@ class AgentLoop {
   int _charsFrom(int from) {
     int total = 0;
     for (int i = from; i < history.length; i += 1) {
-      total += history[i].text.length + 24;
+      total += messageWeight(history[i]);
     }
     return total;
   }
@@ -349,7 +371,7 @@ class AgentLoop {
   int _cutFor(int budget) {
     int total = 0;
     for (int i = history.length - 1; i >= 0; i -= 1) {
-      total += history[i].text.length + 24;
+      total += messageWeight(history[i]);
       if (total > budget && i < history.length - 1) return i + 1;
     }
     return 0;
