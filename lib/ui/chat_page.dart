@@ -19,7 +19,8 @@ import 'temp_files_page.dart';
 import 'theme.dart';
 import 'trace_page.dart';
 
-/// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。
+/// 解过的照片放在这里，重画一帧不用再把 base64 拆一次。留八张就够屏幕上那几行看，
+/// 每张解出来是几兆，留多了长对话里的内存全压在照片上。
 final Map<String, Uint8List> _photoCache = <String, Uint8List>{};
 
 /// 从 `data:image/…;base64,…` 里取出字节。没带前缀或解不开就给 null。
@@ -30,7 +31,7 @@ Uint8List? photoBytes(String url) {
   if (comma < 0 || !url.startsWith('data:')) return null;
   try {
     final Uint8List bytes = base64Decode(url.substring(comma + 1));
-    if (_photoCache.length > 24) _photoCache.clear();
+    if (_photoCache.length > 8) _photoCache.clear();
     _photoCache[url] = bytes;
     return bytes;
   } catch (_) {
