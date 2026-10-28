@@ -1,7 +1,64 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'models.dart';
+
+/// 一份记录最多留这么多字，多出来的从最早的收起。
+///
+/// 手机上记录越长越难办：打开对话要把它整份读回来，每轮跑完要把它整份写回去，
+/// 一部长记录能把这个过程拖到几秒并且吃掉几十兆内存。收在上下文的十几倍，
+/// 回看还够用，读写也不至于把手机拖住。
+const int kTranscriptMaxChars = 1000000;
+
+/// 收的时候至少留这么多条，免得一条超长记录把前面全顶掉。
+const int kTranscriptKeep = 80;
+
+/// 一条记录在预算里算多少字。正文、工具参数、图片都算，图片是最重的那部分。
+int messageWeight(LlmMessage m) {
+  int n = m.text.length + 24;
+  for (final LlmToolCall c in m.calls) {
+    n += c.name.length + 8;
+    c.args.forEach((String key, Object? value) {
+      n += key.length + 4;
+      if (value is String) n += value.length;
+    });
+  }
+  for (final String url in m.images) {
+    n += url.length;
+  }
+  return n;
+}
+
+/// 记录超过 [maxChars] 就把最早的那些从 [messages] 里删掉，返回删了几条。
+///
+/// 不从一条工具结果开始：它的助手消息得跟着走，否则模型看到的是一句没头没尾的输出。
+int trimTranscript(
+  List<LlmMessage> messages, {
+  int maxChars = kTranscriptMaxChars,
+  int keep = kTranscriptKeep,
+}) {
+  int total = 0;
+  for (final LlmMessage m in messages) {
+    total += messageWeight(m);
+  }
+  if (total <= maxChars) return 0;
+  int acc = 0;
+  int cut = 0;
+  for (int i = messages.length - 1; i >= 0; i -= 1) {
+    acc += messageWeight(messages[i]);
+    if (acc > maxChars && messages.length - 1 - i >= keep) {
+      cut = i + 1;
+      break;
+    }
+  }
+  while (cut < messages.length && messages[cut].role == LlmRole.tool) {
+    cut += 1;
+  }
+  if (cut <= 0) return 0;
+  messages.removeRange(0, cut);
+  return cut;
+}
 
 /// One conversation: its scope, its transcript, its own journal file.
 class Conversation {
@@ -15,6 +72,7 @@ class Conversation {
     this.tokensUsed = 0,
     this.systemPrompt = '',
     this.advanceMaster = false,
+    this.dropped = 0,
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -41,6 +99,9 @@ class Conversation {
   /// Advance Master：管全部主机，还能把新主机写进列表。
   bool advanceMaster;
 
+  /// 因为太长收起过多少条。界面上要如实说一句，不然人以为记录丢了。
+  int dropped;
+
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
 
@@ -62,6 +123,7 @@ class Conversation {
         'tokensUsed': tokensUsed,
         if (systemPrompt.trim().isNotEmpty) 'systemPrompt': systemPrompt,
         if (advanceMaster) 'advanceMaster': true,
+        if (dropped > 0) 'dropped': dropped,
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -86,6 +148,7 @@ class Conversation {
       tokensUsed: (json['tokensUsed'] as num?)?.toInt() ?? 0,
       systemPrompt: '${json['systemPrompt'] ?? ''}',
       advanceMaster: json['advanceMaster'] == true,
+      dropped: (json['dropped'] as num?)?.toInt() ?? 0,
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],
@@ -200,10 +263,18 @@ class ConversationStore {
     for (final FileSystemEntity entity in dir.listSync()) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
       try {
-        final Object? decoded = jsonDecode(await entity.readAsString());
+        final String text = await entity.readAsString();
+        // 大文件解在另一个 isolate 里：几十兆的 JSON 在界面线程上解会把画面冻住。
+        final Object? decoded = text.length > 400000
+            ? await Isolate.run(() => jsonDecode(text))
+            : jsonDecode(text);
         if (decoded is Map) {
           final Conversation c = Conversation.fromJson(Map<String, Object?>.from(decoded));
-          if (c.id.isNotEmpty) _items.add(c);
+          if (c.id.isNotEmpty) {
+            // 老版本留下的长记录，先收一次再放进来。
+            c.dropped += trimTranscript(c.messages);
+            _items.add(c);
+          }
         }
       } catch (_) {
         // Skip a broken transcript instead of losing the rest.
@@ -230,7 +301,10 @@ class ConversationStore {
   Future<void> save(Conversation c) async {
     c.updatedAt = DateTime.now();
     dir.createSync(recursive: true);
-    final String text = const JsonEncoder.withIndent('  ').convert(c.toJson());
+    c.dropped += trimTranscript(c.messages);
+    final Map<String, Object?> json = c.toJson();
+    // 编码放在另一个 isolate 里，也不带缩进：缩进只是好看，长记录上要多占一半内存。
+    final String text = await Isolate.run(() => jsonEncode(json));
     await File('${dir.path}/${c.id}.json').writeAsString(text);
   }
 
