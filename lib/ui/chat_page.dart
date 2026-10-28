@@ -541,6 +541,10 @@ class _ChatPageState extends State<ChatPage> {
   /// 这一屏有哪几行。只算行，不拆字也不排版：几万字的记录按需才画。
   List<_Row> _rows() {
     final List<_Row> rows = <_Row>[];
+    final int dropped = widget.conversation.dropped;
+    if (dropped > 0) {
+      rows.add(_Row(_RowKind.trim, text: '更早的 $dropped 条已收起'));
+    }
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
         rows.add(_Row(_RowKind.user, message: m));
@@ -589,6 +593,12 @@ class _ChatPageState extends State<ChatPage> {
         );
       case _RowKind.streaming:
         return _answer(r.text, streaming: true);
+      case _RowKind.trim:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Text(r.text,
+              style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+        );
       case _RowKind.thinking:
         return _ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking);
       case _RowKind.empty:
@@ -1141,7 +1151,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// 一行的身份与内容。不拿 Widget 当缓存，状态一变也不必把整份记录重造。
-enum _RowKind { user, answer, tool, streaming, thinking, empty }
+enum _RowKind { trim, user, answer, tool, streaming, thinking, empty }
 
 class _Row {
   const _Row(this.kind, {this.message, this.text = ''});
