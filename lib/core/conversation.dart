@@ -11,9 +11,6 @@ import 'models.dart';
 /// 回看还够用，读写也不至于把手机拖住。
 const int kTranscriptMaxChars = 1000000;
 
-/// 收的时候至少留这么多条，免得一条超长记录把前面全顶掉。
-const int kTranscriptKeep = 80;
-
 /// 一条记录在预算里算多少字。正文、工具参数、图片都算，图片是最重的那部分。
 int messageWeight(LlmMessage m) {
   int n = m.text.length + 24;
@@ -32,22 +29,17 @@ int messageWeight(LlmMessage m) {
 
 /// 记录超过 [maxChars] 就把最早的那些从 [messages] 里删掉，返回删了几条。
 ///
-/// 不从一条工具结果开始：它的助手消息得跟着走，否则模型看到的是一句没头没尾的输出。
+/// 只保尾部那一块：最新那一条无论如何留着，也不从一条工具结果开头，
+/// 否则模型看到的是一句没头没尾的输出。
 int trimTranscript(
   List<LlmMessage> messages, {
   int maxChars = kTranscriptMaxChars,
-  int keep = kTranscriptKeep,
 }) {
-  int total = 0;
-  for (final LlmMessage m in messages) {
-    total += messageWeight(m);
-  }
-  if (total <= maxChars) return 0;
   int acc = 0;
   int cut = 0;
   for (int i = messages.length - 1; i >= 0; i -= 1) {
     acc += messageWeight(messages[i]);
-    if (acc > maxChars && messages.length - 1 - i >= keep) {
+    if (acc > maxChars && i < messages.length - 1) {
       cut = i + 1;
       break;
     }

@@ -61,11 +61,11 @@ void main() {
       messages.add(LlmMessage.user('第 $i 句 ${'x' * 500}'));
       messages.add(const LlmMessage.assistant('收到。'));
     }
-    final int dropped = trimTranscript(messages, maxChars: 4000, keep: 6);
-    expect(dropped, greaterThan(0));
+    final int dropped = trimTranscript(messages, maxChars: 4000);
+    expect(dropped, greaterThan(30));
     expect(messages.length, lessThan(80));
-    expect(messages.length, greaterThanOrEqualTo(6));
-    expect(messageWeightTotal(messages), lessThanOrEqualTo(4000 + 1000));
+    expect(messageWeightTotal(messages), lessThanOrEqualTo(4000));
+    expect(messages.last.text, '收到。');
   });
 
   test('收起之后头一条不能是工具结果', () {
@@ -78,7 +78,7 @@ void main() {
       messages.add(LlmMessage.toolResult(
           text: 'ok ${'z' * 300}', toolCallId: 'c$i', toolName: 'spy'));
     }
-    final int dropped = trimTranscript(messages, maxChars: 3000, keep: 4);
+    final int dropped = trimTranscript(messages, maxChars: 3000);
     expect(dropped, greaterThan(0));
     expect(messages.first.role, isNot(LlmRole.tool));
   });
@@ -91,13 +91,14 @@ void main() {
     final ConversationStore store = ConversationStore(dir);
     await store.load();
     final Conversation c = await store.create(title: '长对话');
-    for (int i = 0; i < 40; i += 1) {
-      c.messages.add(LlmMessage.user('第 $i 句 ${'x' * 2000}'));
+    // 总额过一百万字的线（一条两万五千字，六十条），保存时应该从最早的收。
+    for (int i = 0; i < 60; i += 1) {
+      c.messages.add(LlmMessage.user('第 $i 句 ${'x' * 25000}'));
     }
     await store.save(c);
     expect(c.dropped, greaterThan(0));
-    expect(c.messages.length, greaterThanOrEqualTo(kTranscriptKeep));
-    expect(c.messages.length, lessThan(40));
+    expect(c.messages.length, lessThan(60));
+    expect(messageWeightTotal(c.messages), lessThanOrEqualTo(kTranscriptMaxChars));
 
     final ConversationStore again = ConversationStore(dir);
     await again.load();
