@@ -699,7 +699,23 @@ class _SettingsPageState extends State<SettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 for (final ToolGroup g in kToolGroups) _toolRow(g),
-                _action('打开系统的应用设置', '权限被拒过之后，要在那里改', openAppSettings),
+                _action(
+                  '打开系统的应用设置',
+                  '权限被拒过之后，要在那里改',
+                  openAppSettings,
+                ),
+                if (const PhoneDevice().supported) ...<Widget>[
+                  _action(
+                    '打开通知读取设置',
+                    '系统里那一项叫「通知使用权」',
+                    const PhoneDevice().openNotificationAccess,
+                  ),
+                  _action(
+                    '打开使用情况访问设置',
+                    '系统里那一项叫「使用情况访问」',
+                    const PhoneDevice().openUsageAccess,
+                  ),
+                ],
               ],
             ),
           ),

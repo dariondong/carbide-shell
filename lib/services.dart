@@ -94,6 +94,8 @@ class AppServices {
     'location': <Tool>[WhereAmITool(device)],
     'contacts': <Tool>[FindContactTool(device)],
     'sms': <Tool>[SmsSendTool(device)],
+    'notif': <Tool>[NotifyReadTool(device)],
+    'usage': <Tool>[AppUsageTool(device)],
   };
 
   /// 按现在的开关把扩展的工具挂上或摘下来。

@@ -1,6 +1,8 @@
 package top.theez.carbide_shell
 
 import android.Manifest
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,6 +14,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
 import android.provider.ContactsContract
 import android.provider.Settings
@@ -32,9 +35,115 @@ object Device {
     )
 
     fun has(context: Context, code: String): Boolean {
+        // 这两项不是运行时权限，是系统设置里单独给的「访问权」。
+        if (code == "notif") return notifAccess(context)
+        if (code == "usage") return usageAccess(context)
         val perm = PERMS[code] ?: return false
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         return context.checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** 系统里那条「通知使用权」给没给。 */
+    fun notifAccess(context: Context): Boolean {
+        val flat = try {
+            Settings.Secure.getString(
+                context.contentResolver,
+                "enabled_notification_listeners",
+            )
+        } catch (error: Throwable) {
+            null
+        } ?: return false
+        val me = context.packageName
+        return flat.split(':').any { it.startsWith("$me/") }
+    }
+
+    /** 系统里那条「使用情况访问」给没给。 */
+    fun usageAccess(context: Context): Boolean {
+        val ops = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+            ?: return false
+        val mode = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ops.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                ops.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            }
+        } catch (error: Throwable) {
+            return false
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    /** 应用名。查不到就把包名当名字。 */
+    fun appLabel(context: Context, pkg: String): String {
+        return try {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        } catch (error: Throwable) {
+            pkg
+        }
+    }
+
+    /** 最近这些通知，新的在前。 */
+    fun notifications(limit: Int, minutes: Int): List<Map<String, Any?>> {
+        val span = minutes.coerceIn(1, 1440) * 60_000L
+        val since = System.currentTimeMillis() - span
+        return NotifLog.recent(limit.coerceIn(1, 100), since)
+    }
+
+    /** 每个应用最近用了多久，按分钟算，只留一分钟以上的前十几名。 */
+    fun usage(context: Context, hours: Int): List<Map<String, Any?>> {
+        val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return emptyList()
+        val end = System.currentTimeMillis()
+        val begin = end - hours.coerceIn(1, 72) * 3600_000L
+        val stats = try {
+            manager.queryAndAggregateUsageStats(begin, end)
+        } catch (error: Throwable) {
+            return emptyList()
+        } ?: return emptyList()
+        val out = ArrayList<Map<String, Any?>>()
+        for ((pkg, one) in stats) {
+            val ms = one.totalTimeInForeground
+            if (ms < 60_000L) continue
+            out.add(
+                mapOf(
+                    "app" to appLabel(context, pkg),
+                    "pkg" to pkg,
+                    "minutes" to (ms / 60_000L).toInt(),
+                    "last" to one.lastTimeUsed,
+                ),
+            )
+        }
+        out.sortByDescending { (it["minutes"] as? Int) ?: 0 }
+        return if (out.size > 15) out.subList(0, 15) else out
+    }
+
+    /** 系统里给「通知使用权」的那一页。 */
+    fun openNotifAccess(context: Context) {
+        open(context, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+    }
+
+    /** 系统里给「使用情况访问」的那一页。 */
+    fun openUsageAccess(context: Context) {
+        open(context, Settings.ACTION_USAGE_ACCESS_SETTINGS)
+    }
+
+    private fun open(context: Context, action: String) {
+        try {
+            val intent = Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (error: Throwable) {
+            appSettings(context)
+        }
     }
 
     /** 现在这台机器的样子：机型、电量、网络、存储。不要权限。 */

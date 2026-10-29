@@ -358,3 +358,144 @@ class SmsSendTool extends Tool {
     }
   }
 }
+
+/// `notifications`：最近收到的通知，只看标题和正文。
+class NotifyReadTool extends Tool {
+  NotifyReadTool(this.device);
+
+  final DeviceApi device;
+
+  @override
+  String get name => 'notifications';
+
+  @override
+  String get description =>
+      '读这台手机最近收到的通知：哪个应用、标题、正文、时间。要系统的「通知读取」权。'
+      '没有这项权就如实说要用户去系统设置里打开，不要猜通知内容。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'minutes': <String, Object?>{
+            'type': 'integer',
+            'description': '往回看多少分钟，默认 720（十二小时），最多 1440',
+          },
+          'limit': <String, Object?>{
+            'type': 'integer',
+            'description': '最多几条，默认 20，最多 100',
+          },
+          'app': <String, Object?>{
+            'type': 'string',
+            'description': '只看这个应用，按名字或包名的一段匹配，留空就是全部',
+          },
+        },
+        'required': <String>[],
+      };
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) => ToolRisk.read;
+
+  @override
+  String summarize(Map<String, Object?> args) {
+    final String app = readString(args, 'app').trim();
+    return app.isEmpty ? '读最近的通知' : '读 $app 的通知';
+  }
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    final int minutes = readInt(args, 'minutes', fallback: 720).clamp(1, 1440).toInt();
+    final int limit = readInt(args, 'limit', fallback: 20).clamp(1, 100).toInt();
+    final String key = readString(args, 'app').trim().toLowerCase();
+    try {
+      List<DeviceNotification> list =
+          await device.notifications(limit: limit, minutes: minutes);
+      if (key.isNotEmpty) {
+        list = list
+            .where((DeviceNotification n) =>
+                n.app.toLowerCase().contains(key) || n.pkg.toLowerCase().contains(key))
+            .toList();
+      }
+      if (list.isEmpty) {
+        return ToolOutcome.success(
+          stdout: key.isEmpty
+              ? '这段时间没有收到通知。'
+              : '这段时间没有 $key 的通知，或者通知读取权没给全。',
+        );
+      }
+      final StringBuffer b = StringBuffer('最近 $minutes 分钟里的 ${list.length} 条通知\n');
+      for (final DeviceNotification n in list) {
+        b.writeln(n.line);
+      }
+      return ToolOutcome.success(stdout: b.toString().trimRight());
+    } on DeviceError catch (e) {
+      return ToolOutcome.failure(e.message);
+    }
+  }
+}
+
+/// `app_usage`：每个应用最近用了多久。
+class AppUsageTool extends Tool {
+  AppUsageTool(this.device);
+
+  final DeviceApi device;
+
+  @override
+  String get name => 'app_usage';
+
+  @override
+  String get description =>
+      '看这台手机上每个应用最近用了多久（前台时长），按小时回溯。要系统的「使用情况访问」权。'
+      '问「今天手机用了多久」「哪个应用最占时间」用这个，没有这项权就说没有。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'hours': <String, Object?>{
+            'type': 'integer',
+            'description': '往回看多少小时，默认 24，最多 72',
+          },
+          'top': <String, Object?>{
+            'type': 'integer',
+            'description': '列前几名，默认 8',
+          },
+        },
+        'required': <String>[],
+      };
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) => ToolRisk.read;
+
+  @override
+  String summarize(Map<String, Object?> args) =>
+      '看最近 ${readInt(args, 'hours', fallback: 24)} 小时的应用使用';
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    final int hours = readInt(args, 'hours', fallback: 24).clamp(1, 72).toInt();
+    final int top = readInt(args, 'top', fallback: 8).clamp(1, 15).toInt();
+    try {
+      final List<AppUsage> all = await device.usage(hours: hours);
+      if (all.isEmpty) {
+        return const ToolOutcome.success(
+          stdout: '最近没有记录到应用使用，可能是「使用情况访问」没给，或者这段时间没怎么用。',
+        );
+      }
+      int total = 0;
+      for (final AppUsage u in all) {
+        total += u.minutes;
+      }
+      final int shown = all.length > top ? top : all.length;
+      final StringBuffer b = StringBuffer('最近 $hours 小时的应用前台时长\n');
+      for (int i = 0; i < shown; i += 1) {
+        b.writeln(all[i].line);
+      }
+      b.write('合计 ${AppUsage(minutes: total).span}'
+          '${all.length > shown ? '，还有 ${all.length - shown} 个没列' : ''}。');
+      return ToolOutcome.success(stdout: b.toString());
+    } on DeviceError catch (e) {
+      return ToolOutcome.failure(e.message);
+    }
+  }
+}

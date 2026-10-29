@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 const MethodChannel _channel = MethodChannel('top.theez.carbide_shell/device');
 
 /// 要单独向系统申请的权限。
-enum DevicePerm { sms, location, contacts }
+enum DevicePerm { sms, location, contacts, notification, usageAccess }
 
 extension DevicePermInfo on DevicePerm {
   /// 原生那边认的代号。
@@ -17,6 +17,8 @@ extension DevicePermInfo on DevicePerm {
         DevicePerm.sms => 'sms',
         DevicePerm.location => 'location',
         DevicePerm.contacts => 'contacts',
+        DevicePerm.notification => 'notif',
+        DevicePerm.usageAccess => 'usage',
       };
 
   /// 设置在界面上的名字。
@@ -24,6 +26,8 @@ extension DevicePermInfo on DevicePerm {
         DevicePerm.sms => '短信',
         DevicePerm.location => '位置',
         DevicePerm.contacts => '联系人',
+        DevicePerm.notification => '通知读取',
+        DevicePerm.usageAccess => '使用情况访问',
       };
 }
 
@@ -139,9 +143,84 @@ class DeviceFix {
   }
 }
 
+/// 收到的一条通知。正文里带长文本时取那一段。
+class DeviceNotification {
+  const DeviceNotification({
+    this.app = '',
+    this.pkg = '',
+    this.title = '',
+    this.text = '',
+    this.at,
+  });
+
+  factory DeviceNotification.fromMap(Map<Object?, Object?> m) {
+    final int ms = (m['at'] as num?)?.toInt() ?? 0;
+    return DeviceNotification(
+      app: '${m['app'] ?? ''}',
+      pkg: '${m['pkg'] ?? ''}',
+      title: '${m['title'] ?? ''}',
+      text: '${m['text'] ?? ''}',
+      at: ms > 0 ? DateTime.fromMillisecondsSinceEpoch(ms) : null,
+    );
+  }
+
+  final String app;
+  final String pkg;
+  final String title;
+  final String text;
+  final DateTime? at;
+
+  /// 一行一条：时间、应用、标题加正文。
+  String get line {
+    final DateTime? t = at;
+    String when = '';
+    if (t != null) {
+      final DateTime local = t.toLocal();
+      String two(int n) => n.toString().padLeft(2, '0');
+      when = '${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)} ';
+    }
+    final String who = app.isEmpty ? pkg : app;
+    final String head = title.trim();
+    final String body = text.trim();
+    final String said = head.isEmpty
+        ? body
+        : (body.isEmpty ? head : '$head：$body');
+    return '$when$who $said';
+  }
+}
+
+/// 一个应用最近用了多久。
+class AppUsage {
+  const AppUsage({this.app = '', this.pkg = '', this.minutes = 0, this.last});
+
+  factory AppUsage.fromMap(Map<Object?, Object?> m) {
+    final int ms = (m['last'] as num?)?.toInt() ?? 0;
+    return AppUsage(
+      app: '${m['app'] ?? ''}',
+      pkg: '${m['pkg'] ?? ''}',
+      minutes: (m['minutes'] as num?)?.toInt() ?? 0,
+      last: ms > 0 ? DateTime.fromMillisecondsSinceEpoch(ms) : null,
+    );
+  }
+
+  final String app;
+  final String pkg;
+  final int minutes;
+  final DateTime? last;
+
+  /// 「1 小时 5 分」这种。
+  String get span {
+    if (minutes < 60) return '$minutes 分钟';
+    final int h = minutes ~/ 60;
+    final int m = minutes % 60;
+    return m == 0 ? '$h 小时' : '$h 小时 $m 分';
+  }
+
+  String get line => '${app.isEmpty ? pkg : app}\t$span';
+}
+
 /// 一条联系人：名字加一个号码。
-class DeviceContact {
-  const DeviceContact({required this.name, required this.phone});
+class DeviceContact {  const DeviceContact({required this.name, required this.phone});
 
   factory DeviceContact.fromMap(Map<Object?, Object?> m) => DeviceContact(
         name: '${m['name'] ?? ''}'.trim(),
@@ -192,6 +271,17 @@ abstract class DeviceApi {
   Future<String> clipboard();
 
   Future<void> setClipboard(String text);
+
+  /// 最近收到的通知。没有「通知使用权」时抛 [DeviceError]。
+  Future<List<DeviceNotification>> notifications({int limit = 40, int minutes = 720});
+
+  /// 每个应用最近用了多久。没有「使用情况访问」时抛 [DeviceError]。
+  Future<List<AppUsage>> usage({int hours = 24});
+
+  /// 去系统里那两页。应用不能替用户打开这两项。
+  Future<void> openNotificationAccess();
+
+  Future<void> openUsageAccess();
 }
 
 /// 真的那一个：走原生通道。剪贴板用 Flutter 自带的那套。
@@ -261,8 +351,40 @@ class PhoneDevice implements DeviceApi {
     }
   }
 
-  Future<Object?> _call(String method, [Map<String, Object?>? args]) async {
-    if (!supported) throw const DeviceError('这台机器上没有手机那一套，只有安卓上才有。');
+  @override
+  Future<List<DeviceNotification>> notifications({
+    int limit = 40,
+    int minutes = 720,
+  }) async {
+    final Object? raw = await _call('notifs', <String, Object?>{
+      'limit': limit,
+      'minutes': minutes,
+    });
+    if (raw is! List) return const <DeviceNotification>[];
+    return raw
+        .whereType<Map<Object?, Object?>>()
+        .map(DeviceNotification.fromMap)
+        .toList();
+  }
+
+  @override
+  Future<List<AppUsage>> usage({int hours = 24}) async {
+    final Object? raw = await _call('usage', <String, Object?>{'hours': hours});
+    if (raw is! List) return const <AppUsage>[];
+    return raw
+        .whereType<Map<Object?, Object?>>()
+        .map(AppUsage.fromMap)
+        .toList();
+  }
+
+  @override
+  Future<void> openNotificationAccess() =>
+      _call('openNotifAccess', <String, Object?>{});
+
+  @override
+  Future<void> openUsageAccess() => _call('openUsageAccess', <String, Object?>{});
+
+  Future<Object?> _call(String method, [Map<String, Object?>? args]) async {    if (!supported) throw const DeviceError('这台机器上没有手机那一套，只有安卓上才有。');
     try {
       return await _channel.invokeMethod<Object?>(method, args);
     } on MissingPluginException {

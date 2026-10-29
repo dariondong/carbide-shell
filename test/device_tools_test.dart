@@ -90,6 +90,35 @@ class FakeDevice implements DeviceApi {
   Future<void> setClipboard(String text) async {
     clip = text;
   }
+
+  /// 通知与使用时间的假数据，权限不给就抛。
+  List<DeviceNotification> feed = <DeviceNotification>[];
+  List<AppUsage> spent = <AppUsage>[];
+
+  @override
+  Future<List<DeviceNotification>> notifications({
+    int limit = 40,
+    int minutes = 720,
+  }) async {
+    if (!granted.contains(DevicePerm.notification)) {
+      throw const DeviceError('没有通知读取权限');
+    }
+    return feed.take(limit).toList();
+  }
+
+  @override
+  Future<List<AppUsage>> usage({int hours = 24}) async {
+    if (!granted.contains(DevicePerm.usageAccess)) {
+      throw const DeviceError('没有使用情况访问权限');
+    }
+    return spent;
+  }
+
+  @override
+  Future<void> openNotificationAccess() async {}
+
+  @override
+  Future<void> openUsageAccess() async {}
 }
 
 void main() {
@@ -105,7 +134,9 @@ void main() {
           expect(names.add(t), isTrue, reason: '工具重了：$t');
         }
       }
-      expect(kToolGroups.length, 6);
+      expect(kToolGroups.length, 8);
+      expect(toolGroupOf('notif')?.perm, DevicePerm.notification);
+      expect(toolGroupOf('usage')?.perm, DevicePerm.usageAccess);
       expect(toolGroupOf('sms')?.perm, DevicePerm.sms);
       expect(toolGroupOf('device')?.perm, isNull);
       expect(toolGroupOf('没有这一项'), isNull);
@@ -297,6 +328,57 @@ void main() {
           await ShareTool(phone).run(<String, Object?>{'text': '这条要转出去'}, _ctx);
       expect(out.ok, isTrue);
       expect(phone.shared, <String>['这条要转出去']);
+    });
+  });
+
+  group('通知与使用时间', () {
+    test('没有通知读取权就如实说没有', () async {
+      final ToolOutcome out =
+          await NotifyReadTool(FakeDevice()).run(<String, Object?>{}, _ctx);
+      expect(out.ok, isFalse);
+      expect(out.error, contains('权限'));
+    });
+
+    test('有权限就把时间、应用、标题正文排出来', () async {
+      final FakeDevice phone = FakeDevice(granted: <DevicePerm>{DevicePerm.notification})
+        ..feed = <DeviceNotification>[
+          DeviceNotification(
+            app: '微信',
+            pkg: 'com.tencent.mm',
+            title: '张三',
+            text: '在吗',
+            at: DateTime(2026, 10, 29, 9, 12),
+          ),
+        ];
+      final ToolOutcome out =
+          await NotifyReadTool(phone).run(<String, Object?>{'minutes': 60}, _ctx);
+      expect(out.ok, isTrue);
+      expect(out.stdout, contains('微信'));
+      expect(out.stdout, contains('张三：在吗'));
+      expect(out.stdout, contains('09:12'));
+    });
+
+    test('按应用筛，筛不中就说没这条', () async {
+      final FakeDevice phone = FakeDevice(granted: <DevicePerm>{DevicePerm.notification})
+        ..feed = <DeviceNotification>[
+          const DeviceNotification(app: '微信', pkg: 'com.tencent.mm', title: 'a', text: 'b'),
+        ];
+      final ToolOutcome out = await NotifyReadTool(phone)
+          .run(<String, Object?>{'app': '支付宝'}, _ctx);
+      expect(out.ok, isTrue);
+      expect(out.stdout, contains('没有'));
+    });
+
+    test('使用时间按时长排出来，末尾写合计', () async {
+      final FakeDevice phone = FakeDevice(granted: <DevicePerm>{DevicePerm.usageAccess})
+        ..spent = <AppUsage>[
+          const AppUsage(app: '微信', pkg: 'mm', minutes: 95),
+          const AppUsage(app: '终端', pkg: 'term', minutes: 20),
+        ];
+      final ToolOutcome out = await AppUsageTool(phone).run(<String, Object?>{}, _ctx);
+      expect(out.ok, isTrue);
+      expect(out.stdout, contains('微信\t1 小时 35 分'));
+      expect(out.stdout, contains('合计 1 小时 55 分'));
     });
   });
 }

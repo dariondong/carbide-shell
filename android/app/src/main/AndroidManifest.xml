@@ -14,6 +14,8 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28"/>
+    <!-- 使用情况访问：系统设置里单独给，这里只声明 -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
     <application
         android:label="Carbide Shell"
         android:name="${applicationName}"
@@ -45,6 +47,16 @@
             android:name=".TaskService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+        <!-- 读通知：系统在用户给了「通知使用权」之后才会把它拉起来 -->
+        <service
+            android:name=".CarbideNotificationListener"
+            android:exported="true"
+            android:label="Carbide Shell 通知"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

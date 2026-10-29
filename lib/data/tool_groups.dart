@@ -68,6 +68,20 @@ const List<ToolGroup> kToolGroups = <ToolGroup>[
     tools: <String>['sms_send'],
     perm: DevicePerm.sms,
   ),
+  ToolGroup(
+    id: 'notif',
+    name: '通知',
+    note: '最近收到的通知：哪个应用、标题、正文',
+    tools: <String>['notifications'],
+    perm: DevicePerm.notification,
+  ),
+  ToolGroup(
+    id: 'usage',
+    name: '使用时间',
+    note: '每个应用最近用了多久',
+    tools: <String>['app_usage'],
+    perm: DevicePerm.usageAccess,
+  ),
 ];
 
 /// 按 id 找那一项。找不到就是 null。

@@ -262,6 +262,41 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    "notifs" -> {
+                        if (!Device.has(this, "notif")) {
+                            result.error("no-permission", "没有通知读取权限", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(
+                            Device.notifications(
+                                call.argument<Int>("limit") ?: 40,
+                                call.argument<Int>("minutes") ?: 720,
+                            ),
+                        )
+                    }
+
+                    "usage" -> {
+                        if (!Device.has(this, "usage")) {
+                            result.error("no-permission", "没有使用情况访问权限", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(Device.usage(this, call.argument<Int>("hours") ?: 24))
+                    }
+
+                    "notifAccess" -> result.success(Device.notifAccess(this))
+
+                    "usageAccess" -> result.success(Device.usageAccess(this))
+
+                    "openNotifAccess" -> {
+                        Device.openNotifAccess(this)
+                        result.success(true)
+                    }
+
+                    "openUsageAccess" -> {
+                        Device.openUsageAccess(this)
+                        result.success(true)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -356,6 +391,17 @@ class MainActivity : FlutterActivity() {
 
     /** 设置里打开一项扩展时问一次权限，结果照实回话。 */
     private fun requestDevice(code: String, result: MethodChannel.Result) {
+        // 通知读取和使用情况不是弹框能给的，只能把人送到系统那一页。
+        if (code == "notif") {
+            Device.openNotifAccess(this)
+            result.success(Device.has(this, code))
+            return
+        }
+        if (code == "usage") {
+            Device.openUsageAccess(this)
+            result.success(Device.has(this, code))
+            return
+        }
         val perm = Device.PERMS[code]
         val requestCode = DEVICE_REQ[code]
         if (perm == null || requestCode == null) {
