@@ -117,6 +117,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _mailPass;
   late final TextEditingController _mailFrom;
   late final TextEditingController _mailTo;
+  late final TextEditingController _mailAllow;
   bool _mailOn = false;
   bool _mailSecure = true;
   bool _mailHtml = true;
@@ -146,6 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailPass = TextEditingController();
     _mailFrom = TextEditingController(text: m.from);
     _mailTo = TextEditingController(text: m.to);
+    _mailAllow = TextEditingController(text: m.allowedTo);
     _mailOn = m.enabled;
     _mailSecure = m.secure;
     _mailHtml = m.html;
@@ -200,6 +202,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailPass.dispose();
     _mailFrom.dispose();
     _mailTo.dispose();
+    _mailAllow.dispose();
     super.dispose();
   }
 
@@ -257,6 +260,7 @@ class _SettingsPageState extends State<SettingsPage> {
       user: _mailUser.text.trim(),
       from: _mailFrom.text.trim(),
       to: _mailTo.text.trim(),
+      allowedTo: _mailAllow.text.trim(),
       html: _mailHtml,
     );
     await widget.mail.save();
@@ -989,6 +993,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   controller: _mailTo,
                   label: '收件人',
                   hint: '多个用逗号分开',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailAllow,
+                  label: '还能发给谁',
+                  hint: 'AI 只能在这几张里选，一行一个或不写就只发给上面的',
+                  minLines: 2,
+                  maxLines: 4,
                   onChanged: (_) => _touch(),
                 ),
                 _toggle(

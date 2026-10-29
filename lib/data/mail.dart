@@ -56,10 +56,18 @@ class Mailer {
 
   /// [html] 非空就用它当富文本版（比如一整页排好的报告），空着就按正文自己排。
   /// 设置里把 HTML 版关掉时，两个都不带。
-  Future<SmtpResult> send(String subject, String body, {String html = ''}) async {
-    final SmtpConfig config = store.value;
+  /// [to] 非空就发给它（模型选的那个），空着就发给设置里的默认收件人。
+  Future<SmtpResult> send(String subject, String body,
+      {String html = '', String to = ''}) async {
+    SmtpConfig config = store.value;
     if (!config.ready) {
       return SmtpResult(error: config.missing.isEmpty ? '邮件没配全' : config.missing);
+    }
+    if (to.trim().isNotEmpty) {
+      if (!config.canSendTo(to)) {
+        return SmtpResult(error: '${to.trim()} 不在允许发送的名单里');
+      }
+      config = config.copyWith(to: to.trim());
     }
     final String supplied = html.trim();
     return sendMail(

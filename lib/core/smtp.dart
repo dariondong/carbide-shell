@@ -18,6 +18,7 @@ class SmtpConfig {
     this.user = '',
     this.from = '',
     this.to = '',
+    this.allowedTo = '',
     this.html = true,
   });
 
@@ -38,11 +39,27 @@ class SmtpConfig {
   /// 收件人，多个用逗号或者空格分开。
   final String to;
 
-  List<String> get recipients => to
-      .split(RegExp(r'[,;\s]+'))
-      .map((String s) => s.trim())
-      .where((String s) => s.contains('@'))
-      .toList();
+  /// 除了默认收件人，还允许模型发给谁。同样逗号或者空格分开。
+  /// 空着就只有 [to] 那几个能收。
+  final String allowedTo;
+
+  List<String> get recipients => addressList(to);
+
+  /// 模型可以选的全部收件人：默认那几个在前，加上允许的那几个，去重。
+  List<String> get allowed {
+    final List<String> out = <String>[];
+    for (final String a in <String>[...recipients, ...addressList(allowedTo)]) {
+      if (!out.contains(a)) out.add(a);
+    }
+    return out;
+  }
+
+  /// 这一封能不能发给它。
+  bool canSendTo(String address) {
+    final String a = address.trim().toLowerCase();
+    if (a.isEmpty) return false;
+    return allowed.any((String e) => e.toLowerCase() == a);
+  }
 
   /// 开关开着，而且地址、发件人、收件人都写了。
   bool get ready =>
@@ -65,6 +82,7 @@ class SmtpConfig {
         'user': user,
         'from': from,
         'to': to,
+        'allowedTo': allowedTo,
         'html': html,
       };
 
@@ -76,8 +94,29 @@ class SmtpConfig {
         user: '${json['user'] ?? ''}',
         from: '${json['from'] ?? ''}',
         to: '${json['to'] ?? ''}',
+        allowedTo: '${json['allowedTo'] ?? ''}',
         html: json['html'] != false,
       );
+
+  /// 换掉收件人（模型选的那一个），其余不动。
+  SmtpConfig copyWith({String? to}) => SmtpConfig(
+        enabled: enabled,
+        host: host,
+        port: port,
+        secure: secure,
+        user: user,
+        from: from,
+        to: to ?? this.to,
+        allowedTo: allowedTo,
+        html: html,
+      );
+
+  /// 把逗号、分号、空格分开的一串地址拆出来，只要带 @ 的。
+  static List<String> addressList(String raw) => raw
+      .split(RegExp(r'[,;\s]+'))
+      .map((String s) => s.trim())
+      .where((String s) => s.contains('@'))
+      .toList();
 }
 
 /// 发出去成没成，没成的原因。

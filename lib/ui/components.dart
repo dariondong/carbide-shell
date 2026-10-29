@@ -348,6 +348,7 @@ class ApprovalCard extends StatelessWidget {
         args['url'] ??
         args['note'] ??
         args['text'] ??
+        args['body'] ??
         args['value'] ??
         args['key'];
     final String detail = '${raw ?? ''}';
