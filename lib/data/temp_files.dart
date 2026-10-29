@@ -150,6 +150,12 @@ class TempFiles {
     return f;
   }
 
+  /// 一个还不存在的路径：同名就加 `-2`。从主机取回来时用它，不覆盖已有的那份。
+  File freshNamed(String name) {
+    ensure();
+    return _fresh(cleanName(name));
+  }
+
   Future<TempFile> save(String name, List<int> bytes) async {
     ensure();
     if (bytes.length > maxBytes) {

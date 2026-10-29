@@ -205,6 +205,28 @@ class _TempFilesPageState extends State<TempFilesPage> {
     _toast('传到了 $done');
   }
 
+  /// 从服务器取一个下来：先挑主机、进目录，再点那个文件。
+  Future<void> _fetch() async {
+    if (widget.hosts.hosts.isEmpty) {
+      _toast('还没有主机，先在主机页加一台。');
+      return;
+    }
+    final String? got = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => _FetchSheet(
+        files: widget.files,
+        hosts: widget.hosts,
+        pool: widget.pool,
+      ),
+    );
+    if (got == null || got.isEmpty) return;
+    _load();
+    _toast('取回来了：$got');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -230,6 +252,21 @@ class _TempFilesPageState extends State<TempFilesPage> {
                   const SizedBox(width: 8),
                   Text('${_items.length} 个 · ${tempSize(_total)}', style: C.monoSmall),
                   const Spacer(),
+                  GestureDetector(
+                    onTap: _fetch,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.only(right: 8),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: C.paper2,
+                        borderRadius: BorderRadius.circular(C.radiusSmall),
+                      ),
+                      child: const Icon(Icons.cloud_download_outlined,
+                          size: 17, color: C.ink),
+                    ),
+                  ),
                   GestureDetector(
                     onTap: _add,
                     child: Container(
@@ -846,6 +883,296 @@ class _PreviewSheetState extends State<_PreviewSheet> {
         child: SelectableText(
           body,
           style: C.mono.copyWith(fontSize: 11.5, height: 1.6),
+        ),
+      ),
+    );
+  }
+}
+
+/// 从服务器取一个：挑主机、进目录、点那个文件，落到临时文件区。
+///
+/// 只列名字，不预读内容；点下去才开始走 sftp，块块落盘，失败就说失败。
+class _FetchSheet extends StatefulWidget {
+  const _FetchSheet({
+    required this.files,
+    required this.hosts,
+    required this.pool,
+  });
+
+  final TempFiles files;
+  final HostStore hosts;
+  final SshPool pool;
+
+  @override
+  State<_FetchSheet> createState() => _FetchSheetState();
+}
+
+class _FetchSheetState extends State<_FetchSheet> {
+  final TextEditingController _path = TextEditingController(text: '~');
+  String _hostId = '';
+  List<RemoteItem> _items = <RemoteItem>[];
+  bool _loading = false;
+  bool _busy = false;
+  String _picking = '';
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.hosts.hosts.length == 1) _hostId = widget.hosts.hosts.first.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
+
+  String get _base {
+    final String path = _path.text.trim();
+    if (path.isEmpty) return '';
+    return path.endsWith('/') ? path : '$path/';
+  }
+
+  Future<void> _open() async {
+    final HostEntry? entry = widget.hosts.byId(_hostId);
+    if (entry == null) return;
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final List<RemoteItem> items = await remoteList(widget.pool, entry, _path.text);
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _items = <RemoteItem>[];
+        _error = '列不出来：$e';
+      });
+    }
+  }
+
+  void _up() {
+    final String path = _path.text.trim();
+    if (path.isEmpty || path == '/' || path == '~') return;
+    final String trimmed = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    final int cut = trimmed.lastIndexOf('/');
+    final String next = cut <= 0 ? '/' : trimmed.substring(0, cut);
+    setState(() => _path.text = next);
+    _open();
+  }
+
+  Future<void> _enter(RemoteItem item) async {
+    if (item.dir) {
+      setState(() => _path.text = '$_base${item.name}/');
+      await _open();
+      return;
+    }
+    final HostEntry? entry = widget.hosts.byId(_hostId);
+    if (entry == null) {
+      setState(() => _error = '先点一下主机。');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _picking = item.name;
+      _error = '';
+    });
+    try {
+      final File target = widget.files.freshNamed(item.name);
+      final int bytes =
+          await sftpDownload(widget.pool, entry, '$_base${item.name}', target);
+      if (!mounted) return;
+      final String rel = target.path.substring(widget.files.root.path.length + 1);
+      Navigator.of(context).pop('$rel（${tempSize(bytes)}）');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _picking = '';
+        _error = '取不回来：$e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<HostEntry> hosts = widget.hosts.hosts;
+    final double height = MediaQuery.sizeOf(context).height * 0.74;
+    return SheetCard(
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SheetHead(
+              title: '从服务器取',
+              note: '点目录进去，点文件取回来',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final HostEntry h in hosts) _hostChip(h),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                _pathChip('上一级', _busy ? null : _up),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: C.paper2,
+                      borderRadius: BorderRadius.circular(C.radiusSmall),
+                    ),
+                    child: TextField(
+                      controller: _path,
+                      enabled: !_busy,
+                      style: C.mono.copyWith(fontSize: 12),
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: (_) => _open(),
+                      decoration: const InputDecoration(hintText: '/var/log'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _pathChip('去', _busy ? null : _open),
+              ],
+            ),
+            if (_error.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(_error,
+                  style: const TextStyle(
+                      fontSize: 12, height: 1.5, color: Color(0xFFD7443E))),
+            ],
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 1.8, color: C.blue),
+                      ),
+                    )
+                  : _items.isEmpty
+                      ? Center(
+                          child: Text('这个目录是空的，或者读不了。',
+                              style: C.monoSmall.copyWith(color: C.grey2)),
+                        )
+                      : ListView.builder(
+                          itemCount: _items.length,
+                          itemBuilder: (BuildContext ctx, int i) => _row(_items[i]),
+                        ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: SquareButton(
+                    label: '关闭',
+                    tone: 'ink',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SquareButton(
+                    label: _busy ? '正在取' : '刷新',
+                    filled: true,
+                    onPressed: _busy ? null : _open,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _hostChip(HostEntry h) {
+    final bool on = h.id == _hostId;
+    return GestureDetector(
+      onTap: _busy
+          ? null
+          : () {
+              setState(() => _hostId = h.id);
+              _open();
+            },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? C.blue : C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: on ? C.blue : C.rule2),
+        ),
+        child: Text(h.name,
+            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+      ),
+    );
+  }
+
+  Widget _pathChip(String label, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: C.card,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: C.rule2),
+        ),
+        child: Text(label,
+            style: TextStyle(fontSize: 12, color: onTap == null ? C.grey2 : C.ink)),
+      ),
+    );
+  }
+
+  Widget _row(RemoteItem item) {
+    final bool busy = _busy && _picking == item.name;
+    return InkWell(
+      onTap: _busy ? null : () => _enter(item),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              item.dir ? Icons.folder_outlined : Icons.insert_drive_file_outlined,
+              size: 15,
+              color: item.dir ? C.blue : C.grey,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: C.mono.copyWith(fontSize: 12, color: C.ink),
+              ),
+            ),
+            if (busy)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: C.blue),
+              )
+            else if (!item.dir)
+              const Icon(Icons.download_rounded, size: 15, color: C.grey2),
+          ],
         ),
       ),
     );

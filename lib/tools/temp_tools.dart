@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -74,14 +75,12 @@ Future<TempUpload> sftpUpload(
 
 class TempUpload {
   const TempUpload({required this.path, required this.bytes, required this.host});
-
   final String path;
   final int bytes;
   final String host;
 }
 
-HostEntry? hostForUpload(HostStore hosts, String name) {
-  final String wanted = name.trim();
+HostEntry? hostForUpload(HostStore hosts, String name) {  final String wanted = name.trim();
   if (wanted.isNotEmpty) return hosts.byName(wanted);
   if (hosts.hosts.length == 1) return hosts.hosts.first;
   return null;
@@ -125,6 +124,60 @@ Future<int> sftpDownload(
   await file.close();
   return total;
 }
+
+/// 远端目录里的一条。名字后面带 `/` 的是目录，这里把它拆成了两个字段。
+class RemoteItem {
+  const RemoteItem({required this.name, required this.dir});
+
+  final String name;
+  final bool dir;
+
+  String get label => dir ? '$name/' : name;
+}
+
+/// 列一个远端目录：只取名字，不取内容，目录名尾上带 `/`。
+///
+/// `~` 换成 `$HOME` 再拼路径，单引号包住的部分不会展开。
+Future<List<RemoteItem>> remoteList(
+  SshPool pool,
+  HostEntry entry,
+  String dir,
+) async {
+  final SSHClient client = await pool.connect(entry);
+  final SSHRunResult result = await client
+      .runWithResult('LC_ALL=C ls -1pA -- ${_targetOf(dir)}')
+      .timeout(const Duration(seconds: 20));
+  if (result.exitCode != 0) {
+    final String err = utf8.decode(result.stderr, allowMalformed: true).trim();
+    throw StateError(err.isEmpty ? '列不出来：${dir.isEmpty ? '~' : dir}' : err);
+  }
+  final List<RemoteItem> out = <RemoteItem>[];
+  for (final String raw
+      in utf8.decode(result.stdout, allowMalformed: true).split('\n')) {
+    final String name = raw.trimRight();
+    if (name.isEmpty || name == './' || name == '../') continue;
+    final bool isDir = name.endsWith('/');
+    out.add(RemoteItem(
+      name: isDir ? name.substring(0, name.length - 1) : name,
+      dir: isDir,
+    ));
+  }
+  out.sort((RemoteItem a, RemoteItem b) {
+    if (a.dir != b.dir) return a.dir ? -1 : 1;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+  return out;
+}
+
+/// 一个路径拼成 shell 认的样子：`~` 要展开，其余部分单引号包住。
+String _targetOf(String dir) {
+  final String path = dir.trim().isEmpty ? '~' : dir.trim();
+  if (path == '~') return '"\$HOME"';
+  if (path.startsWith('~/')) return '"\$HOME"/${_quote(path.substring(2))}';
+  return _quote(path);
+}
+
+String _quote(String text) => "'${text.replaceAll("'", "'\\''")}'";
 
 /// 把主机上的一个文件拉回临时文件区。
 ///
