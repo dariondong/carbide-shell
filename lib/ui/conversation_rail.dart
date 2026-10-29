@@ -85,7 +85,7 @@ class ConversationRail extends StatelessWidget {
       PetMood.working => '${hub.runningCount} 场在跑',
       PetMood.thinking => '等你点一下',
       PetMood.sleeping => '没事干，睡一会儿',
-      PetMood.idle => '待机',
+      _ => '待机',
     };
     return Container(
       width: double.infinity,

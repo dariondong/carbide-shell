@@ -68,7 +68,7 @@ class _HostsPageState extends State<HostsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      PetAvatar(size: 104),
+                      PetAvatar(size: 104, mood: PetMood.curious),
                       SizedBox(height: 14),
                       Text(
                         '还没有主机。加一台，密钥只留在本机。',

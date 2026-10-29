@@ -100,7 +100,7 @@ class _MemoryPageState extends State<MemoryPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          const PetAvatar(size: 96),
+                          const PetAvatar(size: 96, mood: PetMood.curious),
                           const SizedBox(height: 12),
                           Text(
                             _scope == MemoryBook.globalScope

@@ -31,6 +31,7 @@ class _Palette {
     required this.snackBg,
     required this.snackFg,
     required this.select,
+    required this.petPlate,
     required this.shadows,
   });
 
@@ -81,6 +82,9 @@ class _Palette {
   final Color snackFg;
   final Color select;
 
+  /// 小猫立绘底下垫的那一块。浅色底上不垫，所以是透明的。
+  final Color petPlate;
+
   final List<BoxShadow> shadows;
 }
 
@@ -110,6 +114,7 @@ const _Palette _light = _Palette(
   snackBg: Color(0xFF1A1C1F),
   snackFg: Color(0xFFFFFFFF),
   select: Color(0x333355E8),
+  petPlate: Color(0x00000000),
   shadows: <BoxShadow>[
     BoxShadow(color: Color(0x0F181C23), blurRadius: 2, offset: Offset(0, 1)),
     BoxShadow(color: Color(0x0D181C23), blurRadius: 16, offset: Offset(0, 6)),
@@ -144,6 +149,7 @@ const _Palette _dark = _Palette(
   snackBg: Color(0xFF2A2F37),
   snackFg: Color(0xFFF2F3F5),
   select: Color(0x558FA6FF),
+  petPlate: Color(0x33E8E6E1),
   shadows: <BoxShadow>[
     BoxShadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
     BoxShadow(color: Color(0x4D000000), blurRadius: 16, offset: Offset(0, 6)),
@@ -205,6 +211,9 @@ class C {
   static Color get scrim => _palette.scrim;
   static Color get snackBg => _palette.snackBg;
   static Color get snackFg => _palette.snackFg;
+
+  /// 宠物立绘底下的垫底色。浅色那套是透明的，只有夜里要垫。
+  static Color get petPlate => _palette.petPlate;
 
   static const double radius = 14;
   static const double radiusSmall = 10;

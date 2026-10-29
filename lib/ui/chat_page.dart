@@ -973,6 +973,7 @@ class _ChatPageState extends State<ChatPage> {
             mood: petMoodNow(
               running: widget.hub.runningCount > 0,
               waiting: widget.hub.waitingOnes.isNotEmpty,
+              greeting: true,
             ),
             showState: true,
           ),
@@ -1938,13 +1939,27 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
     }
   }
 
+  /// 四步各配一张：在等模型、在跑命令、在等你、在收尾。
+  PetMood get _mood {
+    switch (widget.phase) {
+      case AgentPhase.thinking:
+        return PetMood.loading;
+      case AgentPhase.acting:
+        return PetMood.working;
+      case AgentPhase.waiting:
+        return PetMood.thinking;
+      case AgentPhase.idle:
+        return PetMood.happy;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 34, bottom: 14),
       child: Row(
         children: <Widget>[
-          const PetAvatar(size: 24, mood: PetMood.thinking, showState: false),
+          PetAvatar(size: 30, mood: _mood, showState: false),
           const SizedBox(width: 8),
           AnimatedBuilder(
             animation: _pulse,

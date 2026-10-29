@@ -90,7 +90,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const PetAvatar(size: 112),
+          const PetAvatar(size: 112, mood: PetMood.waving),
           const SizedBox(height: 14),
           const Text('还没有对话',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),

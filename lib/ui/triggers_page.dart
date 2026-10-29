@@ -142,7 +142,7 @@ class _TriggersPageState extends State<TriggersPage> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
                 children: <Widget>[
                   if (_list.isEmpty) ...<Widget>[
-                    const PetAvatar(size: 84),
+                    const PetAvatar(size: 84, mood: PetMood.curious),
                     const SizedBox(height: 10),
                     Text(
                       '还没有触发器。加一条试试：手机插上电时发一句通知，或者来了某个关键词的通知就让模型先看一眼。',

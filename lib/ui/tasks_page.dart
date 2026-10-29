@@ -131,6 +131,22 @@ class _TasksPageState extends State<TasksPage> {
     return h == null ? '主机已删除' : h.name;
   }
 
+  /// 这些任务最近一轮跑成什么样：有失败的就皱眉，都成了就高兴一下，还没跑过就接着睡。
+  static PetMood _taskMood(List<ScheduledTask> list) {
+    bool failed = false;
+    bool done = false;
+    for (final ScheduledTask task in list) {
+      if (task.runs.isEmpty) continue;
+      if (task.runs.first.ok) {
+        done = true;
+      } else {
+        failed = true;
+      }
+    }
+    if (failed) return PetMood.error;
+    return done ? PetMood.celebrating : PetMood.sleeping;
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<ScheduledTask> list = _list;
@@ -189,10 +205,17 @@ class _TasksPageState extends State<TasksPage> {
             children: <Widget>[
               _triggerEntry(),
               const SizedBox(height: 18),
-              const SectionLabel('定时任务'),
+              Row(
+                children: <Widget>[
+                  const SectionLabel('定时任务'),
+                  const Spacer(),
+                  // 右边那只按最近一轮跑成什么样换姿势：都成了就高兴，有失败的就皱眉。
+                  if (list.isNotEmpty) PetAvatar(size: 44, mood: _taskMood(list)),
+                ],
+              ),
               const SizedBox(height: 8),
               if (list.isEmpty && _watchList.isEmpty) ...<Widget>[
-                const PetAvatar(size: 84),
+                const PetAvatar(size: 84, mood: PetMood.sleeping),
                 const SizedBox(height: 10),
               ],
               if (list.isEmpty)
