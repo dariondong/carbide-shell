@@ -849,8 +849,10 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// 一轮里带的照片：小图排一行，点开看大图。
+  /// 一轮里带的照片：一张就大一点，几张就排成方阵，点开看大图。
   Widget _photoStrip(List<String> photos) {
+    final bool single = photos.length == 1;
+    const double small = 96;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -861,8 +863,8 @@ class _ChatPageState extends State<ChatPage> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(C.radiusSmall),
               child: Container(
-                width: 92,
-                height: 92,
+                width: single ? 220 : small,
+                height: single ? 165 : small,
                 decoration: BoxDecoration(
                   color: C.paper2,
                   border: Border.all(color: C.rule2),
@@ -1202,62 +1204,106 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
           ),
-        if (_attachNames.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: <Widget>[
-                for (int i = 0; i < _attachNames.length; i += 1)
-                  Container(
-                    padding: EdgeInsets.fromLTRB(
-                        i < _attachPhotos.length && _attachPhotos[i].isNotEmpty ? 4 : 10,
-                        4,
-                        6,
-                        4),
-                    decoration: BoxDecoration(
-                      color: C.blueSoft,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        if (i < _attachPhotos.length && _attachPhotos[i].isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: _photoImage(_attachPhotos[i], fit: BoxFit.cover),
-                              ),
-                            ),
-                          ),
-                        Text(_attachNames[i],
-                            style: C.monoSmall.copyWith(color: C.blue, fontSize: 10.5)),
-                        GestureDetector(
-                          onTap: () => setState(() {
-                            _attachNames.removeAt(i);
-                            if (i < _images.length) _images.removeAt(i);
-                            if (i < _attachPhotos.length) _attachPhotos.removeAt(i);
-                          }),
-                          child: const Padding(
-                            padding: EdgeInsets.only(left: 6),
-                            child: Icon(Icons.close, size: 13, color: C.blue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        if (_attachNames.isNotEmpty) _attachRow(),
         _composer(loop),
       ],
     );
+  }
+
+  /// 输入条上面那一条：带进来的东西排成一排小方块，图片给缩略图，文本给图标。
+  Widget _attachRow() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: <Widget>[
+          for (int i = 0; i < _attachNames.length; i += 1) _attachTile(i),
+        ],
+      ),
+    );
+  }
+
+  Widget _attachTile(int i) {
+    final String name = _attachNames[i];
+    final String photo = i < _attachPhotos.length ? _attachPhotos[i] : '';
+    final bool image = photo.isNotEmpty;
+    return SizedBox(
+      width: 62,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 62,
+            height: 62,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                Container(
+                  width: 62,
+                  height: 62,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: C.paper2,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                    border: Border.all(color: C.rule2),
+                  ),
+                  child: image
+                      ? _photoImage(photo, fit: BoxFit.cover)
+                      : Center(
+                          child: Icon(_attachIcon(name), size: 22, color: C.grey),
+                        ),
+                ),
+                Positioned(
+                  right: -6,
+                  top: -6,
+                  child: GestureDetector(
+                    onTap: () => _dropAttach(i),
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: C.ink,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: C.paper, width: 1.5),
+                      ),
+                      child: const Icon(Icons.close, size: 11, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: C.monoSmall.copyWith(fontSize: 9.5, color: C.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 去掉一个附件。图片按内容从 `_images` 里拿，不按下标，
+  /// 否则前面夹一个文本文件，后面那张图就会被错删。
+  void _dropAttach(int i) {
+    final String photo = i < _attachPhotos.length ? _attachPhotos[i] : '';
+    setState(() {
+      _attachNames.removeAt(i);
+      if (photo.isNotEmpty) _images.remove(photo);
+      if (i < _attachPhotos.length) _attachPhotos.removeAt(i);
+    });
+  }
+
+  IconData _attachIcon(String name) {
+    final String lower = name.toLowerCase();
+    if (lower.endsWith('.md') || lower.endsWith('.markdown')) return Icons.article_outlined;
+    if (lower.endsWith('.docx')) return Icons.description_outlined;
+    return Icons.insert_drive_file_outlined;
   }
 
   /// 输入条。框跟着焦点亮，左边加东西，右边发或者停，写完没发可以一键清掉。
