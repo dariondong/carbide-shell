@@ -10,7 +10,6 @@ import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/docx.dart';
 import '../core/models.dart';
-import '../core/plan.dart';
 import '../data/hub.dart';
 import '../services.dart';
 import '../tools/ask_tool.dart';
@@ -19,6 +18,7 @@ import 'md_text.dart';
 import 'motion.dart';
 import 'output_preview.dart';
 import 'pet.dart';
+import 'plan_bar.dart';
 import 'temp_files_page.dart';
 import 'theme.dart';
 import 'trace_page.dart';
@@ -446,104 +446,6 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// 对话顶上那张计划卡：一句话的目标，加几步清单。做完划勾，在做的那一步是墨蓝。
-  Widget _planCard(WorkPlan plan) {
-    final List<PlanStep> steps = plan.steps;
-    final bool narrow = steps.length > 8;
-    final int shown = narrow ? 8 : steps.length;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          color: C.card,
-          borderRadius: BorderRadius.circular(C.radiusSmall),
-          border: Border.all(color: plan.finished ? C.rule : C.blueSoft),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(
-                  plan.finished ? Icons.flag_rounded : Icons.checklist_rtl,
-                  size: 13,
-                  color: plan.finished ? C.grey : C.blue,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  plan.finished ? '这件事做完了' : '这一趟的计划',
-                  style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.4),
-                ),
-                const Spacer(),
-                Text(plan.headline, style: C.monoSmall.copyWith(fontSize: 10)),
-              ],
-            ),
-            if (plan.goal.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 8),
-              Text(
-                plan.goal,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: C.ink, height: 1.4),
-              ),
-            ],
-            const SizedBox(height: 8),
-            for (int i = 0; i < shown; i += 1) _planStep(steps[i]),
-            if (narrow)
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Text('还有 ${steps.length - shown} 步',
-                    style: C.monoSmall.copyWith(color: C.grey2, fontSize: 10.5)),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _planStep(PlanStep step) {
-    final Widget mark = switch (step.state) {
-      PlanState.done => const Icon(Icons.check_circle, size: 13, color: Color(0xFF3FA96B)),
-      PlanState.doing => Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(color: C.blue, shape: BoxShape.circle),
-        ),
-      PlanState.todo => Container(
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(color: C.rule2, shape: BoxShape.circle),
-        ),
-    };
-    final Color color = switch (step.state) {
-      PlanState.done => C.grey2,
-      PlanState.doing => C.ink,
-      PlanState.todo => C.body,
-    };
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(width: 16, height: 18, child: Center(child: mark)),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              step.title,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.45,
-                color: color,
-                fontWeight:
-                    step.state == PlanState.doing ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 加号先问一句：这一条消息带文件，还是去临时文件区。
   Future<void> _attachSheet() async {
     final bool running = _running;
@@ -742,7 +644,6 @@ class _ChatPageState extends State<ChatPage> {
     if (dropped > 0) {
       rows.add(_Row(_RowKind.trim, text: '更早的 $dropped 条已收起'));
     }
-    if (widget.conversation.plan != null) rows.add(const _Row(_RowKind.plan));
     for (final LlmMessage m in _messages) {
       if (m.role == LlmRole.user) {
         rows.add(_Row(_RowKind.user, message: m));
@@ -756,6 +657,10 @@ class _ChatPageState extends State<ChatPage> {
         }
         if (m.calls.isNotEmpty) rows.add(_Row(_RowKind.tool, message: m));
       }
+    }
+    // 没活干的时候，记录最后面躺一只睡着的。
+    if (!_running && rows.isNotEmpty && rows.last.kind != _RowKind.empty) {
+      rows.add(const _Row(_RowKind.pet));
     }
     final String partial = _loop?.partial ?? '';
     if (partial.isNotEmpty) {
@@ -803,8 +708,8 @@ class _ChatPageState extends State<ChatPage> {
         );
       case _RowKind.summary:
         return _summaryCard(r.message!.text.substring(kCompactMark.length).trim());
-      case _RowKind.plan:
-        return _planCard(widget.conversation.plan!);
+      case _RowKind.pet:
+        return _sleepingCat();
       case _RowKind.thinking:
         return _ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking);
       case _RowKind.empty:
@@ -965,6 +870,17 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// 没活干的时候，记录末尾右边躺一只睡着的小猫。
+  Widget _sleepingCat() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: PetAvatar(size: 64, mood: PetMood.sleeping),
+      ),
+    );
+  }
+
   Widget _empty() {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -1112,11 +1028,6 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
               const SizedBox(width: 2),
-              PetAvatar(
-                size: 26,
-                mood: petMoodNow(running: _running, waiting: _pending != null || _live?.pendingAsk != null),
-              ),
-              const SizedBox(width: 7),
               Expanded(child: _heading()),
               _statusPill(loop),
               const SizedBox(width: 4),
@@ -1141,6 +1052,7 @@ class _ChatPageState extends State<ChatPage> {
             ],
           ),
         ),
+        if (widget.conversation.plan != null) PlanBar(plan: widget.conversation.plan!),
         Expanded(
           child: Stack(
             children: <Widget>[
@@ -1439,7 +1351,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// 一行的身份与内容。不拿 Widget 当缓存，状态一变也不必把整份记录重造。
-enum _RowKind { trim, summary, plan, user, answer, tool, streaming, thinking, empty }
+enum _RowKind { trim, summary, user, answer, tool, streaming, thinking, pet, empty }
 
 class _Row {
   const _Row(this.kind, {this.message, this.text = ''});
