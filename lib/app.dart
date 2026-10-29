@@ -28,7 +28,6 @@ import 'ui/temp_files_page.dart';
 import 'ui/usage_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
-import 'ui/triggers_page.dart';
 
 class CarbideApp extends StatelessWidget {
   const CarbideApp({

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../core/params.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
 import '../core/openai.dart';
