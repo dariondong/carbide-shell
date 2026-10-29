@@ -11,6 +11,7 @@ import 'core/models.dart';
 import 'core/memory.dart';
 import 'core/policy.dart';
 import 'data/activity.dart';
+import 'data/env_keys.dart';
 import 'data/foreground.dart';
 import 'data/hosts.dart';
 import 'data/hub.dart';
@@ -67,6 +68,10 @@ Future<void> main() async {
   final MailStore mail = MailStore(File('${dir.path}/mail.json'), secrets);
   await mail.load();
 
+  // 环境密钥：名字与日志在 JSON 里，值走安全存储。
+  final EnvBook env = EnvBook(File('${dir.path}/env_keys.json'), secrets);
+  await env.load();
+
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard(styleOf: () => settings.value.notifStyle);
 
@@ -82,6 +87,7 @@ Future<void> main() async {
     watches: watches,
     usage: usage,
     mail: mail,
+    env: env,
     workspace: workspace.path,
     files: TempFiles(workspace),
   );

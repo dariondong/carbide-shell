@@ -7,6 +7,7 @@ import 'core/plan.dart';
 import 'core/policy.dart';
 import 'core/tools.dart';
 import 'data/device.dart';
+import 'data/env_keys.dart';
 import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/mail.dart';
@@ -20,6 +21,7 @@ import 'tools/ask_tool.dart';
 import 'tools/clock_tool.dart';
 import 'tools/device_tools.dart';
 import 'tools/diff_tool.dart';
+import 'tools/env_tool.dart';
 import 'tools/host_tools.dart';
 import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
@@ -57,6 +59,7 @@ class AppServices {
     required this.watches,
     required this.usage,
     required this.mail,
+    required this.env,
     required this.workspace,
     required this.files,
     DeviceApi? device,
@@ -79,6 +82,9 @@ class AppServices {
 
   /// 邮箱通知：定时任务跑完、监听过线时顺手发一封。
   final MailStore mail;
+
+  /// 环境密钥：名字与日志在本地，值在安全存储里。
+  final EnvBook env;
   final String workspace;
 
   /// 临时文件区：模型写文件、用户往里放文件、两个都把文件传到主机。
@@ -139,6 +145,10 @@ class AppServices {
         },
       ))
       ..register(NotifyTool())
+      ..register(EnvListTool(env))
+      ..register(EnvSetTool(env))
+      ..register(EnvDeleteTool(env))
+      ..register(EnvRequestTool(env, settings))
       ..register(MailSendTool(mail, files: files))
       ..register(ReportRenderTool(files))
       ..register(RenderCheckTool(files))

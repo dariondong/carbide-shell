@@ -16,6 +16,7 @@ import 'ui/components.dart';
 import 'ui/conversation_actions.dart';
 import 'ui/conversation_rail.dart';
 import 'ui/conversations_page.dart';
+import 'ui/env_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/motion.dart';
@@ -194,6 +195,15 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openEnv() {
+    final AppServices s = widget.services;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EnvPage(env: s.env),
+      ),
+    );
+  }
+
   /// 设置页那一行右边写文件区的轻重，读一眼目录就够。
   String _filesSummary() {
     try {
@@ -293,7 +303,11 @@ class _HomeShellState extends State<HomeShell> {
                       onOpenAbout: _openAbout,
                       onOpenUsage: _openUsage,
                       onOpenFiles: _openFiles,
+                      onOpenEnv: _openEnv,
                       filesSummary: _filesSummary(),
+                      envSummary: widget.services.env.all.isEmpty
+                          ? '还没存'
+                          : '${widget.services.env.all.length} 把',
                       usage: s.usage,
                       mail: s.mail,
                     ),

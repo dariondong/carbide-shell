@@ -38,6 +38,8 @@ class SettingsPage extends StatefulWidget {
     required this.onOpenAbout,
     required this.onOpenUsage,
     required this.onOpenFiles,
+    required this.onOpenEnv,
+    required this.envSummary,
     required this.filesSummary,
     required this.usage,
     required this.mail,
@@ -55,6 +57,12 @@ class SettingsPage extends StatefulWidget {
 
   /// 临时文件区是单独一页，设置里留一个入口。
   final VoidCallback onOpenFiles;
+
+  /// 环境密钥也是一页，名字和日志在本地，值在安全存储里。
+  final VoidCallback onOpenEnv;
+
+  /// 那一行右边写存了几把。
+  final String envSummary;
 
   /// 那一行右边写「N 个 · 总量」，进页面前就知道里面轻重。
   final String filesSummary;
@@ -434,6 +442,25 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               const SizedBox(width: 10),
                               Text(widget.filesSummary, style: C.monoSmall),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const RuleLine(),
+                      InkWell(
+                        onTap: widget.onOpenEnv,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                          child: Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text('环境密钥',
+                                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(widget.envSummary, style: C.monoSmall),
                               const SizedBox(width: 6),
                               const Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
