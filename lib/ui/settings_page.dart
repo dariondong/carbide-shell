@@ -83,6 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
   int _context = 60000;
   bool _stream = true;
   bool _autoUpdate = true;
+  bool _autoCompact = true;
 
   String _picked = '';
   String _saved = '';
@@ -141,6 +142,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _context = s.contextChars;
     _stream = s.stream;
     _autoUpdate = s.autoCheckUpdate;
+    _autoCompact = s.autoCompact;
     _notifStyle = s.notifStyle;
     _loadKey(s.activeProfile);
     _readNotify();
@@ -220,6 +222,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ..systemPrompt = _sys.text.trim()
       ..answerFont = _font
       ..autoCheckUpdate = _autoUpdate
+      ..autoCompact = _autoCompact
       ..notifStyle = _notifStyle
       ..allowedDomains = _domains.text
           .split(RegExp(r'[\s,]+'))
@@ -768,6 +771,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   _stream,
                   '关掉就是整段一次出来',
                   (bool v) => _apply(() => _stream = v),
+                ),
+                _toggle(
+                  '长了自动压一次',
+                  _autoCompact,
+                  '记录超过预算几倍时，前面的收成一段摘要',
+                  (bool v) => _apply(() => _autoCompact = v),
                 ),
                 _choices<double>(
                   '回答字号',

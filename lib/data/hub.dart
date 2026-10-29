@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/agent.dart';
+import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/usage.dart';
 import '../core/llm_base.dart';
@@ -201,6 +202,8 @@ class SessionHub extends ChangeNotifier {
     final int wasTokens = loop.tokens;
     final int wasCached = loop.cachedTokens;
     changed();
+    // 记录长得太离谱就先压一次，不然这一轮要把几十万字重新发一遍。
+    await _maybeCompact(live);
     board.note('c:${live.conversation.id}', '${live.conversation.title} · 开跑');
     try {
       return await loop.send(text, cancel: live.cancel, images: images);
@@ -250,6 +253,63 @@ class SessionHub extends ChangeNotifier {
   void stop(LiveSession live) {
     live.cancel?.cancel();
     live.decide(false);
+  }
+
+  /// 记录长到这个份上就该收了。按上下文的倍数算，下限十几万字，
+  /// 免得短对话也被拉着压一次。
+  static const int kAutoCompactFloor = 120000;
+
+  Future<void> _maybeCompact(LiveSession live) async {
+    if (!services.settings.value.autoCompact) return;
+    int total = 0;
+    for (final LlmMessage m in live.conversation.messages) {
+      total += messageWeight(m);
+    }
+    final int limit = (live.loop.maxContextChars * 3).clamp(kAutoCompactFloor, 900000);
+    if (total <= limit) return;
+    if (compactCut(live.conversation.messages) <= 0) return;
+    await _compact(live);
+  }
+
+  /// 把前面那一段收成一段摘要。跑着的时候不动它，模型不回话就什么都不改。
+  /// 返回摘要本身，空串表示没压。
+  Future<String> compact(LiveSession live) async {
+    if (live.running) return '';
+    live.running = true;
+    live.cancel = CancelToken();
+    changed();
+    try {
+      return await _compact(live);
+    } finally {
+      live.running = false;
+      live.cancel = null;
+      changed();
+    }
+  }
+
+  Future<String> _compact(LiveSession live) async {
+    final Conversation c = live.conversation;
+    final int cut = compactCut(c.messages);
+    if (cut <= 0) return '';
+    final String ask = compactPrompt(c.messages.sublist(0, cut));
+    LlmReply reply;
+    try {
+      reply = await live.loop.llm.chat(
+        system: kCompactSystem,
+        messages: <LlmMessage>[LlmMessage.user(ask)],
+        tools: const <ToolSpec>[],
+      );
+    } catch (_) {
+      return '';
+    }
+    final String text = reply.text.trim();
+    if (text.isEmpty) return '';
+    c.messages.removeRange(0, cut);
+    c.messages.insert(0, LlmMessage.assistant('$kCompactMark\n$text'));
+    c.dropped += cut;
+    live.loop.onHistoryChanged();
+    await services.persist(c);
+    return text;
   }
 
   /// 对话被删掉了，把它手里的东西也收走。

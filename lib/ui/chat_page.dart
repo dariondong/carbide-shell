@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
+import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/docx.dart';
 import '../core/models.dart';
@@ -348,6 +349,100 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// 顶栏那三颗里的第一颗：这个对话自己的事，提示词和压缩。
+  Future<void> _moreSheet() async {
+    final int cut = compactCut(_messages);
+    final String? pick = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => SheetCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('这场对话',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
+            const SizedBox(height: 3),
+            Text('压缩只动更早的那些，后面几条原样留着。', style: C.monoSmall),
+            const SizedBox(height: 14),
+            _sheetRow(
+              Icons.tune,
+              '这场对话的提示词',
+              widget.conversation.systemPrompt.trim().isEmpty ? '现在跟设置走' : '用自己的一份',
+              true,
+              () => Navigator.of(ctx).pop('prompt'),
+            ),
+            const SizedBox(height: 8),
+            _sheetRow(
+              Icons.compress,
+              '压缩对话',
+              cut <= 0
+                  ? '前面对话还短，不用压'
+                  : (_running ? '这一轮还在跑，跑完再压' : '把前面 $cut 条收成一段摘要'),
+              cut > 0 && !_running,
+              () => Navigator.of(ctx).pop('compact'),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    if (pick == 'prompt') {
+      await _editPrompt();
+      return;
+    }
+    await _compact();
+  }
+
+  /// 把更早的那一段交给模型收成一段摘要：原文从记录里删掉，留下的那一段代替它。
+  Future<void> _compact() async {
+    final LiveSession? live = _live;
+    if (live == null) return;
+    if (_running) {
+      _toast('这一轮还在跑，跑完再压。');
+      return;
+    }
+    final int cut = compactCut(_messages);
+    if (cut <= 0) {
+      _toast('这场对话还短，不用压缩。');
+      return;
+    }
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('压缩这场对话？',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text('前面的 $cut 条会收成一段摘要，原文不再留在记录里。后面几条不动。',
+            style: const TextStyle(fontSize: 13, height: 1.6)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('压缩', style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final String note = await widget.hub.compact(live);
+    if (!mounted) return;
+    setState(() {});
+    _toast(note.isEmpty ? '没压成，模型没回话。' : '前面 $cut 条收成一段摘要了。');
+  }
+
+  Widget _summaryCard(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: _SummaryCard(text: text),
+    );
+  }
+
   /// 加号先问一句：这一条消息带文件，还是去临时文件区。
   Future<void> _attachSheet() async {
     final bool running = _running;
@@ -550,6 +645,10 @@ class _ChatPageState extends State<ChatPage> {
       if (m.role == LlmRole.user) {
         rows.add(_Row(_RowKind.user, message: m));
       } else if (m.role == LlmRole.assistant) {
+        if (m.text.startsWith(kCompactMark)) {
+          rows.add(_Row(_RowKind.summary, message: m));
+          continue;
+        }
         if (m.text.trim().isNotEmpty) {
           rows.add(_Row(_RowKind.answer, message: m, text: m.text));
         }
@@ -600,6 +699,8 @@ class _ChatPageState extends State<ChatPage> {
           child: Text(r.text,
               style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
         );
+      case _RowKind.summary:
+        return _summaryCard(r.message!.text.substring(kCompactMark.length).trim());
       case _RowKind.thinking:
         return _ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking);
       case _RowKind.empty:
@@ -887,12 +988,12 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
               GestureDetector(
-                onTap: _editPrompt,
+                onTap: _moreSheet,
                 behavior: HitTestBehavior.opaque,
                 child: const SizedBox(
                   width: 34,
                   height: 56,
-                  child: Icon(Icons.tune, size: 17, color: C.grey),
+                  child: Icon(Icons.more_horiz, size: 18, color: C.grey),
                 ),
               ),
             ],
@@ -1152,7 +1253,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// 一行的身份与内容。不拿 Widget 当缓存，状态一变也不必把整份记录重造。
-enum _RowKind { trim, user, answer, tool, streaming, thinking, empty }
+enum _RowKind { trim, summary, user, answer, tool, streaming, thinking, empty }
 
 class _Row {
   const _Row(this.kind, {this.message, this.text = ''});
@@ -1160,6 +1261,58 @@ class _Row {
   final _RowKind kind;
   final LlmMessage? message;
   final String text;
+}
+
+/// 压缩出来的那一段：默认收三行，想看全文再展开。
+class _SummaryCard extends StatefulWidget {
+  const _SummaryCard({required this.text});
+
+  final String text;
+
+  @override
+  State<_SummaryCard> createState() => _SummaryCardState();
+}
+
+class _SummaryCardState extends State<_SummaryCard> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+      decoration: BoxDecoration(
+        color: C.paper2,
+        borderRadius: BorderRadius.circular(C.radiusSmall),
+        border: Border.all(color: C.rule),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.compress, size: 13, color: C.grey),
+                const SizedBox(width: 6),
+                const Text('更早的对话已压缩',
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.4)),
+                const Spacer(),
+                Icon(_open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    size: 16, color: C.grey2),
+              ],
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            widget.text,
+            maxLines: _open ? null : 3,
+            overflow: _open ? TextOverflow.clip : TextOverflow.ellipsis,
+            style: C.answer.copyWith(fontSize: 12.5, color: C.grey),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// 模型问人的那张卡。有选项就点，没有就自己写，答完它接着干。

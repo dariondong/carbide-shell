@@ -61,6 +61,7 @@ class AppSettings {
     this.answerFont = 13.5,
     this.autoCheckUpdate = true,
     this.notifStyle = 'simple',
+    this.autoCompact = true,
     this.enabledTools = const <String>[],
   }) {
     _profiles = List<ModelProfile>.of(profiles);
@@ -181,6 +182,9 @@ class AppSettings {
 
   static const List<String> notifStyles = <String>['simple', 'big', 'list', 'chat'];
 
+  /// 记录长得太长时自己收成一段摘要。关掉就只在他点「压缩」时收。
+  bool autoCompact;
+
   /// 开着的那几项扩展工具，见 `data/tool_groups.dart`。空着就一个都不给。
   List<String> enabledTools;
 
@@ -211,6 +215,7 @@ class AppSettings {
         'answerFont': answerFont,
         'autoCheckUpdate': autoCheckUpdate,
         'notifStyle': notifStyle,
+        'autoCompact': autoCompact,
         'enabledTools': enabledTools,
       };
 
@@ -243,6 +248,7 @@ class AppSettings {
       notifStyle: notifStyles.contains('${json['notifStyle'] ?? ''}')
           ? '${json['notifStyle']}'
           : 'simple',
+      autoCompact: json['autoCompact'] != false,
       allowedDomains: domains is List
           ? domains.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],

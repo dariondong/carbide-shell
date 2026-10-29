@@ -39,6 +39,7 @@ const String kSystemPrompt = '''
 5. 收尾用一两句话讲结论，不要复述命令输出。
 6. 用户用中文提问就用中文回答。
 7. 用户说「什么什么的时候就做什么」这种带判断的事，用 task_add 把它排成一条定时任务，条件写在 conditions 里（disk>90、cpu>80、load>4 这样），不要只在这一次的回答里说一遍。
+8. 一件事要超过三步才做完，先用 plan 把步骤写下来，每做完一步就更新一次，免得人不知道走到哪了。
 ''';
 
 /// What the loop is doing right now. The header reads this to answer
@@ -314,6 +315,11 @@ class AgentLoop {
   /// 上下文从哪一条开始算。缓存按前缀算，每轮从头砍一条等于每轮都重算一遍，
   /// 所以只在真的超了才砍，一次砍到留有余量，之后就看着它长回来。
   int _cut = 0;
+
+  /// 记录被外面改短了（压缩、清空）：下一次请求从头算。
+  void onHistoryChanged() {
+    _cut = 0;
+  }
 
   /// 回合里的硬上限：正常长到预算之上不动它，只有快到撑爆模型上下文才再砍一次。
   static const double _hardFactor = 1.5;
