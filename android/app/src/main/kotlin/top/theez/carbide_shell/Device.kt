@@ -190,6 +190,95 @@ object Device {
         return out
     }
 
+    /**
+     * 手机此刻的状态信号：充电、电量、网络、亮屏、锁屏、耳机、铃音、勿扰、在放音乐。
+     *
+     * 拿不到的项就不写进表里，不编一个默认值。驾驶与运动状态系统不给第三方，也不写。
+     */
+    fun phoneState(context: Context): Map<String, Any?> {
+        val out = HashMap<String, Any?>()
+        try {
+            val battery = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (battery != null) {
+                out["battery"] = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    out["charging"] = battery.isCharging
+                }
+            }
+        } catch (error: Throwable) {
+            // 读不到就不写
+        }
+
+        try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            if (pm != null) out["screenOn"] = pm.isInteractive
+        } catch (error: Throwable) {
+            // 同上
+        }
+
+        try {
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE)
+                as? android.app.KeyguardManager
+            if (km != null) out["locked"] = km.isKeyguardLocked
+        } catch (error: Throwable) {
+            // 同上
+        }
+
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val net = cm?.getNetworkCapabilities(cm.activeNetwork)
+            out["network"] = when {
+                net == null -> "offline"
+                net.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                net.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+                net.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                net.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+                else -> "other"
+            }
+        } catch (error: Throwable) {
+            out["network"] = ""
+        }
+
+        try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            if (am != null) {
+                out["ringer"] = when (am.ringerMode) {
+                    android.media.AudioManager.RINGER_MODE_SILENT -> "silent"
+                    android.media.AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                    else -> "normal"
+                }
+                out["music"] = am.isMusicActive
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    var headset = false
+                    for (device in am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)) {
+                        when (device.type) {
+                            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                            android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> headset = true
+                        }
+                    }
+                    out["headset"] = headset
+                }
+            }
+        } catch (error: Throwable) {
+            // 同上
+        }
+
+        try {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE)
+                as? android.app.NotificationManager
+            if (nm != null && nm.isNotificationPolicyAccessGranted) {
+                out["dnd"] = nm.currentInterruptionFilter !=
+                    android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+            }
+        } catch (error: Throwable) {
+            // 没给「勿扰访问权」就不写这一项
+        }
+        return out
+    }
+
     /** 最近一次定位。几个来源取最新的那一个，都没有就 null。 */
     fun location(context: Context): Map<String, Any?>? {
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager

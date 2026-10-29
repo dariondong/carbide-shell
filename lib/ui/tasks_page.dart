@@ -7,11 +7,13 @@ import '../core/schedule.dart';
 import '../core/watch.dart';
 import '../data/hosts.dart';
 import '../data/tasks.dart';
+import '../data/triggers.dart';
 import '../data/watch.dart';
 import 'components.dart';
 import 'pet.dart';
 import 'task_log_page.dart';
 import 'theme.dart';
+import 'triggers_page.dart';
 
 /// 定时任务：清单、开关、跑一次的记录，都在这一页。
 class TasksPage extends StatefulWidget {
@@ -21,6 +23,8 @@ class TasksPage extends StatefulWidget {
     required this.watches,
     required this.scheduler,
     required this.hosts,
+    required this.triggers,
+    required this.triggerRunner,
     required this.onChanged,
   });
 
@@ -28,6 +32,11 @@ class TasksPage extends StatefulWidget {
   final WatchStore watches;
   final TaskScheduler scheduler;
   final HostStore hosts;
+
+  /// 触发器清单与跑它的那个。
+  final TriggerStore triggers;
+  final TriggerRunner triggerRunner;
+
   final VoidCallback onChanged;
 
   @override
@@ -50,6 +59,55 @@ class _TasksPageState extends State<TasksPage> {
   void dispose() {
     _ticker?.cancel();
     super.dispose();
+  }
+
+  /// 任务页顶上那一行进触发器：三种条件、两种动作，单独一页配。
+  Widget _triggerEntry() {
+    final int pending = widget.triggers.all
+        .where((Trigger t) =>
+            t.runs.isNotEmpty && t.runs.first.status == TriggerRunStatus.waiting)
+        .length;
+    final int on = widget.triggers.all.where((Trigger t) => t.enabled).length;
+    final String note = pending > 0
+        ? '$pending 条等你确认'
+        : (on == 0 ? '${widget.triggers.all.length} 条 · 都关着' : '$on 条开着');
+    return CardBox(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => Navigator.of(context)
+            .push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => TriggersPage(
+                  triggers: widget.triggers,
+                  runner: widget.triggerRunner,
+                  onChanged: widget.onChanged,
+                ),
+              ),
+            )
+            .then((_) {
+          widget.onChanged();
+          if (mounted) setState(() {});
+        }),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: <Widget>[
+              const Icon(Icons.bolt_outlined, size: 18, color: C.ink),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('触发器',
+                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+              ),
+              Text(note,
+                  style: C.monoSmall.copyWith(
+                      color: pending > 0 ? C.blue : C.grey)),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   List<ScheduledTask> get _list {
@@ -128,6 +186,8 @@ class _TasksPageState extends State<TasksPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
             children: <Widget>[
+              _triggerEntry(),
+              const SizedBox(height: 18),
               const SectionLabel('定时任务'),
               const SizedBox(height: 8),
               if (list.isEmpty && _watchList.isEmpty) ...<Widget>[

@@ -186,6 +186,8 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "info" -> result.success(Device.info(this))
 
+                    "phoneState" -> result.success(Device.phoneState(this))
+
                     "has" -> result.success(
                         Device.has(this, call.argument<String>("perm").orEmpty()),
                     )

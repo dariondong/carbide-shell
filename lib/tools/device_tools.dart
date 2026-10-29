@@ -53,6 +53,44 @@ class DeviceInfoTool extends Tool {
   }
 }
 
+/// `phone_state`：此刻的状态信号，给模型自己判断用。
+class PhoneStateTool extends Tool {
+  PhoneStateTool(this.device);
+
+  final DeviceApi device;
+
+  @override
+  String get name => 'phone_state';
+
+  @override
+  String get description =>
+      '看手机此刻的状态信号：充电、电量、网络、亮屏、锁屏、耳机、铃音、勿扰、在放音乐。'
+      '系统没给的那几项不会出现（比如驾驶状态）。不要权限，但勿扰那一项要在系统里给过访问权。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{},
+        'required': <String>[],
+      };
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) => ToolRisk.read;
+
+  @override
+  String summarize(Map<String, Object?> args) => '看手机此刻的状态';
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    try {
+      final PhoneSignals signals = await device.phoneState();
+      return ToolOutcome.success(stdout: signals.render());
+    } on DeviceError catch (e) {
+      return ToolOutcome.failure(e.message);
+    }
+  }
+}
+
 /// `clipboard`：读一段、写一段。
 class ClipboardTool extends Tool {
   ClipboardTool(this.device);

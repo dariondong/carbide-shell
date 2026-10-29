@@ -2,6 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../core/phone_signals.dart';
+
+export '../core/phone_signals.dart';
+
 /// 手机这一侧的几件事：设备信息、位置、联系人、短信、分享。
 ///
 /// 只有安卓有这条原生通道。别的平台上 [supported] 是 false，
@@ -83,21 +87,12 @@ class DeviceInfo {
     final List<String> lines = <String>[
       if (name.isNotEmpty) '机型：$name${sdk > 0 ? '（安卓 $sdk${abi.isEmpty ? '' : '，$abi'}）' : ''}',
       if (battery >= 0) '电量：$battery%${charging ? '，在充电' : ''}',
-      if (network.isNotEmpty) '网络：${_networkName(network)}',
+      if (network.isNotEmpty) '网络：${networkName(network)}',
       if (totalMb > 0) '存储：剩 $freeMb MB，共 $totalMb MB',
     ];
     return lines.join('\n');
   }
 }
-
-String _networkName(String code) => switch (code) {
-      'wifi' => '无线',
-      'mobile' => '移动数据',
-      'ethernet' => '网线',
-      'vpn' => '连着 VPN',
-      'offline' => '没联网',
-      _ => code,
-    };
 
 /// 最近一次定位。
 class DeviceFix {
@@ -255,6 +250,10 @@ abstract class DeviceApi {
 
   Future<DeviceInfo> info();
 
+  /// 手机此刻的状态信号：充电、电量、网络、亮屏、锁屏、耳机、铃音、勿扰、在放音乐。
+  /// 系统不给的那几项（比如驾驶状态）不会出现。
+  Future<PhoneSignals> phoneState();
+
   Future<bool> has(DevicePerm perm);
 
   Future<bool> request(DevicePerm perm);
@@ -294,6 +293,13 @@ class PhoneDevice implements DeviceApi {
   @override
   Future<DeviceInfo> info() async =>
       DeviceInfo.fromMap(_map(await _call('info')));
+
+  @override
+  Future<PhoneSignals> phoneState() async {
+    final Object? raw = await _call('phoneState');
+    if (raw is! Map) return const PhoneSignals();
+    return PhoneSignals.fromMap(raw);
+  }
 
   @override
   Future<bool> has(DevicePerm perm) async =>

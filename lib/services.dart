@@ -15,6 +15,7 @@ import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
 import 'data/temp_files.dart';
+import 'data/triggers.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
 import 'tools/ask_tool.dart';
@@ -60,6 +61,7 @@ class AppServices {
     required this.usage,
     required this.mail,
     required this.env,
+    required this.triggers,
     required this.workspace,
     required this.files,
     DeviceApi? device,
@@ -85,6 +87,9 @@ class AppServices {
 
   /// 环境密钥：名字与日志在本地，值在安全存储里。
   final EnvBook env;
+
+  /// 触发器清单：手机状态、消息通知、定时。
+  final TriggerStore triggers;
   final String workspace;
 
   /// 临时文件区：模型写文件、用户往里放文件、两个都把文件传到主机。
@@ -95,7 +100,7 @@ class AppServices {
 
   /// 一项扩展 = 一组工具。哪一项开了，那一组才进模型的清单。
   late final Map<String, List<Tool>> _groupTools = <String, List<Tool>>{
-    'device': <Tool>[DeviceInfoTool(device)],
+    'device': <Tool>[DeviceInfoTool(device), PhoneStateTool(device)],
     'clipboard': <Tool>[ClipboardTool(device)],
     'launch': <Tool>[OpenUrlTool(), ShareTool(device)],
     'location': <Tool>[WhereAmITool(device)],

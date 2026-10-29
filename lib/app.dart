@@ -8,6 +8,7 @@ import 'data/hub.dart';
 import 'data/notice_reply.dart';
 import 'data/tasks.dart';
 import 'data/temp_files.dart';
+import 'data/triggers.dart';
 import 'data/update.dart';
 import 'services.dart';
 import 'ui/about_page.dart';
@@ -27,6 +28,7 @@ import 'ui/temp_files_page.dart';
 import 'ui/usage_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
+import 'ui/triggers_page.dart';
 
 class CarbideApp extends StatelessWidget {
   const CarbideApp({
@@ -34,12 +36,16 @@ class CarbideApp extends StatelessWidget {
     required this.services,
     required this.hub,
     required this.scheduler,
+    required this.triggers,
     required this.replies,
   });
 
   final AppServices services;
   final SessionHub hub;
   final TaskScheduler scheduler;
+
+  /// 触发器：手机状态、消息通知、定时。
+  final TriggerRunner triggers;
 
   /// 通知里回的那句话往哪儿送。
   final NoticeReply replies;
@@ -54,6 +60,7 @@ class CarbideApp extends StatelessWidget {
         services: services,
         hub: hub,
         scheduler: scheduler,
+        triggers: triggers,
         replies: replies,
       ),
     );
@@ -66,12 +73,14 @@ class HomeShell extends StatefulWidget {
     required this.services,
     required this.hub,
     required this.scheduler,
+    required this.triggers,
     required this.replies,
   });
 
   final AppServices services;
   final SessionHub hub;
   final TaskScheduler scheduler;
+  final TriggerRunner triggers;
   final NoticeReply replies;
 
   @override
@@ -284,6 +293,8 @@ class _HomeShellState extends State<HomeShell> {
                       watches: s.watches,
                       scheduler: widget.scheduler,
                       hosts: s.hosts,
+                      triggers: s.triggers,
+                      triggerRunner: widget.triggers,
                       onChanged: _refresh,
                     ),
                     HostsPage(

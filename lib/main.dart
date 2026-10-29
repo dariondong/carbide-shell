@@ -22,6 +22,7 @@ import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
 import 'data/temp_files.dart';
+import 'data/triggers.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
 import 'services.dart';
@@ -72,6 +73,10 @@ Future<void> main() async {
   final EnvBook env = EnvBook(File('${dir.path}/env_keys.json'), secrets);
   await env.load();
 
+  // 触发器：手机状态、消息通知、定时。
+  final TriggerStore triggers = TriggerStore(File('${dir.path}/triggers.json'));
+  await triggers.load();
+
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard(styleOf: () => settings.value.notifStyle);
 
@@ -88,6 +93,7 @@ Future<void> main() async {
     usage: usage,
     mail: mail,
     env: env,
+    triggers: triggers,
     workspace: workspace.path,
     files: TempFiles(workspace),
   );
@@ -95,6 +101,10 @@ Future<void> main() async {
   final SessionHub hub = SessionHub(services: services, board: board);
   // 通知里有回复的时候，字就从这条路上来。
   unawaited(ForegroundTask.install());
+
+  // 触发器跟定时任务共用一条通知，各自半分钟看一次。
+  final TriggerRunner triggers$ = TriggerRunner(services: services, store: triggers);
+  triggers$.start();
 
   runApp(CarbideApp(
     services: services,
@@ -105,6 +115,7 @@ Future<void> main() async {
       watches: watches,
       board: board,
     ),
+    triggers: triggers$,
     replies: NoticeReply(services: services, hub: hub, board: board),
   ));
 }

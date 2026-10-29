@@ -36,6 +36,25 @@ class FakeDevice implements DeviceApi {
   /// 分享出去的那几段。
   final List<String> shared = <String>[];
 
+  /// 手机此刻的状态信号，默认是一台插着电、连着无线、亮着屏解好锁的手机。
+  PhoneSignals signals = const PhoneSignals(
+    battery: 85,
+    charging: true,
+    screenOn: true,
+    locked: false,
+    network: 'wifi',
+    headset: false,
+    ringer: 'normal',
+    dnd: false,
+    music: false,
+  );
+
+  @override
+  Future<PhoneSignals> phoneState() async {
+    if (!supported) throw const DeviceError('这台机器上没有手机那一套，只有安卓上才有。');
+    return signals;
+  }
+
   @override
   Future<DeviceInfo> info() async {
     if (!supported) throw const DeviceError('这台机器上没有手机那一套，只有安卓上才有。');

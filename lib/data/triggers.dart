@@ -1,0 +1,358 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import '../core/agent.dart';
+import '../core/conversation.dart';
+import '../core/models.dart';
+import '../core/schedule.dart';
+import '../core/triggers.dart';
+import '../services.dart';
+import 'device.dart';
+import 'foreground.dart';
+import 'llm_settings.dart';
+
+/// 触发器清单：一个 JSON 文件，和主机、设置放在一起。
+class TriggerStore {
+  TriggerStore(this.file);
+
+  final File file;
+  final List<Trigger> _items = <Trigger>[];
+
+  List<Trigger> get all => List<Trigger>.unmodifiable(_items);
+
+  Trigger? byId(String id) {
+    for (final Trigger t in _items) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  Future<void> load() async {
+    _items.clear();
+    if (!file.existsSync()) return;
+    try {
+      final Object? decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return;
+      final Object? list = decoded['triggers'];
+      if (list is List) {
+        for (final Object? raw in list) {
+          if (raw is! Map) continue;
+          final Trigger t = Trigger.fromJson(Map<String, Object?>.from(raw));
+          if (t.id.isEmpty) continue;
+          _items.add(t);
+        }
+      }
+    } catch (_) {
+      // 文件坏了就从空清单开始，不挡住应用起来。
+    }
+  }
+
+  Future<void> save() async {
+    file.parent.createSync(recursive: true);
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(<String, Object?>{
+      'triggers': _items.map((Trigger t) => t.toJson()).toList(),
+    }));
+  }
+
+  Future<void> upsert(Trigger trigger) async {
+    final int at = _items.indexWhere((Trigger t) => t.id == trigger.id);
+    if (at >= 0) {
+      _items[at] = trigger;
+    } else {
+      _items.add(trigger);
+    }
+    await save();
+  }
+
+  Future<void> remove(String id) async {
+    _items.removeWhere((Trigger t) => t.id == id);
+    await save();
+  }
+
+  String nextId() {
+    int n = _items.length + 1;
+    while (_items.any((Trigger t) => t.id == 't$n')) {
+      n += 1;
+    }
+    return 't$n';
+  }
+}
+
+/// 触发器跑起来时没有人守在旁边：需要确认的一律不放行，危险规则照旧。
+class _ReadOnlyApprover implements Approver {
+  const _ReadOnlyApprover();
+
+  @override
+  Future<bool> confirm(ApprovalRequest request) async => false;
+}
+
+const String kTriggerRunNote = '''
+这一次是触发器自动跑起来的，没有人在旁边回答。
+只做读的事：需要确认的操作会被拒绝，被拒了就在结论里说一句。
+结论写短一点，第一行就是结果。''';
+
+/// 触发器每半分钟看一次：到点的、碰上关键词的、手机状态符合的，各走各自的路。
+class TriggerRunner {
+  TriggerRunner({
+    required this.services,
+    required this.store,
+    this.onChanged,
+  });
+
+  final AppServices services;
+  final TriggerStore store;
+
+  void Function()? onChanged;
+
+  static const Duration tickEvery = Duration(seconds: 30);
+
+  Timer? _timer;
+  bool _busy = false;
+
+  /// 手机状态判断最多花这么久，超了这次就算没触发。
+  static const Duration judgeTimeout = Duration(seconds: 60);
+
+  /// 一个动作（可能是一轮模型对话）最多跑这么久。
+  static const Duration actTimeout = Duration(minutes: 5);
+
+  void start() {
+    _timer?.cancel();
+    _timer = Timer.periodic(tickEvery, (_) => unawaited(tick()));
+    unawaited(tick());
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  Future<void> tick({DateTime? now}) async {
+    if (_busy) return;
+    _busy = true;
+    bool changed = false;
+    try {
+      final DateTime at = now ?? DateTime.now();
+      for (final Trigger t in store.all.toList()) {
+        if (!t.enabled) continue;
+        final DateTime? due = t.nextAt;
+        if (due == null) {
+          t.nextAt = nextDueAt(t, at);
+          changed = true;
+          await store.save();
+          continue;
+        }
+        if (at.isBefore(due)) continue;
+        // 先把下一次排好：这一次跑砸了也不会在同一分钟反复跑。
+        t.nextAt = nextDueAt(t, at.add(const Duration(seconds: 1)));
+        await store.save();
+        changed = true;
+        await _fire(t, at);
+      }
+    } finally {
+      _busy = false;
+      if (changed) onChanged?.call();
+    }
+  }
+
+  /// 现在就试一次，不管到没到点。
+  Future<String> runNow(Trigger t) async {
+    await _fire(t, DateTime.now());
+    return t.runs.isEmpty ? '没跑成' : t.runs.first.note;
+  }
+
+  /// 等在确认的那一条：批准了就把当时那句话真的跑掉。
+  Future<void> approve(Trigger t) async {
+    final TriggerRun? pending = t.runs.isEmpty ? null : t.runs.first;
+    if (pending == null || pending.status != TriggerRunStatus.waiting) return;
+    t.runs.removeAt(0);
+    await _act(t, DateTime.now(), reason: pending.note);
+  }
+
+  /// 不批：把那条待确认的记成没触发。
+  Future<void> dismiss(Trigger t) async {
+    final TriggerRun? pending = t.runs.isEmpty ? null : t.runs.first;
+    if (pending == null || pending.status != TriggerRunStatus.waiting) return;
+    t.runs.removeAt(0);
+    t.addRun(TriggerRun(
+      at: DateTime.now(),
+      status: TriggerRunStatus.skipped,
+      note: '没批准，没有执行。${pending.note}',
+    ));
+    await store.save();
+    onChanged?.call();
+  }
+
+  bool get busy => _busy;
+
+  Future<void> _fire(Trigger t, DateTime at) async {
+    t.lastAt = at;
+    switch (t.kind) {
+      case TriggerKind.schedule:
+        await _act(t, at, reason: '到点了');
+      case TriggerKind.message:
+        await _checkMessage(t, at);
+      case TriggerKind.phone:
+        await _checkPhone(t, at);
+    }
+  }
+
+  /// 消息通知：最近这段时间里有没有碰上关键词的那一条。
+  Future<void> _checkMessage(Trigger t, DateTime at) async {
+    if (t.keywords.isEmpty) {
+      await _skip(t, '还没写关键词');
+      return;
+    }
+    final DeviceApi device = services.device;
+    if (!device.supported) {
+      await _skip(t, '这台机器上读不到通知');
+      return;
+    }
+    final DateTime since = t.lastAt ?? at.subtract(const Duration(minutes: 30));
+    try {
+      final List<DeviceNotification> list =
+          await device.notifications(limit: 40, minutes: 720);
+      for (final DeviceNotification n in list) {
+        final DateTime? when = n.at;
+        if (when == null || when.isBefore(since)) continue;
+        if (!messageMatches(t, n.title, n.text)) continue;
+        final String what = n.title.trim().isEmpty ? n.text.trim() : n.title.trim();
+        await _act(t, at,
+            reason: '${n.app.isEmpty ? '通知' : n.app}「${_clip(what, 40)}」碰上关键词');
+        return;
+      }
+      await _skip(t, '这段时间没有碰上关键词的通知');
+    } on DeviceError catch (e) {
+      await _skip(t, e.message);
+    } catch (e) {
+      await _skip(t, '读通知失败：$e');
+    }
+  }
+
+  /// 手机状态：把允许看的那几项交给模型，让它说触发还是不触发。
+  Future<void> _checkPhone(Trigger t, DateTime at) async {
+    if (t.intent.trim().isEmpty) {
+      await _skip(t, '还没写要看什么状态');
+      return;
+    }
+    final DeviceApi device = services.device;
+    if (!device.supported) {
+      await _skip(t, '这台机器上读不到手机状态');
+      return;
+    }
+    PhoneSignals signals;
+    try {
+      signals = await device.phoneState();
+    } on DeviceError catch (e) {
+      await _skip(t, e.message);
+      return;
+    } catch (e) {
+      await _skip(t, '读状态失败：$e');
+      return;
+    }
+    final SettingsLlmProvider llm = SettingsLlmProvider(services.settings, services.secrets);
+    PhoneJudge judge;
+    try {
+      final LlmReply reply = await llm
+          .chat(
+            system: kPhoneJudgeSystem,
+            messages: <LlmMessage>[LlmMessage.user(phoneJudgePrompt(t, signals, at))],
+            tools: const <ToolSpec>[],
+          )
+          .timeout(judgeTimeout);
+      judge = parseJudge(reply.text);
+    } catch (e) {
+      await _skip(t, '模型没判断成：$e');
+      return;
+    }
+    if (!judge.match) {
+      await _skip(t, judge.text);
+      return;
+    }
+    if (t.needsConfirm) {
+      t.addRun(TriggerRun(at: at, status: TriggerRunStatus.waiting, note: judge.text));
+      await store.save();
+      onChanged?.call();
+      await ForegroundTask.alert(
+        t.title,
+        '条件满足了，等你点一下才动手。\n${judge.text}',
+        slot: _slotOf(t.id),
+      );
+      return;
+    }
+    await _act(t, at, reason: judge.text);
+  }
+
+  Future<void> _skip(Trigger t, String note) async {
+    t.addRun(TriggerRun(at: DateTime.now(), status: TriggerRunStatus.skipped, note: note));
+    await store.save();
+    onChanged?.call();
+  }
+
+  /// 真的动手：发一条通知，或者让模型跑一句。
+  Future<void> _act(Trigger t, DateTime at, {required String reason}) async {
+    if (t.action == TriggerActionKind.notify) {
+      final String head = t.actionText.trim();
+      await ForegroundTask.alert(
+        t.title,
+        head.isEmpty ? reason : '$head\n$reason',
+        slot: _slotOf(t.id),
+      );
+      t.addRun(TriggerRun(at: at, status: TriggerRunStatus.fired, note: reason));
+      await store.save();
+      onChanged?.call();
+      return;
+    }
+    final String prompt = t.actionText.trim();
+    if (prompt.isEmpty) {
+      await _skip(t, '还没写要模型做什么');
+      return;
+    }
+    String answer = '';
+    String note = '';
+    try {
+      final Conversation scope = Conversation(
+        id: 'trigger-${t.id}',
+        title: t.title,
+        hostId: '',
+      );
+      final AgentSession session = await services.sessionFor(scope);
+      session.loop.approver = const _ReadOnlyApprover();
+      session.loop.extraSystem = kTriggerRunNote;
+      answer = await session.loop.send('$prompt\n\n（触发原因：$reason）').timeout(actTimeout);
+      note = summaryLine(answer);
+    } catch (e) {
+      final String text = '$e'.replaceFirst('Exception: ', '');
+      t.addRun(TriggerRun(at: at, status: TriggerRunStatus.failed, note: '跑失败了：$text'));
+      await store.save();
+      onChanged?.call();
+      await ForegroundTask.alert(t.title, '触发器跑失败了：$text', slot: _slotOf(t.id));
+      return;
+    }
+    final bool failed = answer.startsWith('模型请求失败');
+    t.addRun(TriggerRun(
+      at: at,
+      status: failed ? TriggerRunStatus.failed : TriggerRunStatus.fired,
+      note: note.isEmpty ? reason : note,
+    ));
+    await store.save();
+    onChanged?.call();
+    await ForegroundTask.alert(
+      t.title,
+      note.isEmpty ? reason : note,
+      slot: _slotOf(t.id),
+    );
+  }
+
+  /// 一条触发器占一个通知位，别把别的通知盖掉；第 0 位留给资源监听。
+  static int _slotOf(String id) {
+    int sum = 0;
+    for (final int unit in id.codeUnits) {
+      sum = (sum * 31 + unit) & 0x7fffffff;
+    }
+    return 1 + sum % 31;
+  }
+
+  static String _clip(String text, int max) =>
+      text.length <= max ? text : '${text.substring(0, max)}…';
+}
