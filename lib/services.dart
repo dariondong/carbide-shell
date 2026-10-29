@@ -26,6 +26,7 @@ import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/mail_tool.dart';
 import 'tools/notify_tool.dart';
+import 'tools/param_tool.dart';
 import 'tools/plan_tool.dart';
 import 'tools/probe_tool.dart';
 import 'tools/render_tool.dart';
@@ -146,6 +147,12 @@ class AppServices {
       ..register(TaskAddTool(tasks: tasks, hosts: hosts))
       ..register(WatchAddTool(watches: watches, hosts: hosts))
       // 已经排好的东西得看得见、停得掉、删得掉，不然模型只能一直往里加
+      // 参数调节：模型提，用户点批准才改；锁着的不动。
+      ..register(TuneParamTool(
+        settings: settings,
+        profileId: () => profileOf(settings.value, c.profileId).id,
+        save: settings.save,
+      ))
       ..register(HostListTool(
           hosts: hosts, onlyHostId: c.multiHost ? '' : c.hostId))
       ..register(TaskListTool(
@@ -163,7 +170,7 @@ class AppServices {
       registry.register(RemoveHostTool(hosts: hosts, secrets: secrets));
     }
     final AgentLoop loop = AgentLoop(
-      llm: SettingsLlmProvider(settings, secrets),
+      llm: SettingsLlmProvider(settings, secrets, profileId: () => c.profileId),
       registry: registry,
       policy: policy,
       journal: FileJournal(conversations.journalOf(c)),
@@ -188,6 +195,11 @@ class AppServices {
 String promptFor(SettingsStore settings, Conversation c) {
   final String own = c.systemPrompt.trim();
   if (own.isNotEmpty) return own;
+  final ModelProfile profile = profileOf(settings.value, c.profileId);
+  final String byProfile = profile.userPrompt.trim();
+  if (byProfile.isNotEmpty) return byProfile;
+  final String bound = profile.prompt.trim();
+  if (bound.isNotEmpty) return bound;
   final String shared = settings.value.systemPrompt.trim();
   return shared.isEmpty ? kSystemPrompt : shared;
 }

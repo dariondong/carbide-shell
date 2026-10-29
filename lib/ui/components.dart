@@ -343,10 +343,26 @@ class ApprovalCard extends StatelessWidget {
 
   String get _command {
     final Map<String, Object?> args = request.args;
-    final Object? raw = args['command'] ?? args['path'] ?? args['url'] ?? args['note'];
+    final Object? raw = args['command'] ??
+        args['path'] ??
+        args['url'] ??
+        args['note'] ??
+        args['text'] ??
+        args['value'] ??
+        args['key'];
     final String detail = '${raw ?? ''}';
     return detail.isEmpty ? request.summary : detail;
   }
+
+  /// 这张卡执行下去会发生什么。做的是哪件事就说哪件事，不一律说成命令。
+  String get _note => switch (request.tool.name) {
+        'ssh_exec' => '批准后这条命令会在目标主机上执行。危险命令已经在上一步被拦掉了。',
+        'tune_param' => '批准后这套配置的参数就换成新值，之后的消息按新值走。被锁住的参数会回一句改不了。',
+        'env_set' || 'env_delete' => '批准后只动本机安全存储里的环境密钥，值不进对话记录，也不写日志。',
+        'mail_send' => '批准后才发出去，收件人就是上面这个。',
+        'sms_send' => '批准后会用本机号码发出这条短信。',
+        _ => '批准后这一步会执行。',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -389,9 +405,9 @@ class ApprovalCard extends StatelessWidget {
             child: Text(_command, style: C.mono.copyWith(fontSize: 12.5, color: C.ink)),
           ),
           const SizedBox(height: 11),
-          const Text(
-            '批准后这条命令会在目标主机上执行。危险命令已经在上一步被拦掉了。',
-            style: TextStyle(fontSize: 12, height: 1.6, color: C.grey),
+          Text(
+            _note,
+            style: const TextStyle(fontSize: 12, height: 1.6, color: C.grey),
           ),
           const SizedBox(height: 13),
           Row(

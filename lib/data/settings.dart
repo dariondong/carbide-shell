@@ -1,23 +1,42 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/params.dart';
 import 'secrets.dart';
 
 /// 一套模型配置：地址、模型名、和界面上那个名字。
 ///
 /// 密钥不在这里，按 [id] 存在安全存储里（见 [modelSecretKeyFor]）。
+/// 提示词和调过的参数跟着这一套走，切换配置时一起换。
 class ModelProfile {
   ModelProfile({
     required this.id,
     this.name = '',
     this.baseUrl = '',
     this.model = '',
-  });
+    this.prompt = '',
+    this.userPrompt = '',
+    Map<String, ParamState>? params,
+    Map<String, Object?> price = const <String, Object?>{},
+  })  : params = params ?? <String, ParamState>{},
+        price = Map<String, Object?>.of(price);
 
   String id;
   String name;
   String baseUrl;
   String model;
+
+  /// 这一套绑定的提示词。切到这套就换上它，别的不动。
+  String prompt;
+
+  /// 用户为这一套单独写的一份，优先级比 [prompt] 高。
+  String userPrompt;
+
+  /// 调过的参数。没动过的参数不在这张表里。
+  final Map<String, ParamState> params;
+
+  /// 报价：`{input, output, cache, currency, per}`，空着表示用内置那份。
+  final Map<String, Object?> price;
 
   /// 清单上写什么：自己起的名字优先，其次模型名，都没有就说没填。
   String get label {
@@ -27,18 +46,74 @@ class ModelProfile {
     return m.isEmpty ? '未填模型' : m;
   }
 
+  /// 这一个参数现在多少：没动过就是出厂默认。
+  double paramValue(String key) {
+    final ParamState? own = params[key];
+    if (own != null) return own.value;
+    return paramSpecOf(key)?.fallback ?? 0;
+  }
+
+  ParamState? paramState(String key) => params[key];
+
+  bool paramLocked(String key) => params[key]?.locked ?? false;
+
+  /// 这套配置有没有真的配完（地址和模型名都写了）。
+  bool get complete => baseUrl.trim().isNotEmpty && model.trim().isNotEmpty;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'id': id,
         'name': name,
         'baseUrl': baseUrl,
         'model': model,
+        if (prompt.isNotEmpty) 'prompt': prompt,
+        if (userPrompt.isNotEmpty) 'userPrompt': userPrompt,
+        if (params.isNotEmpty)
+          'params': params.map((String k, ParamState v) => MapEntry<String, Object?>(k, v.toJson())),
+        if (price.isNotEmpty) 'price': price,
       };
 
-  static ModelProfile fromJson(Map<String, Object?> json) => ModelProfile(
-        id: '${json['id'] ?? ''}',
-        name: '${json['name'] ?? ''}',
-        baseUrl: '${json['baseUrl'] ?? ''}',
-        model: '${json['model'] ?? ''}',
+  static ModelProfile fromJson(Map<String, Object?> json) {
+    final Map<String, ParamState> params = <String, ParamState>{};
+    final Object? rawParams = json['params'];
+    if (rawParams is Map) {
+      for (final MapEntry<Object?, Object?> e in rawParams.entries) {
+        final Object? v = e.value;
+        if (v is! Map) continue;
+        final ParamState? state = ParamState.fromJson(Map<String, Object?>.from(v));
+        if (state != null) params['${e.key}'] = state;
+      }
+    }
+    final Object? rawPrice = json['price'];
+    return ModelProfile(
+      id: '${json['id'] ?? ''}',
+      name: '${json['name'] ?? ''}',
+      baseUrl: '${json['baseUrl'] ?? ''}',
+      model: '${json['model'] ?? ''}',
+      prompt: '${json['prompt'] ?? ''}',
+      userPrompt: '${json['userPrompt'] ?? ''}',
+      params: params,
+      price: rawPrice is Map ? Map<String, Object?>.from(rawPrice) : const <String, Object?>{},
+    );
+  }
+
+  /// 换一份地址和模型名，其余（提示词、参数、报价）都留着。
+  ModelProfile copyAs(String newId, {String? name}) => ModelProfile(
+        id: newId,
+        name: name ?? (this.name.isEmpty ? '' : '${this.name} 副本'),
+        baseUrl: baseUrl,
+        model: model,
+        prompt: prompt,
+        userPrompt: userPrompt,
+        params: params.map((String k, ParamState v) => MapEntry<String, ParamState>(
+            k,
+            ParamState(
+              value: v.value,
+              locked: v.locked,
+              source: v.source,
+              reason: v.reason,
+              at: v.at,
+            ))),
+        price: price,
       );
 }
 
@@ -63,6 +138,8 @@ class AppSettings {
     this.notifStyle = 'simple',
     this.autoCompact = true,
     this.enabledTools = const <String>[],
+    this.aiTune = true,
+    this.paramRanges = const <String, List<double>>{},
   }) {
     _profiles = List<ModelProfile>.of(profiles);
     _dedupeIds();
@@ -96,6 +173,34 @@ class AppSettings {
   set baseUrl(String value) => active.baseUrl = value;
   String get model => active.model;
   set model(String value) => active.model = value;
+
+  /// 按 id 找一套。找不到就是 null。
+  ModelProfile? profileById(String id) {
+    for (final ModelProfile p in _profiles) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  /// 这套配置现在的温度：调过就用调过的，没动过就用设置里那个滑块。
+  double temperatureFor(ModelProfile profile) =>
+      temperatureOf(params: profile.params, fallback: temperature);
+
+  /// 复制一份配置：提示词、参数、报价一起拷，密钥不拷。
+  ModelProfile duplicateProfile(String id, {String name = ''}) {
+    final ModelProfile? from = profileById(id);
+    if (from == null) return active;
+    final ModelProfile copy = from.copyAs(_nextId(), name: name.isEmpty ? null : name);
+    _profiles.add(copy);
+    return copy;
+  }
+
+  /// 把某一套设成默认（也就是现在用的那一套）。
+  bool setDefault(String id) {
+    if (!_profiles.any((ModelProfile p) => p.id == id)) return false;
+    _active = id;
+    return true;
+  }
 
   /// 切到另一套。id 不存在就什么都不做。
   void switchProfile(String id) {
@@ -188,6 +293,15 @@ class AppSettings {
   /// 开着的那几项扩展工具，见 `data/tool_groups.dart`。空着就一个都不给。
   List<String> enabledTools;
 
+  /// 允许 AI 提参数调节。关掉之后它提了也不生效。
+  bool aiTune;
+
+  /// 用户在设置里改过的允许范围：`{temperature: [0, 1.2]}`。
+  Map<String, List<double>> paramRanges;
+
+  /// 这个参数现在允许落在什么范围里。
+  ParamRange paramRange(String key) => paramRangeOf(key, overrides: paramRanges);
+
   bool toolOn(String id) => enabledTools.contains(id);
 
   /// 开或关一项。开关变了下一轮就生效，不用重开应用。
@@ -217,6 +331,8 @@ class AppSettings {
         'notifStyle': notifStyle,
         'autoCompact': autoCompact,
         'enabledTools': enabledTools,
+        'aiTune': aiTune,
+        if (paramRanges.isNotEmpty) 'paramRanges': paramRanges,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -255,7 +371,24 @@ class AppSettings {
       enabledTools: tools is List
           ? tools.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
           : const <String>[],
+      aiTune: json['aiTune'] != false,
+      paramRanges: _rangesOf(json['paramRanges']),
     );
+  }
+
+  /// `{temperature: [0, 1.2]}` 读回来。读不像样的直接丢掉。
+  static Map<String, List<double>> _rangesOf(Object? raw) {
+    final Map<String, List<double>> out = <String, List<double>>{};
+    if (raw is! Map) return out;
+    for (final MapEntry<Object?, Object?> e in raw.entries) {
+      final Object? v = e.value;
+      if (v is! List || v.length < 2) continue;
+      final double? a = v[0] is num ? (v[0] as num).toDouble() : double.tryParse('${v[0]}');
+      final double? b = v[1] is num ? (v[1] as num).toDouble() : double.tryParse('${v[1]}');
+      if (a == null || b == null) continue;
+      out['${e.key}'] = <double>[a, b];
+    }
+    return out;
   }
 }
 

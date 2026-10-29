@@ -14,6 +14,9 @@ abstract class Tool {
   /// The risk of one concrete call. `ssh_exec` looks at the command here.
   ToolRisk classify(Map<String, Object?> args) => risk;
 
+  /// 不论审批档位都先问一句。改参数、写密钥、发邮件这类「说好才做」的事用它。
+  bool get alwaysAsk => false;
+
   /// One line shown on the approval card. Empty when the tool has nothing to say.
   String summarize(Map<String, Object?> args) => '';
 

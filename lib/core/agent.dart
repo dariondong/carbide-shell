@@ -241,7 +241,12 @@ class AgentLoop {
       return;
     }
 
-    if (verdict == ApprovalVerdict.ask) {
+    // 这类工具无论审批档位多宽都先问一句：参数、密钥、收件人都是说好才做的。
+    final ApprovalVerdict ask = tool.alwaysAsk && verdict != ApprovalVerdict.deny
+        ? ApprovalVerdict.ask
+        : verdict;
+
+    if (ask == ApprovalVerdict.ask) {
       final Approver? who = approver;
       if (who == null) {
         _appendResult(call, '需要用户确认，但当前没有界面可以确认，所以没有执行。', failed: true);

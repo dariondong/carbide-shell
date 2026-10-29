@@ -3,22 +3,35 @@ import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../core/params.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
 import '../core/openai.dart';
 import 'secrets.dart';
 import 'settings.dart';
 
+/// 一套配置按 id 找；找不到就用现在默认的那套。
+ModelProfile profileOf(AppSettings settings, String id) =>
+    settings.profileById(id) ?? settings.active;
+
 /// Reads the model settings on every call, so the settings page takes effect
 /// without a restart.
+///
+/// 一场对话可以钉在自己选的那套配置上（见 [profileId]）：换配置不必先改全局。
 class SettingsLlmProvider implements LlmProvider {
-  SettingsLlmProvider(this.settings, this.secrets);
+  SettingsLlmProvider(this.settings, this.secrets, {this.profileId});
 
   final SettingsStore settings;
   final SecretStore secrets;
 
+  /// 这场对话用哪套配置。为空就是设置里选中的那套。
+  final String Function()? profileId;
+
+  ModelProfile get profile =>
+      profileOf(settings.value, profileId?.call() ?? settings.value.activeProfile);
+
   @override
-  String get label => settings.value.active.label;
+  String get label => profile.label;
 
   @override
   Future<LlmReply> chat({
@@ -28,15 +41,15 @@ class SettingsLlmProvider implements LlmProvider {
     CancelToken? cancel,
     void Function(String delta)? onText,
   }) async {
-    final ModelProfile profile = settings.value.active;
-    String key = await secrets.read(modelSecretKeyFor(profile.id));
+    final ModelProfile chosen = profile;
+    String key = await secrets.read(modelSecretKeyFor(chosen.id));
     // 老的单一密钥只在还没搬过来之前顶一下。
     if (key.isEmpty) key = await secrets.read(modelSecretKey());
     final OpenAiProvider provider = OpenAiProvider(
-      baseUrl: profile.baseUrl,
+      baseUrl: chosen.baseUrl,
       apiKey: key,
-      model: profile.model,
-      temperature: settings.value.temperature,
+      model: chosen.model,
+      temperature: settings.value.temperatureFor(chosen),
     );
     try {
       return await provider.chat(

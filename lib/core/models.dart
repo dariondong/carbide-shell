@@ -200,3 +200,11 @@ int readInt(Map<String, Object?> args, String key, {int fallback = 0}) {
   if (v is String) return int.tryParse(v) ?? fallback;
   return fallback;
 }
+
+/// 模型给数值参数时可能是 0.7、"0.7" 或者整数 1。
+double? readNumber(Map<String, Object?> args, String key) {
+  final Object? v = args[key];
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v.trim());
+  return null;
+}

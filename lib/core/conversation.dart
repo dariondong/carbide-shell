@@ -68,6 +68,7 @@ class Conversation {
     this.dropped = 0,
     this.plan,
     this.planAnchor = 0,
+    this.profileId = '',
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -90,6 +91,9 @@ class Conversation {
 
   /// 这个对话自己的系统提示词。空着表示跟设置走。
   String systemPrompt;
+
+  /// 这场对话钉在哪套模型配置上。空着就是设置里选中的那一套。
+  String profileId;
 
   /// Advance Master：管全部主机，还能把新主机写进列表。
   bool advanceMaster;
@@ -123,6 +127,7 @@ class Conversation {
         'autoApproveAll': autoApproveAll,
         'tokensUsed': tokensUsed,
         if (systemPrompt.trim().isNotEmpty) 'systemPrompt': systemPrompt,
+        if (profileId.isNotEmpty) 'profileId': profileId,
         if (advanceMaster) 'advanceMaster': true,
         if (dropped > 0) 'dropped': dropped,
         if (plan != null) 'plan': plan!.toJson(),
@@ -150,6 +155,7 @@ class Conversation {
       autoApproveAll: json['autoApproveAll'] == true,
       tokensUsed: (json['tokensUsed'] as num?)?.toInt() ?? 0,
       systemPrompt: '${json['systemPrompt'] ?? ''}',
+      profileId: '${json['profileId'] ?? ''}',
       advanceMaster: json['advanceMaster'] == true,
       dropped: (json['dropped'] as num?)?.toInt() ?? 0,
       plan: WorkPlan.fromJson(json['plan']),
