@@ -68,6 +68,47 @@ class ConversationRail extends StatelessWidget {
                     ),
                   ),
           ),
+          _petFoot(),
+        ],
+      ),
+    );
+  }
+
+  /// 栏底那一小块：没事的时候它就睡在那儿，有活在跑就抬起头。
+  Widget _petFoot() {
+    final PetMood mood = petMoodNow(
+      running: hub.runningCount > 0,
+      waiting: hub.waitingOnes.isNotEmpty,
+    );
+    final String note = switch (mood) {
+      PetMood.working => '${hub.runningCount} 场在跑',
+      PetMood.thinking => '等你点一下',
+      PetMood.sleeping => '没事干，睡一会儿',
+      PetMood.idle => '待机',
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: C.rule)),
+      ),
+      child: Row(
+        children: <Widget>[
+          PetAvatar(size: 46, mood: mood),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(mood.label,
+                    style: const TextStyle(fontSize: 12, color: C.ink, height: 1.4)),
+                Text(note,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: C.monoSmall.copyWith(fontSize: 10)),
+              ],
+            ),
+          ),
         ],
       ),
     );

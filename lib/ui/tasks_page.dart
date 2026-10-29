@@ -9,6 +9,7 @@ import '../data/hosts.dart';
 import '../data/tasks.dart';
 import '../data/watch.dart';
 import 'components.dart';
+import 'pet.dart';
 import 'task_log_page.dart';
 import 'theme.dart';
 
@@ -129,6 +130,10 @@ class _TasksPageState extends State<TasksPage> {
             children: <Widget>[
               const SectionLabel('定时任务'),
               const SizedBox(height: 8),
+              if (list.isEmpty && _watchList.isEmpty) ...<Widget>[
+                const PetAvatar(size: 84),
+                const SizedBox(height: 10),
+              ],
               if (list.isEmpty)
                 _hint('还没有定时任务。定好时间与要做的事，到点自动执行。')
               else

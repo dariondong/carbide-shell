@@ -1112,6 +1112,11 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
               const SizedBox(width: 2),
+              PetAvatar(
+                size: 26,
+                mood: petMoodNow(running: _running, waiting: _pending != null || _live?.pendingAsk != null),
+              ),
+              const SizedBox(width: 7),
               Expanded(child: _heading()),
               _statusPill(loop),
               const SizedBox(width: 4),

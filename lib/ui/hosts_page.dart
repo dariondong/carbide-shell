@@ -4,6 +4,7 @@ import '../data/hosts.dart';
 import '../data/secrets.dart';
 import '../tools/ssh_tools.dart';
 import 'components.dart';
+import 'pet.dart';
 import 'resources_page.dart';
 import 'theme.dart';
 
@@ -64,9 +65,16 @@ class _HostsPageState extends State<HostsPage> {
           child: list.isEmpty
               ? const Padding(
                   padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
-                  child: Text(
-                    '还没有主机。加一台，密钥只留在本机。',
-                    style: TextStyle(fontSize: 13.5, height: 1.6, color: C.body),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      PetAvatar(size: 104),
+                      SizedBox(height: 14),
+                      Text(
+                        '还没有主机。加一台，密钥只留在本机。',
+                        style: TextStyle(fontSize: 13.5, height: 1.6, color: C.body),
+                      ),
+                    ],
                   ),
                 )
               : ListView.builder(

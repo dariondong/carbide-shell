@@ -4,6 +4,7 @@ import '../core/memory.dart';
 import '../data/hosts.dart';
 import '../services.dart';
 import 'components.dart';
+import 'pet.dart';
 import 'theme.dart';
 
 /// Long-term memory, one file per scope: 全局 plus every host.
@@ -95,12 +96,20 @@ class _MemoryPageState extends State<MemoryPage> {
               ? const SizedBox.shrink()
               : list.isEmpty
                   ? Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                      child: Text(
-                        _scope == MemoryBook.globalScope
-                            ? '还没有全局记忆。在对话里说「记住…」，内容会写在这里。'
-                            : '这台机器还没有记忆。在绑定它的对话里说「记住…」，内容会写在这里。',
-                        style: const TextStyle(fontSize: 13.5, height: 1.6, color: C.body),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const PetAvatar(size: 96),
+                          const SizedBox(height: 12),
+                          Text(
+                            _scope == MemoryBook.globalScope
+                                ? '还没有全局记忆。在对话里说「记住…」，内容会写在这里。'
+                                : '这台机器还没有记忆。在绑定它的对话里说「记住…」，内容会写在这里。',
+                            style: const TextStyle(
+                                fontSize: 13.5, height: 1.6, color: C.body),
+                          ),
+                        ],
                       ),
                     )
                   : ListView.builder(

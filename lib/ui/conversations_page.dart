@@ -7,6 +7,7 @@ import '../services.dart';
 import 'components.dart';
 import 'conversation_actions.dart';
 import 'motion.dart';
+import 'pet.dart';
 import 'theme.dart';
 
 /// The list of conversations. Each one is a scope plus a transcript.
@@ -89,6 +90,8 @@ class _ConversationsPageState extends State<ConversationsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          const PetAvatar(size: 112),
+          const SizedBox(height: 14),
           const Text('还没有对话',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 8),
