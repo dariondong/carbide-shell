@@ -66,6 +66,7 @@ class Conversation {
     this.systemPrompt = '',
     this.advanceMaster = false,
     this.dropped = 0,
+    this.costCny = 0,
     this.plan,
     this.planAnchor = 0,
     this.profileId = '',
@@ -101,6 +102,9 @@ class Conversation {
   /// 因为太长收起过多少条。界面上要如实说一句，不然人以为记录丢了。
   int dropped;
 
+  /// 这场对话一共花了多少钱（元）。模型的价配不上就是 0。
+  double costCny;
+
   /// 模型写的这一趟的计划。界面照着它画顶上那张卡。
   WorkPlan? plan;
 
@@ -130,6 +134,7 @@ class Conversation {
         if (profileId.isNotEmpty) 'profileId': profileId,
         if (advanceMaster) 'advanceMaster': true,
         if (dropped > 0) 'dropped': dropped,
+        if (costCny > 0) 'cost': double.parse(costCny.toStringAsFixed(6)),
         if (plan != null) 'plan': plan!.toJson(),
         if (planAnchor > 0) 'planAnchor': planAnchor,
         'kindApprovals': kindApprovals,
@@ -158,6 +163,7 @@ class Conversation {
       profileId: '${json['profileId'] ?? ''}',
       advanceMaster: json['advanceMaster'] == true,
       dropped: (json['dropped'] as num?)?.toInt() ?? 0,
+      costCny: (json['cost'] as num?)?.toDouble() ?? 0,
       plan: WorkPlan.fromJson(json['plan']),
       planAnchor: (json['planAnchor'] as num?)?.toInt() ?? 0,
       kindApprovals: (json['kindApprovals'] is List)

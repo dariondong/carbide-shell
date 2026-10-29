@@ -11,6 +11,8 @@ class UsageEntry {
     this.prompt = 0,
     this.completion = 0,
     this.cached = 0,
+    this.costIn = 0,
+    this.costOut = 0,
     this.conversationId = '',
   });
 
@@ -23,6 +25,12 @@ class UsageEntry {
 
   /// 输入里由服务端缓存命中的那部分。
   final int cached;
+
+  /// 这一笔花了多少钱（元）。没配价就是 0。
+  final double costIn;
+  final double costOut;
+
+  double get cost => costIn + costOut;
   final String conversationId;
 
   int get total => prompt + completion;
@@ -37,6 +45,8 @@ class UsageEntry {
         'prompt': prompt,
         'completion': completion,
         'cached': cached,
+        if (costIn > 0) 'costIn': double.parse(costIn.toStringAsFixed(6)),
+        if (costOut > 0) 'costOut': double.parse(costOut.toStringAsFixed(6)),
         if (conversationId.isNotEmpty) 'conversation': conversationId,
       };
 
@@ -46,8 +56,15 @@ class UsageEntry {
         prompt: _intOf(json['prompt']),
         completion: _intOf(json['completion']),
         cached: _intOf(json['cached']),
+        costIn: _numOf(json['costIn']),
+        costOut: _numOf(json['costOut']),
         conversationId: '${json['conversation'] ?? ''}',
       );
+
+  static double _numOf(Object? raw) {
+    if (raw is num) return raw.toDouble();
+    return double.tryParse('${raw ?? ''}') ?? 0;
+  }
 
   static int _intOf(Object? raw) {
     if (raw is int) return raw;
@@ -63,6 +80,12 @@ class UsageTotals {
   int completion = 0;
   int cached = 0;
 
+  /// 这些笔加起来的钱（元）。
+  double costIn = 0;
+  double costOut = 0;
+
+  double get cost => costIn + costOut;
+
   int get total => prompt + completion;
 
   double get cacheRate => prompt <= 0 || cached <= 0 ? 0 : cached / prompt;
@@ -72,6 +95,8 @@ class UsageTotals {
     prompt += e.prompt;
     completion += e.completion;
     cached += e.cached;
+    costIn += e.costIn;
+    costOut += e.costOut;
   }
 
   void addAll(Iterable<UsageEntry> entries) {

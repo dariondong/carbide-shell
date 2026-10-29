@@ -7,6 +7,7 @@ import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/params.dart';
 import '../core/policy.dart';
+import '../core/pricing.dart';
 import '../core/smtp.dart';
 import '../core/usage.dart';
 import '../data/device.dart';
@@ -87,6 +88,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _prompt;
   late final TextEditingController _sys;
   late final TextEditingController _domains;
+  late final TextEditingController _priceIn;
+  late final TextEditingController _priceCache;
+  late final TextEditingController _priceOut;
 
   String _mode = 'autoRead';
   double _temperature = 0.2;
@@ -140,6 +144,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _prompt = TextEditingController(text: s.extraPrompt);
     _sys = TextEditingController(text: s.systemPrompt);
     _domains = TextEditingController(text: s.allowedDomains.join('\n'));
+    _priceIn = TextEditingController();
+    _priceCache = TextEditingController();
+    _priceOut = TextEditingController();
     final SmtpConfig m = widget.mail.value;
     _mailHost = TextEditingController(text: m.host);
     _mailPort = TextEditingController(text: '${m.port}');
@@ -196,6 +203,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _prompt.dispose();
     _sys.dispose();
     _domains.dispose();
+    _priceIn.dispose();
+    _priceCache.dispose();
+    _priceOut.dispose();
     _mailHost.dispose();
     _mailPort.dispose();
     _mailUser.dispose();
@@ -249,6 +259,17 @@ class _SettingsPageState extends State<SettingsPage> {
           .map((String d) => d.trim())
           .where((String d) => d.isNotEmpty)
           .toList();
+    // 手填的价：三个数都空着就回到内置价目表。
+    final double? pin = double.tryParse(_priceIn.text.trim());
+    final double? pcache = double.tryParse(_priceCache.text.trim());
+    final double? pout = double.tryParse(_priceOut.text.trim());
+    widget.settings.value.active.price
+      ..clear()
+      ..addAll(<String, Object?>{
+        if (pin != null && pin > 0) 'input': pin,
+        if (pcache != null && pcache > 0) 'cache': pcache,
+        if (pout != null && pout > 0) 'output': pout,
+      });
     await widget.settings.save();
     await widget.secrets
         .write(modelSecretKeyFor(widget.settings.value.activeProfile), _key.text.trim());
@@ -704,7 +725,42 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          // 三、提示词：跟着这套走
+          // 三、计价：手填的价盖住内置价目表
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(_priceLine(st.active),
+                    style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+                const SizedBox(height: 12),
+                RuleField(
+                  controller: _priceIn,
+                  label: '输入价（元 / 百万 token）',
+                  hint: '没命中缓存的那部分',
+                  keyboard: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _priceCache,
+                  label: '缓存命中价（元 / 百万 token）',
+                  hint: '不确定就留空，按输入价算',
+                  keyboard: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _priceOut,
+                  label: '输出价（元 / 百万 token）',
+                  hint: '模型的输出报价',
+                  keyboard: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => _touch(),
+                ),
+                _action('用内置价目表', '清掉上面手填的三个数', _clearPrice),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // 四、提示词：跟着这套走
           CardBox(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
             child: Column(
@@ -1392,6 +1448,27 @@ class _SettingsPageState extends State<SettingsPage> {
     _setSaved('复制成了 ${copy.label}，密钥要自己填');
   }
 
+  /// 这套配置的价从哪儿来，一句话说清。
+  String _priceLine(ModelProfile p) {
+    final PriceQuote quote = quotePrice(manual: p.price, model: p.model);
+    if (!quote.known) {
+      return '还没价：手填三个数，或者把模型名写成内置价目表里有的那些（'
+          '${kPriceBook.map((PriceEntry e) => e.match).join(' / ')}）。';
+    }
+    final String peak = quote.peakValley ? '，谷时半价' : '';
+    return '现在按${quote.sourceLabel}的价算：${quote.price!.oneLine}$peak。';
+  }
+
+  /// 回到内置价目表。
+  Future<void> _clearPrice() async {
+    _priceIn.text = '';
+    _priceCache.text = '';
+    _priceOut.text = '';
+    setState(() {});
+    await _persist();
+    _setSaved('改回内置价目表');
+  }
+
   /// 把当前这套的提示词读进输入框。切配置、新建、删除之后都要叫一次。
   void _fillProfileFields(AppSettings s) {
     _profileName.text = s.active.name;
@@ -1399,6 +1476,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _model.text = s.model;
     _profilePrompt.text = s.active.prompt;
     _profileUserPrompt.text = s.active.userPrompt;
+    final String pin = '${s.active.price['input'] ?? ''}';
+    final String pcache = '${s.active.price['cache'] ?? ''}';
+    final String pout = '${s.active.price['output'] ?? ''}';
+    _priceIn.text = pin.isEmpty || pin == 'null' ? '' : pin;
+    _priceCache.text = pcache.isEmpty || pcache == 'null' ? '' : pcache;
+    _priceOut.text = pout.isEmpty || pout == 'null' ? '' : pout;
     _picked = '';
   }
 

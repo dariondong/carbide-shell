@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/agent.dart';
 import '../core/compact.dart';
 import '../core/conversation.dart';
+import '../core/pricing.dart';
 import '../core/usage.dart';
 import '../core/llm_base.dart';
 import '../core/models.dart';
@@ -12,6 +13,7 @@ import '../core/tools.dart';
 import '../services.dart';
 import '../tools/ask_tool.dart';
 import 'activity.dart';
+import 'llm_settings.dart';
 
 /// 一个对话在跑的时候的全部状态。
 ///
@@ -239,14 +241,40 @@ class SessionHub extends ChangeNotifier {
     final int completion = (loop.tokens - wasTokens) - prompt;
     final int cached = loop.cachedTokens - wasCached;
     if (prompt <= 0 && completion <= 0) return;
+    // 这一轮用的是这场对话钉住的那套配置，价钱也按它的来。
+    final ModelProfile profile =
+        profileOf(services.settings.value, live.conversation.profileId);
+    final PriceQuote quote = quotePrice(manual: profile.price, model: profile.model);
+    final DateTime now = DateTime.now();
+    final int fixedPrompt = prompt < 0 ? 0 : prompt;
+    final int fixedCompletion = completion < 0 ? 0 : completion;
+    final int fixedCached = cached < 0 ? 0 : cached;
+    final double factor = quote.peakValley
+        ? peakFactor(peakValley: true, at: now)
+        : 1;
+    final CostSplit cost = quote.known
+        ? costSplitOf(
+            prompt: fixedPrompt,
+            completion: fixedCompletion,
+            cached: fixedCached,
+            price: quote.price!,
+            factor: factor,
+          )
+        : const CostSplit();
     await services.usage.record(UsageEntry(
-      at: DateTime.now(),
-      model: services.settings.value.model,
-      prompt: prompt < 0 ? 0 : prompt,
-      completion: completion < 0 ? 0 : completion,
-      cached: cached < 0 ? 0 : cached,
+      at: now,
+      model: profile.model,
+      prompt: fixedPrompt,
+      completion: fixedCompletion,
+      cached: fixedCached,
+      costIn: cost.promptTotal,
+      costOut: cost.output,
       conversationId: live.conversation.id,
     ));
+    if (cost.total > 0) {
+      live.conversation.costCny += cost.total;
+      await services.persist(live.conversation);
+    }
   }
 
   /// 停一轮：正在等确认的也一起放掉。

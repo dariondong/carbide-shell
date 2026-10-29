@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/usage.dart';
+import '../core/pricing.dart';
 import '../data/usage.dart';
 import 'components.dart';
 import 'theme.dart';
@@ -130,6 +131,36 @@ class _UsagePageState extends State<UsagePage> {
                       ],
                     ),
                   ),
+                  if (totals.cost > 0) ...<Widget>[
+                    const SizedBox(height: 14),
+                    CardBox(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                      child: Column(
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              _cell('输入费用', moneyText(totals.costIn)),
+                              _cell('输出费用', moneyText(totals.costOut)),
+                            ],
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: RuleLine(),
+                          ),
+                          Row(
+                            children: <Widget>[
+                              _cell('合计费用', moneyText(totals.cost)),
+                              _cell(
+                                  '每轮均价',
+                                  totals.turns <= 0
+                                      ? '—'
+                                      : moneyText(totals.cost / totals.turns)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   const SectionLabel('按模型'),
                   const SizedBox(height: 8),
@@ -194,7 +225,8 @@ class _UsagePageState extends State<UsagePage> {
                   const SizedBox(height: 14),
                   const Text(
                     '一轮对话结束记一笔，只记 token 数，不记内容。命中率是输入里由服务端缓存供上的比例，'
-                    '模型没报缓存就是「—」。',
+                    '模型没报缓存就是「—」。费用按这套配置的价算：手填的价在先，没填就用内置价目表，'
+                    'DeepSeek 的谷时按高峰的一半。',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
                 ],
@@ -228,7 +260,8 @@ class _UsagePageState extends State<UsagePage> {
           const SizedBox(height: 4),
           Text(
             '输入 ${usageText(row.totals.prompt)} · 输出 ${usageText(row.totals.completion)}'
-            ' · 命中 ${usageRate(row.totals.cacheRate, cached: row.totals.cached)}',
+            ' · 命中 ${usageRate(row.totals.cacheRate, cached: row.totals.cached)}'
+            '${row.totals.cost > 0 ? ' · 消费 ${moneyText(row.totals.cost)}' : ''}',
             style: C.monoSmall.copyWith(color: C.grey2),
           ),
         ],

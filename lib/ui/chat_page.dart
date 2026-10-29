@@ -8,9 +8,11 @@ import 'package:flutter/material.dart';
 import '../core/agent.dart';
 import '../core/compact.dart';
 import '../core/conversation.dart';
+import '../core/deepseek.dart';
 import '../core/docx.dart';
 import '../core/models.dart';
 import '../core/plan.dart';
+import '../core/pricing.dart';
 import '../data/hub.dart';
 import '../data/llm_settings.dart';
 import '../data/settings.dart';
@@ -1353,8 +1355,37 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         if (_attachNames.isNotEmpty) _attachRow(),
+        if (widget.conversation.costCny > 0) _costLine(),
         _composer(loop),
       ],
+    );
+  }
+
+  /// 这一场花了多少：输入、输出、合计，一行小字放在输入框上面。
+  ///
+  /// 价按这场对话钉住的那套配置算：手填的价在先，没填就用内置价目表。
+  /// DeepSeek 再标一句现在是不是谷时。
+  Widget _costLine() {
+    final ModelProfile p = _profile;
+    final PriceQuote quote = quotePrice(manual: p.price, model: p.model);
+    String tail = quote.known ? quote.sourceLabel : '';
+    if (quote.peakValley) {
+      tail = quote.known
+          ? '${quote.sourceLabel} · ${const DeepSeekClock().state(DateTime.now()).peak ? '高峰价' : '谷时半价'}'
+          : '谷时半价';
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 2, 18, 6),
+      child: Row(
+        children: <Widget>[
+          Text('本次会话 ${moneyText(widget.conversation.costCny)}',
+              style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey)),
+          const Spacer(),
+          if (tail.isNotEmpty)
+            Text(tail, style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2)),
+        ],
+      ),
     );
   }
 
