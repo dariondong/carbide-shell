@@ -37,6 +37,7 @@ import 'tools/report_tool.dart';
 import 'tools/ssh_tools.dart';
 import 'tools/status_tools.dart';
 import 'tools/temp_tools.dart';
+import 'tools/trigger_tool.dart';
 
 /// One conversation's live pieces: its loop and the memory file it writes.
 class AgentSession {
@@ -175,7 +176,11 @@ class AppServices {
       ..register(WatchListTool(
           watches: watches, hosts: hosts, onlyHostId: c.multiHost ? '' : c.hostId))
       ..register(TaskControlTool(tasks))
-      ..register(WatchControlTool(watches));
+      ..register(WatchControlTool(watches))
+      // 触发器：手机状态、消息通知、定时，模型能看、能建、能改、能删。
+      ..register(TriggerListTool(triggers))
+      ..register(TriggerSaveTool(triggers))
+      ..register(TriggerDeleteTool(triggers));
     if (isDesktopPlatform) {
       registry.register(LocalExecTool());
     }
