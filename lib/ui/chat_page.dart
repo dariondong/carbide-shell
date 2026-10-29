@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
+import '../core/balance.dart';
 import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/deepseek.dart';
@@ -15,6 +16,7 @@ import '../core/models.dart';
 import '../core/plan.dart';
 import '../core/poems.dart';
 import '../core/pricing.dart';
+import '../data/balance.dart';
 import '../data/hub.dart';
 import '../data/llm_settings.dart';
 import '../data/settings.dart';
@@ -102,6 +104,10 @@ class _ChatPageState extends State<ChatPage> {
 
   List<LlmMessage> get _messages => widget.conversation.messages;
 
+  /// 账上还剩多少：问得到的服务才显示，点一下那个数字重问一次。
+  late final BalanceStore _balance =
+      BalanceStore(widget.services.settings, widget.services.secrets);
+
   /// 这一轮是不是在跑，看托管处，不看页面自己。
   bool get _running => _live?.running ?? false;
 
@@ -115,9 +121,18 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     widget.hub.addListener(_refresh);
+    _balance.addListener(_onBalance);
+    // 第一帧之后再问：建这个页面的当口同步 setState 会撞上「during build」。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_balance.refresh(_profile));
+    });
     _scroll.addListener(_onScroll);
     _focus.addListener(_onFocus);
     _attach();
+  }
+
+  void _onBalance() {
+    if (mounted) setState(() {});
   }
 
   void _onFocus() {
@@ -177,6 +192,8 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     _openJump?.cancel();
     widget.hub.removeListener(_refresh);
+    _balance.removeListener(_onBalance);
+    _balance.dispose();
     _scroll.removeListener(_onScroll);
     _input.dispose();
     _focus.dispose();
@@ -289,6 +306,8 @@ class _ChatPageState extends State<ChatPage> {
     // 交给托管处跑：切到别的对话、回到列表，这一轮都还在。
     await widget.hub.send(live, text, images: images);
     if (!mounted) return;
+    // 刚花过钱，余额顺手再问一句（十二秒内只问一次）。
+    unawaited(_balance.refresh(_profile));
     setState(() {});
   }
 
@@ -1092,6 +1111,8 @@ class _ChatPageState extends State<ChatPage> {
     }
     if (!mounted) return;
     setState(() {});
+    // 换了一套模型就是另一个账户，余额重新问一句。
+    unawaited(_balance.refresh(_profile, force: true));
     _toast(c.profileId.isEmpty
         ? '这场对话跟设置走。'
         : '这场对话换成 ${_profile.label}，下一句就按它走。');
@@ -1366,7 +1387,8 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         if (_attachNames.isNotEmpty) _attachRow(),
-        if (widget.conversation.costCny > 0) _costLine(),
+        if (widget.conversation.costCny > 0 || BalanceStore.supports(_profile.baseUrl))
+          _costLine(),
         _composer(loop),
       ],
           ),
@@ -1447,8 +1469,11 @@ class _ChatPageState extends State<ChatPage> {
   ///
   /// 价按这场对话钉住的那套配置算：手填的价在先，没填就用内置价目表。
   /// DeepSeek 再标一句现在是不是谷时。
+  /// 服务商给了余额接口的话，右边再写一句账上还剩多少，点一下重问一次。
   Widget _costLine() {
     final ModelProfile p = _profile;
+    final AccountBalance? money = _balance.value;
+    final bool canAsk = BalanceStore.supports(p.baseUrl);
     final PriceQuote quote = quotePrice(manual: p.price, model: p.model);
     String tail = quote.known ? quote.sourceLabel : '';
     if (quote.peakValley) {
@@ -1462,11 +1487,26 @@ class _ChatPageState extends State<ChatPage> {
       padding: const EdgeInsets.fromLTRB(18, 2, 18, 6),
       child: Row(
         children: <Widget>[
-          Text('本次会话 ${moneyText(widget.conversation.costCny)}',
-              style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey)),
+          if (widget.conversation.costCny > 0)
+            Text('本次会话 ${moneyText(widget.conversation.costCny)}',
+                style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey)),
           const Spacer(),
           if (tail.isNotEmpty)
             Text(tail, style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2)),
+          if (canAsk) ...<Widget>[
+            if (tail.isNotEmpty)
+              Text(' · ', style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2)),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => unawaited(_balance.refresh(p, force: true)),
+              child: Text(
+                money == null
+                    ? (_balance.loading ? '余额 …' : '余额 --')
+                    : '余额 ${money.text}',
+                style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey),
+              ),
+            ),
+          ],
         ],
       ),
     );
