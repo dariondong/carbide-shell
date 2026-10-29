@@ -9,6 +9,8 @@ library;
 
 import 'dart:convert';
 
+import 'gbk.dart';
+
 /// 一封拆开的邮件。键都是小写的头名。
 class ParsedMail {
   const ParsedMail({
@@ -114,14 +116,43 @@ String decodeWord(String text) {
 
 final RegExp _encodedWord = RegExp(r'=\?([^?]+)\?([BbQq])\?([^?]*)\?=');
 
-/// 把一段字节按 charset 变成字符串。认不认识别的无所谓，认 UTF-8 就够读绝大多数信了。
+/// 把一段字节按 charset 变成字符串。
+///
+/// 认三种：GBK 家族（gbk / gb2312 / gb18030 / cp936）、Latin-1 家族、其余按 UTF-8。
+/// 没写 charset 的，先严格按 UTF-8 试一遍，坏字节再让 GBK 顶上去：中文的旧信多半是 GBK，
+/// 而 GBK 几乎什么字节都能凑出字来，所以只有整段解得干干净净才换用。
 String decodeBytesText(String raw, String charset) {
   final List<int> bytes = _bytesOf(raw);
   final String cs = charset.trim().toLowerCase();
-  if (cs.contains('8859') || cs.contains('latin') || cs == 'us-ascii') {
-    return latin1.decode(bytes, allowInvalid: true);
+  if (isGbkCharset(cs)) return decodeGbk(bytes);
+  final String? strict = _utf8OrNull(bytes);
+  if (cs.contains('8859') || cs.contains('latin') || cs == 'us-ascii' || cs == 'ascii') {
+    return strict ?? latin1.decode(bytes, allowInvalid: true);
+  }
+  if (strict != null) return strict;
+  if (!cs.contains('utf')) {
+    final String gbk = decodeGbk(bytes);
+    if (!gbk.contains('\uFFFD')) return gbk;
   }
   return utf8.decode(bytes, allowMalformed: true);
+}
+
+/// `gbk` `gb2312` `gb18030` `cp936` `x-gbk` `euc-cn` 都算同一族。
+bool isGbkCharset(String charset) {
+  final String cs = charset.trim().toLowerCase();
+  return cs.contains('gbk') ||
+      cs.contains('gb2312') ||
+      cs.contains('gb18030') ||
+      cs.contains('cp936') ||
+      cs.contains('euc-cn');
+}
+
+String? _utf8OrNull(List<int> bytes) {
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    return null;
+  }
 }
 
 /// base64 正文 → 字符串。
@@ -327,7 +358,7 @@ List<int> _bytesOf(String text) {
   return out;
 }
 
-/// 头部里夹着原始 8 位字节（没走 `=?…?=`）的那种，按 UTF-8 重新认一遍。
+/// 头部里夹着原始 8 位字节（没走 `=?…?=`）的那种，按 UTF-8 或 GBK 重新认一遍。
 String repairByteText(String text) {
   if (text.isEmpty) return text;
   bool high = false;
@@ -336,9 +367,10 @@ String repairByteText(String text) {
     if (c >= 128) high = true;
   }
   if (!high) return text;
-  try {
-    return utf8.decode(latin1.encode(text));
-  } catch (_) {
-    return text;
-  }
+  final List<int> bytes = _bytesOf(text);
+  final String? strict = _utf8OrNull(bytes);
+  if (strict != null) return strict;
+  final String gbk = decodeGbk(bytes);
+  if (!gbk.contains('\uFFFD')) return gbk;
+  return text;
 }

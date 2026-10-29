@@ -12,6 +12,16 @@ String qpT(String text) => utf8
     .map((int b) => '=${b.toRadixString(16).toUpperCase().padLeft(2, '0')}')
     .join();
 
+/// GBK 的字节：「测试邮件」「张三」「今天天气很好。」
+const List<int> gbkTitle = <int>[0xb2, 0xe2, 0xca, 0xd4, 0xd3, 0xca, 0xbc, 0xfe];
+const List<int> gbkName = <int>[0xd5, 0xc5, 0xc8, 0xfd];
+const List<int> gbkBody = <int>[
+  0xbd, 0xf1, 0xcc, 0xec, 0xcc, 0xec, 0xc6, 0xf8, 0xba, 0xdc, 0xba, 0xc3, 0xa1, 0xa3,
+];
+
+/// 一段 GBK 字节按 latin1 摊成字符：读 socket 时就是这么落下来的。
+String gbk(List<int> bytes) => latin1.decode(bytes);
+
 void main() {
   test('头部折行接回去，=?UTF-8?B?…?= 解开', () {
     final String raw = 'From: =?UTF-8?B?${base64.encode(utf8.encode('张三'))}?= '
@@ -97,5 +107,65 @@ void main() {
   test('headToText 不把 script 和注释当成正文', () {
     expect(htmlToText('<style>.a{}</style><!-- 别让人看见 --><p>正文</p>'), '正文');
     expect(unescapeHtml('&#39;&#x4e2d;&lt;'), "'中<");
+  });
+
+  // 中文的旧信多数不是 UTF-8：以前一律按 UTF-8 解，满屏是替换符。
+  test('GBK 的主题、发件人、正文都解得回来', () {
+    final String raw = 'From: =?GBK?B?${base64.encode(gbkName)}?= <zs@example.com>\r\n'
+        'Subject: =?gb2312?B?${base64.encode(gbkTitle)}?=\r\n'
+        'Content-Type: text/plain; charset=gb2312\r\n'
+        'Content-Transfer-Encoding: base64\r\n'
+        '\r\n'
+        '${base64.encode(gbkBody)}\r\n';
+    final ParsedMail mail = parseMail(gbk(utf8.encode(raw)));
+    expect(mail.from, '张三 <zs@example.com>');
+    expect(mail.subject, '测试邮件');
+    expect(mail.readable, '今天天气很好。');
+  });
+
+  test('GBK 的 Q 编码与 gb18030 写法', () {
+    final String q = gbkTitle
+        .map((int b) => '=${b.toRadixString(16).toUpperCase().padLeft(2, '0')}')
+        .join();
+    expect(decodeWord('=?GBK?Q?$q?='), '测试邮件');
+    expect(decodeWord('=?gb18030?B?${base64.encode(gbkTitle)}?='), '测试邮件');
+  });
+
+  test('没写 charset 的 GBK 正文也能读', () {
+    final List<int> raw = <int>[
+      ...utf8.encode('Subject: no-charset\r\nContent-Type: text/plain\r\n\r\n'),
+      ...gbkBody,
+      ...utf8.encode('\r\n'),
+    ];
+    expect(parseMail(gbk(raw)).readable, '今天天气很好。');
+  });
+
+  test('头部里裸的 GBK 字节也认', () {
+    final List<int> raw = <int>[
+      ...utf8.encode('Subject: '),
+      ...gbkTitle,
+      ...utf8.encode('\r\nContent-Type: text/plain\r\n\r\nhi\r\n'),
+    ];
+    expect(parseMail(gbk(raw)).subject, '测试邮件');
+  });
+
+  test('GBK 正文用 quoted-printable 写也一样', () {
+    final String q = gbkBody
+        .map((int b) => '=${b.toRadixString(16).toUpperCase().padLeft(2, '0')}')
+        .join();
+    final String raw = 'Content-Type: text/plain; charset="GBK"\r\n'
+        'Content-Transfer-Encoding: quoted-printable\r\n'
+        '\r\n'
+        '$q\r\n';
+    expect(parseMail(raw).readable, '今天天气很好。');
+  });
+
+  test('UTF-8 的信不被 GBK 抢走', () {
+    final String raw = 'Content-Type: text/plain; charset=utf-8\r\n'
+        '\r\n'
+        '中文正文\r\n';
+    expect(parseMail(bytes(raw)).readable, '中文正文');
+    expect(isGbkCharset('GB2312'), isTrue);
+    expect(isGbkCharset('utf-8'), isFalse);
   });
 }
