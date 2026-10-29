@@ -17,6 +17,7 @@ import '../tools/ask_tool.dart';
 import 'components.dart';
 import 'md_text.dart';
 import 'motion.dart';
+import 'output_preview.dart';
 import 'pet.dart';
 import 'temp_files_page.dart';
 import 'theme.dart';
@@ -923,20 +924,42 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _answer(String text, {bool streaming = false, double bottom = 18}) {
+    final List<String> out = streaming
+        ? const <String>[]
+        : localOutputs(widget.services.files, text);
     return Padding(
       padding: EdgeInsets.only(left: 34, bottom: streaming ? 6 : bottom),
-      child: MdText(
-        text: text,
-        streaming: streaming,
-        base: C.answer.copyWith(fontSize: widget.services.settings.value.answerFont),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          MdText(
+            text: text,
+            streaming: streaming,
+            base: C.answer.copyWith(fontSize: widget.services.settings.value.answerFont),
+          ),
+          if (out.isNotEmpty) OutputPreview(files: widget.services.files, paths: out),
+        ],
       ),
     );
   }
 
   Widget _toolTurn(List<LlmToolCall> calls, Map<String, String> outputs, String runningId) {
+    // 这一组工具写出来的图和网页，就在它们下面露一眼。
+    final StringBuffer said = StringBuffer();
+    for (final LlmToolCall c in calls) {
+      final String? out = outputs[c.id];
+      if (out != null) said.writeln(out);
+    }
+    final List<String> shown = localOutputs(widget.services.files, said.toString());
     return Padding(
       padding: const EdgeInsets.only(left: 34, bottom: 18),
-      child: ToolRunGroup(calls: calls, outputs: outputs, runningId: runningId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          ToolRunGroup(calls: calls, outputs: outputs, runningId: runningId),
+          if (shown.isNotEmpty) OutputPreview(files: widget.services.files, paths: shown),
+        ],
+      ),
     );
   }
 

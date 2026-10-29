@@ -150,6 +150,16 @@ class TempFiles {
     return f;
   }
 
+  /// 绝对路径抹掉工作目录前缀，变成临时区里的相对路径。不属于这里就原样返回。
+  String relativize(String path) {
+    final String text = path.replaceAll('\\', '/').trim();
+    final String root = this.root.path.replaceAll('\\', '/');
+    if (text.startsWith('$root/')) {
+      return text.substring(root.length + 1);
+    }
+    return text;
+  }
+
   /// 一个还不存在的路径：同名就加 `-2`。从主机取回来时用它，不覆盖已有的那份。
   File freshNamed(String name) {
     ensure();
