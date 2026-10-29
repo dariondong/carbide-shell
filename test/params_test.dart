@@ -99,8 +99,11 @@ void main() {
     expect(copy.id, isNot('p1'));
     expect(copy.label, endsWith('副本'));
     expect(copy.prompt, '内置那份');
+    // 复制之后默认切到新的那一份，改它不影响原来的。
+    expect(s.activeProfile, copy.id);
     copy.params['temperature']!.value = 0.5;
-    expect(s.active.params['temperature']!.value, 1.1);
+    expect(s.profileById('p1')!.paramValue('temperature'), 1.1);
+    expect(copy.paramValue('temperature'), 0.5);
   });
 
   test('设为默认与配置是否配完', () {
