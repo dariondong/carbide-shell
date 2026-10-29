@@ -5,6 +5,7 @@ import '../data/hosts.dart';
 import '../data/hub.dart';
 import '../services.dart';
 import 'motion.dart';
+import 'pet.dart';
 import 'theme.dart';
 
 /// 会话常驻在左边：宽屏时一直摆着，点哪一条右边就换成哪一场对话。
