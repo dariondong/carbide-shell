@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/imap.dart';
 import '../core/mail_html.dart';
 import '../core/smtp.dart';
 import 'secrets.dart';
 
+export '../core/imap.dart' show ImapClient, ImapConfig, ImapError, MailDetail, MailSummary;
 export '../core/mail_html.dart';
 
 /// 邮件通知的设置：一个 JSON 文件，密码单独放安全存储。
@@ -55,6 +57,44 @@ class MailStore extends ChangeNotifier {
       return;
     }
     await secrets.write(passwordKey, password);
+  }
+
+  /// 收信那一半的设置。账号、密码与发信共用。
+  ImapConfig get imap => value.imap;
+
+  /// 收信能用：填了 IMAP 服务器和账号。
+  bool get inboxReady => value.imapReady;
+
+  /// 读收件箱：最近几封。没配好就报一句能读的错。
+  Future<List<MailSummary>> inbox({int count = 15, bool unreadOnly = false}) async {
+    if (!inboxReady) {
+      throw ImapError(value.imapMissing.isEmpty ? '读邮箱没配全' : value.imapMissing);
+    }
+    return ImapClient(value.imap, await password())
+        .latest(count: count, unreadOnly: unreadOnly);
+  }
+
+  /// 看一封的全部。
+  Future<MailDetail> read(int uid) async {
+    if (!inboxReady) {
+      throw ImapError(value.imapMissing.isEmpty ? '读邮箱没配全' : value.imapMissing);
+    }
+    return ImapClient(value.imap, await password()).read(uid);
+  }
+
+  /// 试一下收信地址：只登录，不拉任何一封信。
+  Future<String> testInbox() async {
+    if (!inboxReady) {
+      return value.imapMissing.isEmpty ? '读邮箱没配全' : value.imapMissing;
+    }
+    try {
+      await ImapClient(value.imap, await password()).ping();
+      return '连上了';
+    } on ImapError catch (e) {
+      return '连不上：${e.message}';
+    } catch (e) {
+      return '连不上：$e';
+    }
   }
 }
 

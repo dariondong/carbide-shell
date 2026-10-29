@@ -23,6 +23,7 @@ import '../data/update.dart';
 import '../version.dart';
 import 'components.dart';
 import 'motion.dart';
+import 'inbox_page.dart';
 import 'theme.dart';
 
 /// 设置：一页是模块清单，点进去才是那个模块的东西。
@@ -125,11 +126,15 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _mailFrom;
   late final TextEditingController _mailTo;
   late final TextEditingController _mailAllowInput;
+  late final TextEditingController _mailImapHost;
+  late final TextEditingController _mailImapPort;
   String _mailAllowNote = '';
   bool _mailOn = false;
   bool _mailSecure = true;
   bool _mailHtml = true;
+  bool _mailImapSecure = true;
   String _mailNote = '';
+  String _inboxNote = '';
 
   /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
   final ValueNotifier<int> _tick = ValueNotifier<int>(0);
@@ -161,10 +166,13 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailFrom = TextEditingController(text: m.from);
     _mailTo = TextEditingController(text: m.to);
     _mailAllowInput = TextEditingController();
+    _mailImapHost = TextEditingController(text: m.imapHost);
+    _mailImapPort = TextEditingController(text: '${m.imapPort}');
     widget.mail.addListener(_onMailChanged);
     _mailOn = m.enabled;
     _mailSecure = m.secure;
     _mailHtml = m.html;
+    _mailImapSecure = m.imapSecure;
     _mode = s.approvalMode;
     _temperature = s.temperature;
     _font = s.answerFont;
@@ -222,6 +230,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailFrom.dispose();
     _mailTo.dispose();
     _mailAllowInput.dispose();
+    _mailImapHost.dispose();
+    _mailImapPort.dispose();
     widget.mail.removeListener(_onMailChanged);
     super.dispose();
   }
@@ -296,6 +306,9 @@ class _SettingsPageState extends State<SettingsPage> {
       // 名单是加减出来的，不跟着上面那些输入框走；模型也可能刚改过，读现在这份。
       allowedTo: widget.mail.value.allowedTo,
       html: _mailHtml,
+      imapHost: _mailImapHost.text.trim(),
+      imapPort: _intOf(_mailImapPort.text, 993, 1, 65535),
+      imapSecure: _mailImapSecure,
     );
     await widget.mail.save();
     await widget.mail.setPassword(_mailPass.text.trim());
@@ -1162,8 +1175,51 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('收信',
+                    style: TextStyle(
+                        fontSize: 12.5, color: C.ink, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('账号和密码跟上面那两行用同一份，这里只填服务器。',
+                    style: TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
+                const SizedBox(height: 10),
+                RuleField(
+                  controller: _mailImapHost,
+                  label: 'IMAP 服务器',
+                  hint: 'imap.qq.com',
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _mailImapPort,
+                  label: '端口',
+                  hint: '993',
+                  keyboard: TextInputType.number,
+                  onChanged: (_) => _touch(),
+                ),
+                _toggle(
+                  '直连加密',
+                  _mailImapSecure,
+                  _mailImapSecure ? '993 一般都要开' : '明文，只适合内网',
+                  (bool v) => _apply(() => _mailImapSecure = v),
+                ),
+                const RuleLine(),
+                _action(
+                  '收件箱',
+                  _mailImapHost.text.trim().isEmpty ? '先填服务器' : '看最近 20 封',
+                  _openInbox,
+                ),
+                const RuleLine(),
+                _action('试一下收信', _inboxNote.isEmpty ? '只登录，不拉信' : _inboxNote, _testInbox),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           Text(
-            '发不出去只影响这一封，任务照常跑完。',
+            '发不出去只影响这一封，任务照常跑完。收信是只读的：不标已读，也不下载附件。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];
@@ -1702,6 +1758,26 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (!mounted) return;
     setState(() => _mailNote = result.ok ? '发出去了' : '没发出去：${result.error}');
+  }
+
+  /// 打开收件箱。先把这一页的输入盘一次，不然刚填的 IMAP 地址还没落盘。
+  Future<void> _openInbox() async {
+    await _persist();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => InboxPage(mail: widget.mail)),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// 只登录，不拉任何一封：能连上就说明服务器、端口、授权码都对。
+  Future<void> _testInbox() async {
+    setState(() => _inboxNote = '正在连…');
+    await _persist();
+    final String note = await widget.mail.testInbox();
+    if (!mounted) return;
+    setState(() => _inboxNote = note);
   }
 
   /// 名单存了一次就重画一次：模型在后台加了一个地址，这一页也得跟着变，

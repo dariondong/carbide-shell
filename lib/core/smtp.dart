@@ -2,11 +2,15 @@
 ///
 /// 只做两件事：直接加密连（465）和不加密连（25，一般只在局域网里）。登录走 AUTH LOGIN，
 /// 服务器不认就试 AUTH PLAIN。不 import Flutter，可以单独测报文拼装。
+///
+/// 同一份设置里也放着收信的 IMAP 地址：账号、密码共用，服务器和端口各填一行。
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'imap.dart';
 
 /// 一台 SMTP 服务器的设置。
 class SmtpConfig {
@@ -20,6 +24,9 @@ class SmtpConfig {
     this.to = '',
     this.allowedTo = const <String>[],
     this.html = true,
+    this.imapHost = '',
+    this.imapPort = 993,
+    this.imapSecure = true,
   });
 
   final bool enabled;
@@ -32,6 +39,11 @@ class SmtpConfig {
 
   /// 带一份 HTML 排版的正文，同时留一份纯文本给不认 HTML 的客户端。
   final bool html;
+
+  /// 收信的服务器。空着就是只看发信、不读邮箱。
+  final String imapHost;
+  final int imapPort;
+  final bool imapSecure;
 
   /// 发件人地址。多数服务器要求它和账号一致。
   final String from;
@@ -87,6 +99,22 @@ class SmtpConfig {
     return '';
   }
 
+  /// 收信那一半：账号与密码跟着上面走，服务器、端口单独填。
+  ///
+  /// 读邮箱不看那个发信开关：不想收信就把服务器空着。
+  ImapConfig get imap => ImapConfig(
+        host: imapHost.trim(),
+        port: imapPort,
+        secure: imapSecure,
+        user: user.trim().isEmpty ? from.trim() : user.trim(),
+      );
+
+  /// 收信能用：服务器填了，也有账号。
+  bool get imapReady => imap.ready;
+
+  /// 收信差哪一项。
+  String get imapMissing => imap.missing;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'enabled': enabled,
         'host': host,
@@ -97,6 +125,9 @@ class SmtpConfig {
         'to': to,
         'allowedTo': allowedTo,
         'html': html,
+        'imapHost': imapHost,
+        'imapPort': imapPort,
+        'imapSecure': imapSecure,
       };
 
   static SmtpConfig fromJson(Map<String, Object?> json) => SmtpConfig(
@@ -109,6 +140,9 @@ class SmtpConfig {
         to: '${json['to'] ?? ''}',
         allowedTo: allowedFromJson(json['allowedTo']),
         html: json['html'] != false,
+        imapHost: '${json['imapHost'] ?? ''}',
+        imapPort: (json['imapPort'] as num?)?.toInt() ?? 993,
+        imapSecure: json['imapSecure'] != false,
       );
 
   /// 换掉收件人（模型选的那一个）或那份额外名单，其余不动。
@@ -122,6 +156,9 @@ class SmtpConfig {
         to: to ?? this.to,
         allowedTo: allowedTo ?? this.allowedTo,
         html: html,
+        imapHost: imapHost,
+        imapPort: imapPort,
+        imapSecure: imapSecure,
       );
 
   /// 名单在 JSON 里是一条一条存的。老版本存成过一行文本，两种都认。
