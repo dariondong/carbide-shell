@@ -91,7 +91,7 @@ void main() {
 
   test('Head 里夹着原始 8 位字节的主题也认', () {
     final String raw = 'Subject: ${latin1.decode(utf8.encode('未编码的中文'))}\r\n\r\n正文';
-    expect(parseMail(bytes(raw)).subject, '未编码的中文');
+    expect(parseMail(raw).subject, '未编码的中文');
   });
 
   test('headToText 不把 script 和注释当成正文', () {
