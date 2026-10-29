@@ -98,9 +98,10 @@ class ModelProfile {
   }
 
   /// 换一份地址和模型名，其余（提示词、参数、报价）都留着。
+  /// 没写过名字的那一套也要能一眼看出是副本，所以名字取 [label] 加个尾巴。
   ModelProfile copyAs(String newId, {String? name}) => ModelProfile(
         id: newId,
-        name: name ?? (this.name.isEmpty ? '' : '${this.name} 副本'),
+        name: name ?? '$label 副本',
         baseUrl: baseUrl,
         model: model,
         prompt: prompt,
