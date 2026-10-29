@@ -192,6 +192,7 @@ class AppSettings {
     if (from == null) return active;
     final ModelProfile copy = from.copyAs(_nextId(), name: name.isEmpty ? null : name);
     _profiles.add(copy);
+    _active = copy.id;
     return copy;
   }
 

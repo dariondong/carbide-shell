@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
+import '../core/params.dart';
 import '../core/policy.dart';
 import '../core/smtp.dart';
 import '../core/usage.dart';
@@ -72,6 +73,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _model;
   late final TextEditingController _key;
   late final TextEditingController _profileName;
+  late final TextEditingController _profilePrompt;
+  late final TextEditingController _profileUserPrompt;
   late final TextEditingController _steps;
   late final TextEditingController _prompt;
   late final TextEditingController _sys;
@@ -119,6 +122,8 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final AppSettings s = widget.settings.value;
     _profileName = TextEditingController(text: s.active.name);
+    _profilePrompt = TextEditingController(text: s.active.prompt);
+    _profileUserPrompt = TextEditingController(text: s.active.userPrompt);
     _base = TextEditingController(text: s.baseUrl);
     _model = TextEditingController(text: s.model);
     _key = TextEditingController();
@@ -175,6 +180,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _model.dispose();
     _key.dispose();
     _profileName.dispose();
+    _profilePrompt.dispose();
+    _profileUserPrompt.dispose();
     _steps.dispose();
     _prompt.dispose();
     _sys.dispose();
@@ -213,6 +220,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ..active.name = _profileName.text.trim()
       ..baseUrl = _base.text.trim()
       ..model = _model.text.trim()
+      ..active.prompt = _profilePrompt.text.trim()
+      ..active.userPrompt = _profileUserPrompt.text.trim()
       ..maxSteps = _intOf(_steps.text, 12, 1, 200)
       ..temperature = _temperature
       ..approvalMode = _mode
@@ -576,9 +585,11 @@ class _SettingsPageState extends State<SettingsPage> {
   List<Widget> _moduleBody(String key) {
     switch (key) {
       case 'model':
+        final AppSettings st = widget.settings.value;
         return <Widget>[
+          // 一、这套配置本身：名字、地址、密钥
           CardBox(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 2),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -586,11 +597,13 @@ class _SettingsPageState extends State<SettingsPage> {
                   spacing: 8,
                   runSpacing: 8,
                   children: <Widget>[
-                    for (final ModelProfile p in widget.settings.value.profiles)
-                      _profileChip(p),
+                    for (final ModelProfile p in st.profiles) _profileChip(p),
                     _newProfileChip(),
                   ],
                 ),
+                const SizedBox(height: 8),
+                const Text('点一下切过去，切过去的就是默认用的那套。',
+                    style: TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
                 const SizedBox(height: 14),
                 RuleField(
                   controller: _profileName,
@@ -627,25 +640,71 @@ class _SettingsPageState extends State<SettingsPage> {
                   obscure: true,
                   onChanged: (_) => _touch(),
                 ),
-                _choices<double>(
-                  '温度',
-                  const <double>[0.0, 0.2, 0.7],
-                  _temperature,
-                  (double v) => '${v.toStringAsFixed(1)}',
-                  (double v) => _apply(() => _temperature = v),
-                ),
                 RuleField(
                   controller: _steps,
                   label: '每轮步数上限',
                   keyboard: TextInputType.number,
                   onChanged: (_) => _touch(),
                 ),
-                if (widget.settings.value.profiles.length > 1)
+                _configCheck(),
+                const RuleLine(),
+                _action('复制一套', '提示词、参数、报价一起拷，密钥不拷', _copyProfile),
+                if (st.profiles.length > 1)
                   _action('删掉这套配置', '地址与密钥一起清掉', _deleteProfile),
               ],
             ),
           ),
           const SizedBox(height: 14),
+          // 二、参数：值、来源、锁、范围
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (final ParamSpec spec in kParamSpecs) _paramRow(spec),
+                const RuleLine(),
+                _toggle(
+                  '允许 AI 调节参数',
+                  st.aiTune,
+                  '它只能提，提了还要你点批准；锁住的参数它改不动',
+                  (bool v) => _apply(() => st.aiTune = v),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // 三、提示词：跟着这套走
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                RuleField(
+                  controller: _profilePrompt,
+                  label: '这套绑定的提示词',
+                  hint: '切到这套就换上它；留空就是设置里那份',
+                  minLines: 3,
+                  maxLines: 8,
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _profileUserPrompt,
+                  label: '只给这套写的一份',
+                  hint: '优先级最高；留空就用上面那份',
+                  minLines: 3,
+                  maxLines: 8,
+                  onChanged: (_) => _touch(),
+                ),
+                _action('看看内置提示词', '只读', _showBuiltinPrompt),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '提示词次序：对话自己写的 > 这里「只给这套写的一份」> 「这套绑定的」> 设置里的全局提示词 > 内置那份。',
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+          const SizedBox(height: 6),
           const Text(
             '密钥只存在本机安全存储，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
@@ -975,10 +1034,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (id == s.activeProfile) return;
     await _persist();
     s.switchProfile(id);
-    _profileName.text = s.active.name;
-    _base.text = s.baseUrl;
-    _model.text = s.model;
-    _picked = '';
+    _fillProfileFields(s);
     await widget.settings.save();
     await _loadKey(s.activeProfile);
     if (!mounted) return;
@@ -996,6 +1052,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _model.text = '';
     _key.text = '';
     _picked = '';
+    _profilePrompt.text = '';
+    _profileUserPrompt.text = '';
     await widget.settings.save();
     if (!mounted) return;
     _setSaved('新建了一套');
@@ -1009,10 +1067,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final String gone = s.activeProfile;
     if (!s.removeProfile(gone)) return;
     await widget.secrets.delete(modelSecretKeyFor(gone));
-    _profileName.text = s.active.name;
-    _base.text = s.baseUrl;
-    _model.text = s.model;
-    _picked = '';
+    _fillProfileFields(s);
     await widget.settings.save();
     await _loadKey(s.activeProfile);
     if (!mounted) return;
@@ -1026,6 +1081,286 @@ class _SettingsPageState extends State<SettingsPage> {
       if (typing.isNotEmpty) return typing;
     }
     return p.label;
+  }
+
+  /// 这套配置到底能不能用：地址、模型名、密钥三样。
+  Widget _configCheck() {
+    final List<String> bad = <String>[];
+    final String url = _base.text.trim();
+    final String model = _model.text.trim();
+    if (url.isEmpty) {
+      bad.add('还没填地址');
+    } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      bad.add('地址要以 http:// 或 https:// 开头');
+    }
+    if (model.isEmpty) bad.add('还没填模型名');
+    if (_key.text.trim().isEmpty) bad.add('还没填密钥（本地模型可以空着）');
+    final bool ready = bad.isEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 5, right: 7),
+            decoration: BoxDecoration(
+              color: ready ? C.blue : C.rule2,
+              shape: BoxShape.circle,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              ready ? '这一套填好了，切过去就能用。' : bad.join('；'),
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.6,
+                color: ready ? C.grey : C.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一个参数一行：值（点开改）、谁改的、锁、范围、恢复。
+  Widget _paramRow(ParamSpec spec) {
+    final AppSettings s = widget.settings.value;
+    final ModelProfile p = s.active;
+    final ParamState? state = p.paramState(spec.key);
+    final double value = p.paramValue(spec.key);
+    final ParamRange range = s.paramRange(spec.key);
+    final bool locked = state?.locked ?? false;
+    final String who = <String>[
+      state?.sourceLabel ?? '默认',
+      if ((state?.reason ?? '').isNotEmpty) state!.reason,
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(spec.label, style: const TextStyle(fontSize: 13, color: C.ink)),
+                    const SizedBox(height: 3),
+                    Text(who,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: C.grey, height: 1.4)),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _editParamValue(spec),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  height: 28,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: C.paper2,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                  ),
+                  child: Text(spec.format(value),
+                      style: C.monoSmall.copyWith(color: C.ink, fontSize: 11.5)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _toggleParamLock(spec, !locked),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: locked ? C.blueSoft : C.paper2,
+                    borderRadius: BorderRadius.circular(C.radiusSmall),
+                  ),
+                  child: Icon(locked ? Icons.lock : Icons.lock_open,
+                      size: 14, color: locked ? C.blue : C.grey),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text('允许 ${range.text}\u3000${locked ? '锁着，AI 改不动' : 'AI 可以提，批准后生效'}',
+                    style: const TextStyle(fontSize: 10.5, color: C.grey2, height: 1.4)),
+              ),
+              _miniLink('改范围', () => _editParamRange(spec)),
+              const SizedBox(width: 10),
+              _miniLink('恢复默认', () => _resetParam(spec)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniLink(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Text(label, style: const TextStyle(fontSize: 10.5, color: C.blue)),
+    );
+  }
+
+  /// 调一个数字的小对话框。返回 null 表示没改。
+  Future<String?> _numberDialog({
+    required String title,
+    required String hint,
+    required List<TextEditingController> fields,
+    required List<String> labels,
+  }) async {
+    final String? done = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(hint, style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+            const SizedBox(height: 10),
+            for (int i = 0; i < fields.length; i += 1) ...<Widget>[
+              TextField(
+                controller: fields[i],
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(fontSize: 13.5),
+                decoration: InputDecoration(labelText: labels[i]),
+              ),
+              if (i < fields.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('ok'),
+            child: const Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
+        ],
+      ),
+    );
+    return done;
+  }
+
+  /// 自己填一个参数值。锁不影响用户自己改，来源记成手动。
+  Future<void> _editParamValue(ParamSpec spec) async {
+    final AppSettings s = widget.settings.value;
+    final ModelProfile p = s.active;
+    final ParamRange range = s.paramRange(spec.key);
+    final TextEditingController field =
+        TextEditingController(text: spec.format(p.paramValue(spec.key)));
+    final String? done = await _numberDialog(
+      title: spec.label,
+      hint: '允许 ${range.text}。填过之后这套就用这个值，AI 的提议要你批准才会覆盖它。',
+      fields: <TextEditingController>[field],
+      labels: <String>[spec.label],
+    );
+    final String raw = field.text;
+    field.dispose();
+    if (done == null || !mounted) return;
+    final double? value = double.tryParse(raw.trim());
+    if (value == null) {
+      _setSaved('要填一个数字');
+      return;
+    }
+    final ParamEdit edit = applyParam(
+      p.params,
+      key: spec.key,
+      value: value,
+      range: range,
+      byAi: false,
+      reason: '自己填的',
+    );
+    if (!edit.ok) {
+      _setSaved(edit.text);
+      return;
+    }
+    setState(() {});
+    await _persist();
+    _setSaved(edit.text);
+  }
+
+  /// 改这一个参数允许落在什么范围。只能往出厂范围里收窄。
+  Future<void> _editParamRange(ParamSpec spec) async {
+    final AppSettings s = widget.settings.value;
+    final ParamRange range = s.paramRange(spec.key);
+    final TextEditingController low = TextEditingController(text: '${range.low}');
+    final TextEditingController high = TextEditingController(text: '${range.high}');
+    final String? done = await _numberDialog(
+      title: '${spec.label}的允许范围',
+      hint: '出厂范围是 ${spec.span}，只能往里收。AI 的值落在这个范围外会被拒绝。',
+      fields: <TextEditingController>[low, high],
+      labels: <String>['最小', '最大'],
+    );
+    final double? a = double.tryParse(low.text.trim());
+    final double? b = double.tryParse(high.text.trim());
+    low.dispose();
+    high.dispose();
+    if (done == null || !mounted) return;
+    if (a == null || b == null || a >= b) {
+      _setSaved('范围要两个数，小的在前面');
+      return;
+    }
+    s.paramRanges[spec.key] = <double>[a, b];
+    setState(() {});
+    await _persist();
+    _setSaved('范围改成 ${s.paramRange(spec.key).text}');
+  }
+
+  Future<void> _toggleParamLock(ParamSpec spec, bool locked) async {
+    setParamLock(widget.settings.value.active.params, key: spec.key, locked: locked);
+    setState(() {});
+    await _persist();
+    _setSaved(locked ? '${spec.label}锁上了，AI 改不动' : '${spec.label}解锁了');
+  }
+
+  Future<void> _resetParam(ParamSpec spec) async {
+    resetParam(widget.settings.value.active.params, key: spec.key);
+    setState(() {});
+    await _persist();
+    _setSaved('${spec.label}回到 ${spec.format(spec.fallback)}');
+  }
+
+  /// 把手上这套设成默认。
+  /// 复制一份：提示词、参数、报价一起拷，密钥不拷（新的一套自己填）。
+  Future<void> _copyProfile() async {
+    _debounce?.cancel();
+    await _persist();
+    final AppSettings s = widget.settings.value;
+    final String from = s.activeProfile;
+    final ModelProfile copy = s.duplicateProfile(from);
+    await widget.settings.save();
+    _fillProfileFields(s);
+    await _loadKey(copy.id);
+    if (!mounted) return;
+    setState(() {});
+    _setSaved('复制成了 ${copy.label}，密钥要自己填');
+  }
+
+  /// 把当前这套的提示词读进输入框。切配置、新建、删除之后都要叫一次。
+  void _fillProfileFields(AppSettings s) {
+    _profileName.text = s.active.name;
+    _base.text = s.baseUrl;
+    _model.text = s.model;
+    _profilePrompt.text = s.active.prompt;
+    _profileUserPrompt.text = s.active.userPrompt;
+    _picked = '';
   }
 
   /// 一套配置的芯片，点一下就切过去。
