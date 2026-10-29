@@ -24,13 +24,11 @@ extension PetMoodInfo on PetMood {
       };
 }
 
-/// 现在该画哪一态：有活在跑就是工作中，在等人答就是想，夜里没活就睡觉。
-PetMood petMoodNow({required bool running, required bool waiting, DateTime? at}) {
+/// 现在该画哪一态：有活在跑就是工作中，在等人答就是想，其余时候都在睡觉。
+PetMood petMoodNow({required bool running, required bool waiting}) {
   if (running) return PetMood.working;
   if (waiting) return PetMood.thinking;
-  final int hour = (at ?? DateTime.now()).hour;
-  if (hour >= 23 || hour < 7) return PetMood.sleeping;
-  return PetMood.idle;
+  return PetMood.sleeping;
 }
 
 /// 应用的拟人形象。是一张带透明底的立绘，不是头像框，所以贴在哪里都干净。
