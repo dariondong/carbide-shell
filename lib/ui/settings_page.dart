@@ -124,7 +124,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _mailPass;
   late final TextEditingController _mailFrom;
   late final TextEditingController _mailTo;
-  late final TextEditingController _mailAllow;
+  late final TextEditingController _mailAllowInput;
+  String _mailAllowNote = '';
   bool _mailOn = false;
   bool _mailSecure = true;
   bool _mailHtml = true;
@@ -159,7 +160,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailPass = TextEditingController();
     _mailFrom = TextEditingController(text: m.from);
     _mailTo = TextEditingController(text: m.to);
-    _mailAllow = TextEditingController(text: m.allowedTo);
+    _mailAllowInput = TextEditingController();
+    widget.mail.addListener(_onMailChanged);
     _mailOn = m.enabled;
     _mailSecure = m.secure;
     _mailHtml = m.html;
@@ -219,7 +221,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailPass.dispose();
     _mailFrom.dispose();
     _mailTo.dispose();
-    _mailAllow.dispose();
+    _mailAllowInput.dispose();
+    widget.mail.removeListener(_onMailChanged);
     super.dispose();
   }
 
@@ -290,7 +293,8 @@ class _SettingsPageState extends State<SettingsPage> {
       user: _mailUser.text.trim(),
       from: _mailFrom.text.trim(),
       to: _mailTo.text.trim(),
-      allowedTo: _mailAllow.text.trim(),
+      // 名单是加减出来的，不跟着上面那些输入框走；模型也可能刚改过，读现在这份。
+      allowedTo: widget.mail.value.allowedTo,
       html: _mailHtml,
     );
     await widget.mail.save();
@@ -1145,14 +1149,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   hint: '多个用逗号分开',
                   onChanged: (_) => _touch(),
                 ),
-                RuleField(
-                  controller: _mailAllow,
-                  label: '还能发给谁',
-                  hint: 'AI 只能在这几张里选，一行一个或不写就只发给上面的',
-                  minLines: 2,
-                  maxLines: 4,
-                  onChanged: (_) => _touch(),
-                ),
+                _mailAllowlist(),
                 _toggle(
                   'HTML 排版',
                   _mailHtml,
@@ -1705,6 +1702,168 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (!mounted) return;
     setState(() => _mailNote = result.ok ? '发出去了' : '没发出去：${result.error}');
+  }
+
+  /// 名单存了一次就重画一次：模型在后台加了一个地址，这一页也得跟着变，
+  /// 否则下一次落盘会把手里那份旧的写回去。
+  void _onMailChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _bump();
+  }
+
+  /// 「AI 能发给谁」那一份名单：一条一行，右边一个叉；下面一个输入框加一条。
+  ///
+  /// 收件人那一行带来的地址也在这里露脸，但它属于那行输入框，在这一页删不掉。
+  Widget _mailAllowlist() {
+    final SmtpConfig m = widget.mail.value;
+    final List<String> list = m.allowed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Text('AI 能发给谁', style: TextStyle(fontSize: 11.5, color: C.grey)),
+            const Spacer(),
+            Text('${list.length} 个', style: C.monoSmall),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (list.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: C.paper2,
+              borderRadius: BorderRadius.circular(C.radiusSmall),
+            ),
+            child: Text(
+              '名单是空的。下面加一个，模型就能发给它。',
+              style: TextStyle(fontSize: 12, color: C.grey, height: 1.5),
+            ),
+          )
+        else
+          for (final String address in list)
+            _mailAllowRow(address, removable: m.listedAsExtra(address)),
+        const SizedBox(height: 10),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                decoration: BoxDecoration(
+                  color: C.card,
+                  borderRadius: BorderRadius.circular(C.radiusSmall),
+                  border: Border.all(color: _mailAllowNote.isEmpty ? C.rule : C.danger),
+                ),
+                child: TextField(
+                  controller: _mailAllowInput,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _addAllowed(),
+                  style: C.mono.copyWith(fontSize: 13),
+                  decoration: const InputDecoration(hintText: 'somebody@example.com'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _addAllowed,
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: C.blue,
+                  borderRadius: BorderRadius.circular(C.radiusSmall),
+                ),
+                child: Text('加上', style: TextStyle(fontSize: 13, color: C.onAccent)),
+              ),
+            ),
+          ],
+        ),
+        if (_mailAllowNote.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(_mailAllowNote,
+              style: TextStyle(fontSize: 11.5, color: C.danger, height: 1.4)),
+        ],
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _mailAllowRow(String address, {required bool removable}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.only(left: 12, right: 2),
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                address,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: C.mono.copyWith(fontSize: 12.5),
+              ),
+            ),
+            if (removable)
+              IconButton(
+                onPressed: () => _removeAllowed(address),
+                icon: Icon(Icons.close, size: 15, color: C.grey),
+                tooltip: '从名单里删掉',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('默认收件人',
+                    style: C.monoSmall.copyWith(fontSize: 10)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addAllowed() async {
+    final String raw = _mailAllowInput.text.trim();
+    final String? problem = addressProblem(raw);
+    if (problem != null) {
+      setState(() => _mailAllowNote = problem);
+      return;
+    }
+    if (widget.mail.value.canSendTo(raw)) {
+      setState(() => _mailAllowNote = '$raw 已经在名单里了');
+      return;
+    }
+    _mailAllowInput.clear();
+    setState(() => _mailAllowNote = '');
+    await _setAllowed(<String>[...widget.mail.value.allowedTo, raw]);
+  }
+
+  Future<void> _removeAllowed(String address) async {
+    final String a = address.trim().toLowerCase();
+    final List<String> next = widget.mail.value.allowedTo
+        .where((String e) => e.trim().toLowerCase() != a)
+        .toList();
+    setState(() => _mailAllowNote = '');
+    await _setAllowed(next);
+  }
+
+  /// 加一条删一条就存一次，不等那 600 毫秒：这是两个离散的动，不存在打到一半的中间态。
+  Future<void> _setAllowed(List<String> list) async {
+    await widget.mail.setAllowed(list);
+    if (!mounted) return;
+    setState(() {});
+    _setSaved('已保存');
   }
 
   /// 一项扩展一行：名字、能干什么、系统给不给权限。

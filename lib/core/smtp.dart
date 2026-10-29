@@ -18,7 +18,7 @@ class SmtpConfig {
     this.user = '',
     this.from = '',
     this.to = '',
-    this.allowedTo = '',
+    this.allowedTo = const <String>[],
     this.html = true,
   });
 
@@ -39,17 +39,21 @@ class SmtpConfig {
   /// 收件人，多个用逗号或者空格分开。
   final String to;
 
-  /// 除了默认收件人，还允许模型发给谁。同样逗号或者空格分开。
-  /// 空着就只有 [to] 那几个能收。
-  final String allowedTo;
+  /// 除了默认收件人，还允许模型发给谁。空着就只有 [to] 那几个能收。
+  ///
+  /// 一条一个地址，界面上一条一行地加、一行地删，模型用 `mail_allow` 改的也是这份。
+  final List<String> allowedTo;
 
   List<String> get recipients => addressList(to);
 
-  /// 模型可以选的全部收件人：默认那几个在前，加上允许的那几个，去重。
+  /// 模型可以选的全部收件人：默认那几个在前，加上允许的那几个，去重（不分大小写）。
   List<String> get allowed {
     final List<String> out = <String>[];
-    for (final String a in <String>[...recipients, ...addressList(allowedTo)]) {
-      if (!out.contains(a)) out.add(a);
+    for (final String a in <String>[...recipients, ...allowedTo]) {
+      final String one = a.trim();
+      if (one.isEmpty) continue;
+      if (out.any((String e) => e.toLowerCase() == one.toLowerCase())) continue;
+      out.add(one);
     }
     return out;
   }
@@ -60,6 +64,15 @@ class SmtpConfig {
     if (a.isEmpty) return false;
     return allowed.any((String e) => e.toLowerCase() == a);
   }
+
+  /// 这一条在额外名单里吗（不分大小写）。
+  bool listedAsExtra(String address) {
+    final String a = address.trim().toLowerCase();
+    return allowedTo.any((String e) => e.trim().toLowerCase() == a);
+  }
+
+  /// 换一份额外名单，别的不动。
+  SmtpConfig withAllowed(List<String> list) => copyWith(allowedTo: list);
 
   /// 开关开着，而且地址、发件人、收件人都写了。
   bool get ready =>
@@ -94,12 +107,12 @@ class SmtpConfig {
         user: '${json['user'] ?? ''}',
         from: '${json['from'] ?? ''}',
         to: '${json['to'] ?? ''}',
-        allowedTo: '${json['allowedTo'] ?? ''}',
+        allowedTo: allowedFromJson(json['allowedTo']),
         html: json['html'] != false,
       );
 
-  /// 换掉收件人（模型选的那一个），其余不动。
-  SmtpConfig copyWith({String? to}) => SmtpConfig(
+  /// 换掉收件人（模型选的那一个）或那份额外名单，其余不动。
+  SmtpConfig copyWith({String? to, List<String>? allowedTo}) => SmtpConfig(
         enabled: enabled,
         host: host,
         port: port,
@@ -107,16 +120,40 @@ class SmtpConfig {
         user: user,
         from: from,
         to: to ?? this.to,
-        allowedTo: allowedTo,
+        allowedTo: allowedTo ?? this.allowedTo,
         html: html,
       );
 
-  /// 把逗号、分号、空格分开的一串地址拆出来，只要带 @ 的。
+  /// 名单在 JSON 里是一条一条存的。老版本存成过一行文本，两种都认。
+  static List<String> allowedFromJson(Object? raw) {
+    if (raw is List) {
+      return raw
+          .map((Object? e) => '$e'.trim())
+          .where((String e) => e.contains('@'))
+          .toList();
+    }
+    return addressList('${raw ?? ''}');
+  }
+
+  /// 把逗号、分号、空格、换行分开的一串地址拆出来，只要带 @ 的。
   static List<String> addressList(String raw) => raw
       .split(RegExp(r'[,;\s]+'))
       .map((String s) => s.trim())
       .where((String s) => s.contains('@'))
       .toList();
+}
+
+/// 一个地址能不能当收件人。能就用 null，不能就给一句人话说明差在哪。
+String? addressProblem(String raw) {
+  final String a = raw.trim();
+  if (a.isEmpty) return '没写地址';
+  if (a.contains(RegExp(r'\s'))) return '中间不能有空格';
+  final int at = a.indexOf('@');
+  if (at <= 0 || at != a.lastIndexOf('@') || at == a.length - 1) {
+    return '要写成 somebody@example.com 这样';
+  }
+  if (!a.substring(at + 1).contains('.')) return '域名里要有点，比如 example.com';
+  return null;
 }
 
 /// 发出去成没成，没成的原因。

@@ -115,3 +115,114 @@ class MailSendTool extends Tool {
         stdout: '发出去了：$subject → $who${why.isEmpty ? '' : '（$why）'}');
   }
 }
+
+/// `mail_allow`：让模型看和改「AI 能发给谁」那份名单。
+///
+/// 名单决定 `mail_send` 能发给谁。往里加一个就等于多一处能发信，所以加和删都要先问一句，
+/// 只有看清单不用。设置页那一行「收件人」带来的地址属于那行输入框，在这份名单外面。
+class MailAllowTool extends Tool {
+  MailAllowTool(this.mail);
+
+  final MailStore mail;
+
+  @override
+  String get name => 'mail_allow';
+
+  @override
+  String get description =>
+      '看、加、删「AI 能发给谁」这份名单，也就是 mail_send 能选的那些地址。'
+      'action=list 只看；action=add 加一个，action=remove 删一个，这两个用户点批准才动。'
+      '地址要在名单里才能发信，名单之外会被拒。设置页「收件人」那一行带来的地址不在这份名单里，也删不掉。';
+
+  @override
+  Map<String, Object?> get schema => <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'action': <String, Object?>{
+            'type': 'string',
+            'enum': <String>['list', 'add', 'remove'],
+            'description': 'list 看清单，add 加一个地址，remove 删一个地址',
+          },
+          'address': <String, Object?>{
+            'type': 'string',
+            'description': '邮箱地址，action 是 add / remove 时必填',
+          },
+        },
+        'required': <String>['action'],
+      };
+
+  static String _actionOf(Map<String, Object?> args) {
+    final String action = readString(args, 'action', fallback: 'list').trim();
+    return action.isEmpty ? 'list' : action;
+  }
+
+  @override
+  ToolRisk classify(Map<String, Object?> args) =>
+      _actionOf(args) == 'list' ? ToolRisk.read : ToolRisk.write;
+
+  /// 只看不动的那个动作不问，加和删一律问一句。
+  @override
+  bool asksAlways(Map<String, Object?> args) => _actionOf(args) != 'list';
+
+  @override
+  String summarize(Map<String, Object?> args) {
+    final String address = readString(args, 'address').trim();
+    return switch (_actionOf(args)) {
+      'add' => '往发信名单里加 $address',
+      'remove' => '从发信名单里删掉 $address',
+      _ => '看一眼发信名单',
+    };
+  }
+
+  @override
+  Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
+    final String action = _actionOf(args);
+    final SmtpConfig config = mail.value;
+    if (action == 'list') {
+      final List<String> allowed = config.allowed;
+      if (allowed.isEmpty) {
+        return const ToolOutcome.success(
+            stdout: '名单是空的，现在谁也发不出去。用 action=add 加一个地址。');
+      }
+      final StringBuffer b = StringBuffer('能发给：\n');
+      for (final String a in allowed) {
+        b.writeln('- $a${config.listedAsExtra(a) ? '' : '（默认收件人）'}');
+      }
+      return ToolOutcome.success(stdout: b.toString().trimRight());
+    }
+
+    const String hint = '收件人那一行带来的地址属于设置页，要改去改那一行。';
+    final String raw = readString(args, 'address').trim();
+    final String? problem = addressProblem(raw);
+    if (problem != null) {
+      return ToolOutcome.failure(raw.isEmpty ? 'address 没写。' : '$raw 用不了：$problem。');
+    }
+
+    if (action == 'add') {
+      if (config.canSendTo(raw)) {
+        return ToolOutcome.success(stdout: '$raw 已经能发了，名单没动。');
+      }
+      await mail.setAllowed(<String>[...config.allowedTo, raw]);
+      return ToolOutcome.success(
+          stdout: '加好了。现在能发给：${mail.value.allowed.join('、')}。');
+    }
+
+    if (action == 'remove') {
+      final String key = raw.toLowerCase();
+      final List<String> next = config.allowedTo
+          .where((String e) => e.trim().toLowerCase() != key)
+          .toList();
+      if (next.length == config.allowedTo.length) {
+        return ToolOutcome.failure(
+            config.canSendTo(raw) ? '$raw 是默认收件人，不在这份名单里。$hint' : '名单里没有 $raw。');
+      }
+      await mail.setAllowed(next);
+      final bool stillDefault = mail.value.canSendTo(raw);
+      return ToolOutcome.success(
+          stdout: '删掉了。${stillDefault ? '$raw 还是默认收件人，照样能发给它。' : ''}'
+              '现在能发给：${mail.value.allowed.isEmpty ? '谁都不能' : mail.value.allowed.join('、')}。');
+    }
+
+    return ToolOutcome.failure('action 只有 list / add / remove。');
+  }
+}

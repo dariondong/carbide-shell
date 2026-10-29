@@ -156,6 +156,7 @@ class AppServices {
       ..register(EnvDeleteTool(env))
       ..register(EnvRequestTool(env, settings))
       ..register(MailSendTool(mail, files: files))
+      ..register(MailAllowTool(mail))
       ..register(ReportRenderTool(files))
       ..register(RenderCheckTool(files))
       ..register(ProbeTool())

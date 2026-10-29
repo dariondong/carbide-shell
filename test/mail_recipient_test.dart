@@ -27,7 +27,7 @@ void main() {
   test('允许名单 = 默认收件人 + 额外那几个，去重', () {
     const SmtpConfig config = SmtpConfig(
       to: 'a@example.com, b@example.com',
-      allowedTo: 'b@example.com\nops@example.com',
+      allowedTo: <String>['b@example.com', 'ops@example.com'],
     );
     expect(config.recipients, <String>['a@example.com', 'b@example.com']);
     expect(config.allowed,
@@ -38,10 +38,29 @@ void main() {
   });
 
   test('名单跟着 JSON 走', () {
-    const SmtpConfig config = SmtpConfig(to: 'a@example.com', allowedTo: 'c@example.com');
+    const SmtpConfig config = SmtpConfig(to: 'a@example.com', allowedTo: <String>['c@example.com']);
     final SmtpConfig back = SmtpConfig.fromJson(config.toJson());
     expect(back.allowed, <String>['a@example.com', 'c@example.com']);
+    expect(back.allowedTo, <String>['c@example.com']);
     expect(back.copyWith(to: 'c@example.com').recipients, <String>['c@example.com']);
+  });
+
+  test('老版本存下来的一行文本也读得回来', () {
+    final SmtpConfig back = SmtpConfig.fromJson(<String, Object?>{
+      'to': 'a@example.com',
+      'allowedTo': 'c@example.com d@example.com',
+    });
+    expect(back.allowedTo, <String>['c@example.com', 'd@example.com']);
+    expect(back.allowed, <String>['a@example.com', 'c@example.com', 'd@example.com']);
+  });
+
+  test('一条地址写成什么算能用', () {
+    expect(addressProblem('a@example.com'), isNull);
+    expect(addressProblem('  a@example.com  '), isNull);
+    expect(addressProblem(''), '没写地址');
+    expect(addressProblem('a b@example.com'), contains('空格'));
+    expect(addressProblem('aexample.com'), isNotNull);
+    expect(addressProblem('a@example'), contains('点'));
   });
 
   test('AI 选的人不在名单里就不发', () async {
@@ -50,7 +69,7 @@ void main() {
       host: 'smtp.example.com',
       from: 'me@example.com',
       to: 'a@example.com',
-      allowedTo: 'ops@example.com',
+      allowedTo: <String>['ops@example.com'],
     );
     final ToolOutcome out = await MailSendTool(store).run(
       <String, Object?>{'body': '磁盘满了', 'to': 'stranger@example.com'},

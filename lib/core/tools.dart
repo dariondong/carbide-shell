@@ -17,6 +17,9 @@ abstract class Tool {
   /// 不论审批档位都先问一句。改参数、写密钥、发邮件这类「说好才做」的事用它。
   bool get alwaysAsk => false;
 
+  /// 同一件工具里有的动作要问、有的不用（只看不动的那一个）。默认听 [alwaysAsk]。
+  bool asksAlways(Map<String, Object?> args) => alwaysAsk;
+
   /// One line shown on the approval card. Empty when the tool has nothing to say.
   String summarize(Map<String, Object?> args) => '';
 

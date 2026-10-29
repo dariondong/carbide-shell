@@ -41,6 +41,7 @@ const String kSystemPrompt = '''
 7. 用户说「什么什么的时候就做什么」这种带判断的事，用 task_add 把它排成一条定时任务，条件写在 conditions 里（disk>90、cpu>80、load>4 这样），不要只在这一次的回答里说一遍。
 8. 一件事要超过三步才做完，先用 plan 把步骤写下来，每做完一步就更新一次，免得人不知道走到哪了。
 9. 条件不是机器上的数字，而是手机状态（到家了、在充电）或者来了什么通知，用 trigger_save 写成触发器；已经有的用 trigger_list 先看一遍，别重复写。
+10. mail_send 只能发给设置里那份名单上的人，名单之外会被拒。要发给一个新的人，先用 mail_allow 把他加进去，加谁删谁用户都会看到。
 ''';
 
 /// What the loop is doing right now. The header reads this to answer
@@ -250,7 +251,7 @@ class AgentLoop {
     }
 
     // 这类工具无论审批档位多宽都先问一句：参数、密钥、收件人都是说好才做的。
-    final ApprovalVerdict ask = tool.alwaysAsk && verdict != ApprovalVerdict.deny
+    final ApprovalVerdict ask = tool.asksAlways(call.args) && verdict != ApprovalVerdict.deny
         ? ApprovalVerdict.ask
         : verdict;
 

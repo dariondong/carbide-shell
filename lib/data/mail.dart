@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../core/mail_html.dart';
 import '../core/smtp.dart';
 import 'secrets.dart';
@@ -8,7 +10,10 @@ import 'secrets.dart';
 export '../core/mail_html.dart';
 
 /// 邮件通知的设置：一个 JSON 文件，密码单独放安全存储。
-class MailStore {
+///
+/// 存一次就通知一声，因为「AI 能发给谁」那份名单模型也能改：设置页开着的时候
+/// 它在后台加了一个地址，界面得跟着刷新，否则下一次落盘又会把旧的名单写回去。
+class MailStore extends ChangeNotifier {
   MailStore(this.file, this.secrets);
 
   final File file;
@@ -33,6 +38,13 @@ class MailStore {
   Future<void> save() async {
     file.parent.createSync(recursive: true);
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(value.toJson()));
+    notifyListeners();
+  }
+
+  /// 换一份「还能发给谁」的名单。加一个、删一个都走这里，写完通知界面重画。
+  Future<void> setAllowed(List<String> list) async {
+    value = value.copyWith(allowedTo: list);
+    await save();
   }
 
   Future<String> password() => secrets.read(passwordKey);
