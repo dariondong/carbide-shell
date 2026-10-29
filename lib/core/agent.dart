@@ -117,6 +117,9 @@ class AgentLoop {
   /// Called whenever the visible state changes.
   void Function()? onChanged;
 
+  /// 记录变长了就叫一下：中途退出、系统把应用杀掉时，已经跑完的那几步还在盘上。
+  void Function()? onCheckpoint;
+
   /// Called right before a call waits for the user.
   void Function(ApprovalRequest? pending)? onApproval;
 
@@ -131,6 +134,8 @@ class AgentLoop {
     if (text.isEmpty && images.isEmpty) return '';
     history.add(LlmMessage.user(text, images: images));
     journal.add(<String, Object?>{'event': 'user', 'text': text});
+    // 用户这句先落到盘上：接下来一场跑多久都不再冒丢字的险。
+    _checkpoint();
     _cancel = cancel;
     partial = '';
     phase = AgentPhase.thinking;
@@ -186,6 +191,7 @@ class AgentLoop {
         partial = '';
         phase = AgentPhase.idle;
         journal.add(<String, Object?>{'event': 'final', 'text': answer});
+        _checkpoint();
         _notify();
         return answer;
       }
@@ -193,6 +199,7 @@ class AgentLoop {
       history.add(
           LlmMessage.assistant(reply.text, calls: reply.calls, usage: reply.usage));
       partial = '';
+      _checkpoint();
       _notify();
 
       for (final LlmToolCall call in reply.calls) {
@@ -305,8 +312,11 @@ class AgentLoop {
       toolName: call.name,
       failed: failed,
     ));
+    _checkpoint();
     _notify();
   }
+
+  void _checkpoint() => onCheckpoint?.call();
 
   String _finish(String note) {
     partial = '';

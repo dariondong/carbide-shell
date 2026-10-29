@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -315,14 +316,40 @@ class ConversationStore {
     return c;
   }
 
-  Future<void> save(Conversation c) async {
+  /// 每一场对话一本排队的账。一轮跑着的时候会顺手存几次，
+  /// 两次保存叠在一起会把同一个文件写成半截，所以后一笔等前一笔写完。
+  final Map<String, Future<void>> _writing = <String, Future<void>>{};
+
+  Future<void> save(Conversation c) {
+    final Future<void> prev = _writing[c.id] ?? Future<void>.value();
+    final Future<void> run = prev.then(
+      (void _) => _write(c),
+      onError: (Object _) => _write(c),
+    );
+    _writing[c.id] = run;
+    unawaited(run.then<void>(
+      (void _) => _finishWrite(c.id, run),
+      onError: (Object _) => _finishWrite(c.id, run),
+    ));
+    return run;
+  }
+
+  void _finishWrite(String id, Future<void> run) {
+    if (identical(_writing[id], run)) _writing.remove(id);
+  }
+
+  Future<void> _write(Conversation c) async {
     c.updatedAt = DateTime.now();
     dir.createSync(recursive: true);
     c.dropped += trimTranscript(c.messages);
     final Map<String, Object?> json = c.toJson();
     // 编码放在另一个 isolate 里，也不带缩进：缩进只是好看，长记录上要多占一半内存。
     final String text = await Isolate.run(() => jsonEncode(json));
-    await File('${dir.path}/${c.id}.json').writeAsString(text);
+    // 先写一份临时的再换上去：写到一半被杀掉时，换上去的仍是上一份完整的记录，
+    // 而不是一个读不回来的半截文件。
+    final File tmp = File('${dir.path}/${c.id}.json.tmp');
+    await tmp.writeAsString(text);
+    await tmp.rename('${dir.path}/${c.id}.json');
   }
 
   Future<void> remove(String id) async {

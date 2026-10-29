@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -86,7 +88,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
   int _index = 0;
   Conversation? _open;
@@ -98,6 +100,7 @@ class _HomeShellState extends State<HomeShell> {
     widget.scheduler.start();
     // 有几个对话在跑、在等确认，列表要跟着变；正文的增量不重画整个外壳。
     widget.hub.addListener(_onHub);
+    WidgetsBinding.instance.addObserver(this);
     // 通知上那颗回复：字到了就往对话里送。
     ForegroundTask.listen(_onReply);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckUpdate());
@@ -107,8 +110,17 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     widget.scheduler.stop();
     widget.hub.removeListener(_onHub);
+    WidgetsBinding.instance.removeObserver(this);
     ForegroundTask.listen(null);
     super.dispose();
+  }
+
+  /// 切到后台、或者系统即将把它收走的时候，先把跑着的对话写一遍盘。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      unawaited(widget.hub.saveAll());
+    }
   }
 
   /// 通知里写的那句：交给它去发，然后把那个对话摆到眼前。

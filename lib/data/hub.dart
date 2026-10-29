@@ -24,6 +24,7 @@ class LiveSession {
   LiveSession({required this.conversation, required this.session}) {
     session.loop.approver = _LiveApprover(this);
     session.loop.onChanged = () => hub?.touch(this);
+    session.loop.onCheckpoint = () => hub?.checkpoint(this);
     _wireAsk();
   }
 
@@ -57,6 +58,9 @@ class LiveSession {
 
   DateTime lastNote = DateTime.fromMillisecondsSinceEpoch(0);
   String lastNoteText = '';
+
+  /// 上一次往盘上写记录的时刻。写得太频没意义，太稀又会丢东西。
+  DateTime savedAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get waiting => pending != null || pendingAsk != null;
 
@@ -208,6 +212,8 @@ class SessionHub extends ChangeNotifier {
     // 记录长得太离谱就先压一次，不然这一轮要把几十万字重新发一遍。
     await _maybeCompact(live);
     board.note('c:${live.conversation.id}', '${live.conversation.title} · 开跑');
+    // 这一轮的第一笔（用户那句话）一定要落盘，不受上轮的频率限制。
+    live.savedAt = DateTime.fromMillisecondsSinceEpoch(0);
     try {
       return await loop.send(text, cancel: live.cancel, images: images);
     } finally {
@@ -227,6 +233,23 @@ class SessionHub extends ChangeNotifier {
           summary: '${live.conversation.title} · ${summaryOf(live)}');
       changed();
       _drain(live);
+    }
+  }
+
+  /// 跑着的时候顺手把记录写下来：每写完一步就存一次，中途退出、系统把应用杀掉，
+  /// 已经发生过的事都还在盘上。两笔之间至少隔一秒，存得太频只会拖慢跑的那种。
+  void checkpoint(LiveSession live) {
+    final DateTime now = DateTime.now();
+    if (now.difference(live.savedAt).inMilliseconds < 1000) return;
+    live.savedAt = now;
+    unawaited(services.persist(live.conversation));
+  }
+
+  /// 应用切到后台、被系统收走之前，把还开着的对话都写一遍。
+  Future<void> saveAll() async {
+    for (final LiveSession live in _live.values.toList()) {
+      live.savedAt = DateTime.now();
+      await services.persist(live.conversation);
     }
   }
 

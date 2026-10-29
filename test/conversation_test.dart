@@ -77,4 +77,41 @@ void main() {
     expect(File('${dir.path}/${c.id}.json').existsSync(), isFalse);
     expect(store.all, isEmpty);
   });
+
+  test('存一次不留临时文件，写的是完整一份', () async {
+    final ConversationStore store = ConversationStore(dir);
+    await store.load();
+    final Conversation c = await store.create(title: 'a');
+    c.messages.add(const LlmMessage.user('在吗'));
+    await store.save(c);
+    final List<String> names = dir
+        .listSync()
+        .whereType<File>()
+        .map((File f) => f.uri.pathSegments.last)
+        .toList();
+    expect(names.where((String n) => n.endsWith('.tmp')), isEmpty);
+    final ConversationStore again = ConversationStore(dir);
+    await again.load();
+    expect(again.all.first.messages.single.text, '在吗');
+  });
+
+  test('连着存两次不会把文件写成半截', () async {
+    final ConversationStore store = ConversationStore(dir);
+    await store.load();
+    final Conversation c = await store.create(title: 'a');
+    for (int i = 0; i < 40; i += 1) {
+      c.messages.add(LlmMessage.user('第 $i 句'));
+    }
+    // 不等前一笔写完就再存一次：以前两笔叠在一起会把同一个文件写花。
+    final Future<void> first = store.save(c);
+    c.messages.add(const LlmMessage.user('最后一句'));
+    final Future<void> second = store.save(c);
+    await Future.wait(<Future<void>>[first, second]);
+
+    final ConversationStore again = ConversationStore(dir);
+    await again.load();
+    final List<LlmMessage> back = again.all.first.messages;
+    expect(back.length, 41);
+    expect(back.last.text, '最后一句');
+  });
 }
