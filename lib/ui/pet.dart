@@ -98,10 +98,19 @@ class _PetAvatarState extends State<PetAvatar> with TickerProviderStateMixin {
   )..repeat();
 
   /// 姿势轮换的进度。一个整圈换完一整轮，不靠定时器：widget 测试里不会留一个没清的 Timer。
-  late final AnimationController _pose = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 26000),
-  )..repeat();
+  /// 只画一张的时候用不上它，所以是第一次真要轮换才建：小图标位一秒建一次空转的 ticker 不值当。
+  AnimationController? _pose;
+
+  AnimationController get _poseCtl {
+    final AnimationController? held = _pose;
+    if (held != null) return held;
+    final AnimationController made = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 26000),
+    )..repeat();
+    _pose = made;
+    return made;
+  }
 
   /// 一张换到下一张的那一小段，占一格的这么多。
   static const double _fade = 0.07;
@@ -123,7 +132,7 @@ class _PetAvatarState extends State<PetAvatar> with TickerProviderStateMixin {
   @override
   void dispose() {
     _breathe.dispose();
-    _pose.dispose();
+    _pose?.dispose();
     super.dispose();
   }
 
@@ -186,10 +195,11 @@ class _PetAvatarState extends State<PetAvatar> with TickerProviderStateMixin {
 
   /// 姿势轮换：一格一格换过去，交界处叠着淡进去，不是硬切。
   Widget _rotating(List<PetMood> poses) {
+    final AnimationController ctrl = _poseCtl;
     return AnimatedBuilder(
-      animation: _pose,
+      animation: ctrl,
       builder: (BuildContext ctx, Widget? child) {
-        final double pos = _pose.value * poses.length;
+        final double pos = ctrl.value * poses.length;
         final double edge = pos - pos.floorToDouble();
         final PetMood cur = poses[pos.floor() % poses.length];
         if (edge >= _fade) return _figure(cur);
