@@ -10,8 +10,10 @@ import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/deepseek.dart';
 import '../core/docx.dart';
+import '../core/greeting.dart';
 import '../core/models.dart';
 import '../core/plan.dart';
+import '../core/poems.dart';
 import '../core/pricing.dart';
 import '../data/hub.dart';
 import '../data/llm_settings.dart';
@@ -766,7 +768,11 @@ class _ChatPageState extends State<ChatPage> {
       case _RowKind.pet:
         return _sleepingCat();
       case _RowKind.thinking:
-        return _ThinkingRow(phase: _loop?.phase ?? AgentPhase.thinking);
+        return _ThinkingRow(
+          phase: _loop?.phase ?? AgentPhase.thinking,
+          poemOn: widget.services.settings.value.poemOn,
+          poemEvery: widget.services.settings.value.poemEvery,
+        );
       case _RowKind.empty:
         return _empty();
     }
@@ -1233,7 +1239,11 @@ class _ChatPageState extends State<ChatPage> {
     final List<_Row> rows = _rows();
     final Map<String, String> outputs = _outputs();
     final String runningId = _runningId(outputs);
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: Column(
       children: <Widget>[
         Container(
           height: 56,
@@ -1358,6 +1368,76 @@ class _ChatPageState extends State<ChatPage> {
         if (widget.conversation.costCny > 0) _costLine(),
         _composer(loop),
       ],
+          ),
+        ),
+        if (_greetingOn) _greetingRail(),
+      ],
+    );
+  }
+
+  /// 宽屏才在右边写问候语：窄屏上那一栏会把正文挤成一条。
+  bool get _greetingOn =>
+      MediaQuery.sizeOf(context).width >= 1000 &&
+      widget.services.settings.value.greetOn;
+
+  /// 右边那几行：一句问候，用 DeepSeek 的时候再加一段峰谷提示。
+  Widget _greetingRail() {
+    final AppSettings s = widget.services.settings.value;
+    final ModelProfile p = _profile;
+    final Greeting greeting = greetingFor(
+      at: DateTime.now(),
+      model: p.model,
+      peakHint: s.greetPeak,
+    );
+    return Container(
+      width: 212,
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
+      decoration: const BoxDecoration(
+        color: C.card,
+        border: Border(left: BorderSide(color: C.rule)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(greeting.line,
+              style: const TextStyle(fontSize: 13, height: 1.75, color: C.ink)),
+          const SizedBox(height: 14),
+          if (greeting.hasPeak) ...<Widget>[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
+              decoration: BoxDecoration(
+                color: C.paper2,
+                borderRadius: BorderRadius.circular(C.radiusSmall),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(greeting.peak == true ? '高峰' : '谷时',
+                      style: C.monoSmall.copyWith(
+                        fontSize: 10.5,
+                        color: greeting.peak == true ? C.ink : C.blue,
+                        letterSpacing: 1,
+                      )),
+                  const SizedBox(height: 5),
+                  Text(greeting.peakLine,
+                      style: const TextStyle(fontSize: 11.5, height: 1.65, color: C.ink)),
+                  if (greeting.hint.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(greeting.hint,
+                        style: const TextStyle(fontSize: 11, height: 1.65, color: C.grey)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const Spacer(),
+          Text(p.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2)),
+        ],
+      ),
     );
   }
 
@@ -1675,17 +1755,7 @@ class _SummaryCardState extends State<_SummaryCard> {
   }
 }
 
-/// 干活的时候小猫右边那句诗，每九秒换一句。都是古人的句子，不带署名。
-const List<String> _kVerses = <String>[
-  '长风破浪会有时，直挂云帆济沧海',
-  '山重水复疑无路，柳暗花明又一村',
-  '千淘万漉虽辛苦，吹尽狂沙始到金',
-  '莫愁前路无知己，天下谁人不识君',
-  '会当凌绝顶，一览众山小',
-  '路漫漫其修远兮，吾将上下而求索',
-  '不积跬步，无以至千里',
-  '锲而不舍，金石可镂',
-];
+/// 等待时读的那首古诗：库里随机抽，隔一会儿换一首，不连着重复。
 
 /// 模型问人的那张卡。有选项就点，没有就自己写，答完它接着干。
 class _AskCard extends StatefulWidget {
@@ -1795,9 +1865,19 @@ class _AskCardState extends State<_AskCard> {
 /// The live line at the tail of the transcript: three breathing dots, what the
 /// loop is doing, and how long it has been doing it.
 class _ThinkingRow extends StatefulWidget {
-  const _ThinkingRow({required this.phase});
+  const _ThinkingRow({
+    required this.phase,
+    this.poemOn = true,
+    this.poemEvery = kPoemEveryDefault,
+  });
 
   final AgentPhase phase;
+
+  /// 这一行右边读不读诗。
+  final bool poemOn;
+
+  /// 隔多少秒换一首。
+  final int poemEvery;
 
   @override
   State<_ThinkingRow> createState() => _ThinkingRowState();
@@ -1809,27 +1889,37 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
     duration: const Duration(milliseconds: 1100),
   )..repeat();
   Timer? _tick;
+  Timer? _poemTimer;
   int _seconds = 0;
 
-  /// 第几句诗。
-  int _verse = 0;
+  /// 这一首和它的轮子。
+  final PoemWheel _wheel = PoemWheel();
+  Poem? _poem;
 
   @override
   void initState() {
     super.initState();
+    if (widget.poemOn) _poem = _wheel.next();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() {
-        _seconds += 1;
-        if (_seconds % 9 == 0) _verse += 1;
-      });
+      setState(() => _seconds += 1);
     });
+    if (widget.poemOn) {
+      _poemTimer = Timer.periodic(
+        Duration(seconds: clampPoemEvery(widget.poemEvery)),
+        (_) {
+          if (!mounted) return;
+          setState(() => _poem = _wheel.next());
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
     _pulse.dispose();
     _tick?.cancel();
+    _poemTimer?.cancel();
     super.dispose();
   }
 
@@ -1879,35 +1969,41 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
           Text('$_label · $_seconds 秒',
               style: C.monoSmall.copyWith(color: C.grey, fontSize: 11)),
           const SizedBox(width: 10),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: Motion.swap,
-              child: _verseText(_kVerses[_verse % _kVerses.length]),
-            ),
-          ),
+          if (widget.poemOn && _poem != null)
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: Motion.swap,
+                child: _poemBlock(_poem!),
+              ),
+            )
+          else
+            const Expanded(child: SizedBox.shrink()),
         ],
       ),
     );
   }
 
-  /// 一句诗分两行写：逗号前一行、逗号后一行，放不下就自己折，不拿省略号剪。
-  Widget _verseText(String line) {
-    final int cut = line.indexOf('，');
-    final String head = cut < 0 ? line : line.substring(0, cut);
-    final String tail = cut < 0 ? '' : line.substring(cut + 1);
+  /// 一首诗：题目与作者弱化着写在上头，正文分两行，读得清比什么都要紧。
+  Widget _poemBlock(Poem poem) {
     const TextStyle style = TextStyle(
       fontSize: 11,
-      height: 1.45,
+      height: 1.5,
       color: C.grey2,
       letterSpacing: 0.4,
     );
     return Column(
-      key: ValueKey<String>(line),
+      key: ValueKey<String>(poem.line),
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(head, textAlign: TextAlign.right, style: style),
-        if (tail.isNotEmpty) Text(tail, textAlign: TextAlign.right, style: style),
+        Text(poem.byline,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 9, height: 1.3, color: C.grey2)),
+        Text(poem.head, textAlign: TextAlign.right, style: style),
+        if (poem.tail.isNotEmpty)
+          Text(poem.tail, textAlign: TextAlign.right, style: style),
       ],
     );
   }

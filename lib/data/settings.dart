@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../core/params.dart';
+import '../core/poems.dart';
 import 'secrets.dart';
 
 /// 一套模型配置：地址、模型名、和界面上那个名字。
@@ -140,6 +141,10 @@ class AppSettings {
     this.enabledTools = const <String>[],
     this.aiTune = true,
     this.paramRanges = const <String, List<double>>{},
+    this.poemOn = true,
+    this.poemEvery = 20,
+    this.greetOn = true,
+    this.greetPeak = true,
   }) {
     _profiles = List<ModelProfile>.of(profiles);
     _dedupeIds();
@@ -300,6 +305,18 @@ class AppSettings {
   /// 用户在设置里改过的允许范围：`{temperature: [0, 1.2]}`。
   Map<String, List<double>> paramRanges;
 
+  /// 等待的时候读不读诗。
+  bool poemOn;
+
+  /// 隔多少秒换一句（10–60）。
+  int poemEvery;
+
+  /// 对话页右侧那几行问候语。
+  bool greetOn;
+
+  /// 用 DeepSeek 时附一句峰谷提示。
+  bool greetPeak;
+
   /// 这个参数现在允许落在什么范围里。
   ParamRange paramRange(String key) => paramRangeOf(key, overrides: paramRanges);
 
@@ -334,6 +351,10 @@ class AppSettings {
         'enabledTools': enabledTools,
         'aiTune': aiTune,
         if (paramRanges.isNotEmpty) 'paramRanges': paramRanges,
+        'poemOn': poemOn,
+        'poemEvery': poemEvery,
+        'greetOn': greetOn,
+        'greetPeak': greetPeak,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -374,6 +395,10 @@ class AppSettings {
           : const <String>[],
       aiTune: json['aiTune'] != false,
       paramRanges: _rangesOf(json['paramRanges']),
+      poemOn: json['poemOn'] != false,
+      poemEvery: clampPoemEvery((json['poemEvery'] as num?)?.toInt() ?? 20),
+      greetOn: json['greetOn'] != false,
+      greetPeak: json['greetPeak'] != false,
     );
   }
 

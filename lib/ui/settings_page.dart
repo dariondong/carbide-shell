@@ -6,6 +6,7 @@ import '../core/agent.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/params.dart';
+import '../core/poems.dart';
 import '../core/policy.dart';
 import '../core/pricing.dart';
 import '../core/smtp.dart';
@@ -950,6 +951,33 @@ class _SettingsPageState extends State<SettingsPage> {
                           ? '标准'
                           : '大',
                   (double v) => _apply(() => _font = v),
+                ),
+                const RuleLine(),
+                _toggle(
+                  '等待时读一首诗',
+                  widget.settings.value.poemOn,
+                  '每次只一首，随机挑，不连着重复',
+                  (bool v) => _apply(() => widget.settings.value.poemOn = v),
+                ),
+                _choices<int>(
+                  '隔多久换一首',
+                  const <int>[10, 20, 30, 45, 60],
+                  widget.settings.value.poemEvery,
+                  (int v) => '$v 秒',
+                  (int v) => _apply(
+                      () => widget.settings.value.poemEvery = clampPoemEvery(v)),
+                ),
+                _toggle(
+                  '右侧问候语',
+                  widget.settings.value.greetOn,
+                  '宽屏时在对话右边写几行，窄屏不占地方',
+                  (bool v) => _apply(() => widget.settings.value.greetOn = v),
+                ),
+                _toggle(
+                  '问候语带峰谷提示',
+                  widget.settings.value.greetPeak,
+                  '用 DeepSeek 时附一句现在是不是谷时',
+                  (bool v) => _apply(() => widget.settings.value.greetPeak = v),
                 ),
               ],
             ),
