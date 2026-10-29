@@ -8,6 +8,7 @@ import '../data/usage.dart';
 import '../version.dart';
 import 'components.dart';
 import 'motion.dart';
+import 'pet.dart';
 import 'theme.dart';
 
 /// 关于：版本、这台机器上的东西有多少、更新、项目地址。
@@ -154,15 +155,7 @@ class _AboutPageState extends State<AboutPage> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: C.blueSoft,
-              borderRadius: BorderRadius.circular(C.radius),
-            ),
-            child: const Icon(Icons.terminal_rounded, size: 26, color: C.blue),
-          ),
+          const PetAvatar(size: 54),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

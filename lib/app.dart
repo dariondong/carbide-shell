@@ -19,6 +19,7 @@ import 'ui/conversations_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/motion.dart';
+import 'ui/pet.dart';
 import 'ui/settings_page.dart';
 import 'ui/tasks_page.dart';
 import 'ui/temp_files_page.dart';
@@ -393,6 +394,8 @@ class _HomeShellState extends State<HomeShell> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          const PetAvatar(size: 92),
+          const SizedBox(height: 16),
           const Text('左边选一个对话',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 8),
