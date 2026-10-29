@@ -251,7 +251,8 @@ class SessionHub extends ChangeNotifier {
     final int fixedCompletion = completion < 0 ? 0 : completion;
     final int fixedCached = cached < 0 ? 0 : cached;
     final double factor = quote.peakValley
-        ? peakFactor(peakValley: true, at: now)
+        ? peakFactor(
+            peakValley: true, at: now, clock: services.settings.value.deepSeekClock())
         : 1;
     final CostSplit cost = quote.known
         ? costSplitOf(

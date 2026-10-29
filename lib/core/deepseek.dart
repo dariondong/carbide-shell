@@ -9,7 +9,8 @@ library;
 
 /// 内置的法定节假日（北京时间的日期，`2025-01-01` 这样写）。
 ///
-/// 2026 年的排期官方公布之后，在设置 → 对话 → 峰谷时段里补进去。
+/// 官方每年公布一次排期：内置表只放了已经公布的那一年，新的排期在设置 → 对话 →
+/// 峰谷时段里按行填进去，不用等一个版本。
 const Set<String> kCnHolidays2025 = <String>{
   '2025-01-01',
   // 春节
@@ -110,6 +111,26 @@ class DeepSeekClock {
     this.holidays = kCnHolidays2025,
     this.makeupDays = kCnMakeup2025,
   });
+
+  /// 内置表 + 用户在设置里补的那几天。读不懂的写法直接丢掉。
+  factory DeepSeekClock.withExtra({
+    Iterable<String> extraHolidays = const <String>[],
+    Iterable<String> extraMakeup = const <String>[],
+  }) =>
+      DeepSeekClock(
+        holidays: <String>{...kCnHolidays2025, ..._dates(extraHolidays)},
+        makeupDays: <String>{...kCnMakeup2025, ..._dates(extraMakeup)},
+      );
+
+  /// 只认 `2026-10-01` 这种写法，其他一律不要。
+  static Iterable<String> _dates(Iterable<String> raw) {
+    final List<String> out = <String>[];
+    for (final String line in raw) {
+      final String one = line.trim();
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(one)) out.add(one);
+    }
+    return out;
+  }
 
   final Set<String> holidays;
   final Set<String> makeupDays;

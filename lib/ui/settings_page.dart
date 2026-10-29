@@ -92,6 +92,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _priceIn;
   late final TextEditingController _priceCache;
   late final TextEditingController _priceOut;
+  late final TextEditingController _peakHolidays;
+  late final TextEditingController _peakMakeup;
 
   String _mode = 'autoRead';
   double _temperature = 0.2;
@@ -148,6 +150,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _priceIn = TextEditingController();
     _priceCache = TextEditingController();
     _priceOut = TextEditingController();
+    _peakHolidays = TextEditingController(text: s.peakHolidays.join('\n'));
+    _peakMakeup = TextEditingController(text: s.peakMakeup.join('\n'));
     final SmtpConfig m = widget.mail.value;
     _mailHost = TextEditingController(text: m.host);
     _mailPort = TextEditingController(text: '${m.port}');
@@ -207,6 +211,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _priceIn.dispose();
     _priceCache.dispose();
     _priceOut.dispose();
+    _peakHolidays.dispose();
+    _peakMakeup.dispose();
     _mailHost.dispose();
     _mailPort.dispose();
     _mailUser.dispose();
@@ -255,6 +261,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ..autoCheckUpdate = _autoUpdate
       ..autoCompact = _autoCompact
       ..notifStyle = _notifStyle
+      ..peakHolidays = _linesOf(_peakHolidays.text)
+      ..peakMakeup = _linesOf(_peakMakeup.text)
       ..allowedDomains = _domains.text
           .split(RegExp(r'[\s,]+'))
           .map((String d) => d.trim())
@@ -302,6 +310,13 @@ class _SettingsPageState extends State<SettingsPage> {
         'chat' => '会话',
         _ => '简洁',
       };
+
+  /// 一行一个的清单：去掉空行，只留 `2026-10-01` 这种写法。
+  static List<String> _linesOf(String text) => text
+      .split(RegExp(r'[\n,，]+'))
+      .map((String s) => s.trim())
+      .where((String s) => s.isNotEmpty)
+      .toList();
 
   static int _intOf(String text, int fallback, int low, int high) {    final int? n = int.tryParse(text.trim());
     if (n == null) return fallback;
@@ -978,6 +993,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   widget.settings.value.greetPeak,
                   '用 DeepSeek 时附一句现在是不是谷时',
                   (bool v) => _apply(() => widget.settings.value.greetPeak = v),
+                ),
+                const RuleLine(),
+                RuleField(
+                  controller: _peakHolidays,
+                  label: '法定节假日（北京时间，一行一个）',
+                  hint: '2026-10-01',
+                  minLines: 2,
+                  maxLines: 6,
+                  onChanged: (_) => _touch(),
+                ),
+                RuleField(
+                  controller: _peakMakeup,
+                  label: '调休上班的周末（一行一个）',
+                  hint: '2026-10-11',
+                  minLines: 1,
+                  maxLines: 4,
+                  onChanged: (_) => _touch(),
+                ),
+                const Text(
+                  '内置的只有 2025 年那一年的官方排期。新的排期公布后填在上面两格，'
+                  '这些日子 DeepSeek 全天按谷时算，调休上班的周末也一样。',
+                  style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
                 ),
               ],
             ),

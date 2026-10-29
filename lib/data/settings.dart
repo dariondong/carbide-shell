@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/deepseek.dart';
 import '../core/params.dart';
 import '../core/poems.dart';
 import 'secrets.dart';
@@ -146,6 +147,8 @@ class AppSettings {
     this.poemEvery = 20,
     this.greetOn = true,
     this.greetPeak = true,
+    this.peakHolidays = const <String>[],
+    this.peakMakeup = const <String>[],
   }) {
     _profiles = List<ModelProfile>.of(profiles);
     _dedupeIds();
@@ -318,6 +321,16 @@ class AppSettings {
   /// 用 DeepSeek 时附一句峰谷提示。
   bool greetPeak;
 
+  /// 用户自己补的法定节假日（北京时间日期，一行一个）。
+  List<String> peakHolidays;
+
+  /// 用户自己补的调休上班日。
+  List<String> peakMakeup;
+
+  /// 现在用的峰谷时钟：内置表加上用户补的那几天。
+  DeepSeekClock deepSeekClock() =>
+      DeepSeekClock.withExtra(extraHolidays: peakHolidays, extraMakeup: peakMakeup);
+
   /// 这个参数现在允许落在什么范围里。
   ParamRange paramRange(String key) => paramRangeOf(key, overrides: paramRanges);
 
@@ -356,6 +369,8 @@ class AppSettings {
         'poemEvery': poemEvery,
         'greetOn': greetOn,
         'greetPeak': greetPeak,
+        if (peakHolidays.isNotEmpty) 'peakHolidays': peakHolidays,
+        if (peakMakeup.isNotEmpty) 'peakMakeup': peakMakeup,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -400,7 +415,18 @@ class AppSettings {
       poemEvery: clampPoemEvery((json['poemEvery'] as num?)?.toInt() ?? 20),
       greetOn: json['greetOn'] != false,
       greetPeak: json['greetPeak'] != false,
+      peakHolidays: _lines(json['peakHolidays']),
+      peakMakeup: _lines(json['peakMakeup']),
     );
+  }
+
+  /// 一行一个的字符串清单读回来。
+  static List<String> _lines(Object? raw) {
+    if (raw is! List) return <String>[];
+    return raw
+        .map((Object? e) => '$e'.trim())
+        .where((String s) => s.isNotEmpty)
+        .toList();
   }
 
   /// `{temperature: [0, 1.2]}` 读回来。读不像样的直接丢掉。

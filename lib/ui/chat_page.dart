@@ -1388,6 +1388,7 @@ class _ChatPageState extends State<ChatPage> {
       at: DateTime.now(),
       model: p.model,
       peakHint: s.greetPeak,
+      clock: s.deepSeekClock(),
     );
     return Container(
       width: 212,
@@ -1450,8 +1451,9 @@ class _ChatPageState extends State<ChatPage> {
     final PriceQuote quote = quotePrice(manual: p.price, model: p.model);
     String tail = quote.known ? quote.sourceLabel : '';
     if (quote.peakValley) {
+      final PeakState now = widget.services.settings.value.deepSeekClock().state(DateTime.now());
       tail = quote.known
-          ? '${quote.sourceLabel} · ${const DeepSeekClock().state(DateTime.now()).peak ? '高峰价' : '谷时半价'}'
+          ? '${quote.sourceLabel} · ${now.peak ? '高峰价' : '谷时半价'}'
           : '谷时半价';
     }
     return Container(

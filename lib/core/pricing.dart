@@ -187,9 +187,12 @@ PriceQuote quotePrice({
 }
 
 /// 这一刻该乘几倍。DeepSeek 的谷时是高峰的一半，其余模型不打折。
-double peakFactor({required bool peakValley, required DateTime at}) {
+double peakFactor({
+  required bool peakValley,
+  required DateTime at,
+  DeepSeekClock clock = const DeepSeekClock(),
+}) {
   if (!peakValley) return 1;
-  const DeepSeekClock clock = DeepSeekClock();
   return clock.state(at).peak ? 1 : 0.5;
 }
 

@@ -1,6 +1,7 @@
 import 'package:carbide_shell/core/deepseek.dart';
 import 'package:carbide_shell/core/pricing.dart';
 import 'package:carbide_shell/core/usage.dart';
+import 'package:carbide_shell/data/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 北京时间 -> 真实瞬间。
@@ -53,6 +54,23 @@ void main() {
       expect(isDeepSeekModel('deepseek-chat'), isTrue);
       expect(isDeepSeekModel('gpt-4o'), isFalse);
     });
+  });
+
+
+  test('设置里补的节假日也算谷时', () {
+    final AppSettings s = AppSettings(
+      peakHolidays: <String>['2026-10-01', '乱写的一行'],
+      peakMakeup: <String>['2026-10-11'],
+    );
+    final DeepSeekClock clock = s.deepSeekClock();
+    expect(clock.state(bj(2026, 10, 1, 10)).peak, isFalse);
+    expect(clock.state(bj(2026, 10, 1, 10)).holiday, isTrue);
+    expect(clock.state(bj(2026, 10, 11, 10)).makeup, isTrue);
+    // 内置的 2025 那张表还在。
+    expect(clock.state(bj(2025, 10, 1, 10)).holiday, isTrue);
+    // 平常的工作日还是高峰。
+    expect(clock.state(bj(2026, 10, 28, 10)).peak, isTrue);
+    expect(peakFactor(peakValley: true, at: bj(2026, 10, 1, 10), clock: clock), 0.5);
   });
 
   group('计价', () {
