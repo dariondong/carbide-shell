@@ -54,6 +54,7 @@ class ChatPage extends StatefulWidget {
     required this.conversation,
     required this.subtitle,
     required this.onBack,
+    this.onOpenSidebar,
   });
 
   final AppServices services;
@@ -61,6 +62,9 @@ class ChatPage extends StatefulWidget {
   final Conversation conversation;
   final String subtitle;
   final VoidCallback onBack;
+
+  /// 窄屏时顶上那颗换成菜单，点开是会话侧边栏；宽屏是 null，用返回箭头。
+  final VoidCallback? onOpenSidebar;
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -1076,12 +1080,16 @@ class _ChatPageState extends State<ChatPage> {
           child: Row(
             children: <Widget>[
               GestureDetector(
-                onTap: widget.onBack,
+                onTap: widget.onOpenSidebar ?? widget.onBack,
                 behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 56,
-                  child: Icon(Icons.arrow_back, size: 19, color: C.ink),
+                  child: Icon(
+                    widget.onOpenSidebar == null ? Icons.arrow_back : Icons.menu,
+                    size: 19,
+                    color: C.ink,
+                  ),
                 ),
               ),
               const SizedBox(width: 2),
@@ -1471,6 +1479,18 @@ class _SummaryCardState extends State<_SummaryCard> {
   }
 }
 
+/// 干活的时候小猫右边那句诗，每九秒换一句。都是古人的句子，不带署名。
+const List<String> _kVerses = <String>[
+  '长风破浪会有时，直挂云帆济沧海',
+  '山重水复疑无路，柳暗花明又一村',
+  '千淘万漉虽辛苦，吹尽狂沙始到金',
+  '莫愁前路无知己，天下谁人不识君',
+  '会当凌绝顶，一览众山小',
+  '路漫漫其修远兮，吾将上下而求索',
+  '不积跬步，无以至千里',
+  '锲而不舍，金石可镂',
+];
+
 /// 模型问人的那张卡。有选项就点，没有就自己写，答完它接着干。
 class _AskCard extends StatefulWidget {
   const _AskCard({required this.request, required this.onAnswer});
@@ -1595,11 +1615,18 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
   Timer? _tick;
   int _seconds = 0;
 
+  /// 第几句诗。
+  int _verse = 0;
+
   @override
   void initState() {
     super.initState();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _seconds += 1);
+      if (!mounted) return;
+      setState(() {
+        _seconds += 1;
+        if (_seconds % 9 == 0) _verse += 1;
+      });
     });
   }
 
@@ -1655,6 +1682,25 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
           const SizedBox(width: 6),
           Text('$_label · $_seconds 秒',
               style: C.monoSmall.copyWith(color: C.grey, fontSize: 11)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: Motion.swap,
+              child: Text(
+                _kVerses[_verse % _kVerses.length],
+                key: ValueKey<int>(_verse),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontSize: 11,
+                  height: 1.3,
+                  color: C.grey2,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

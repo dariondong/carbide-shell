@@ -78,6 +78,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
   int _index = 0;
   Conversation? _open;
 
@@ -252,6 +253,9 @@ class _HomeShellState extends State<HomeShell> {
         _back();
       },
       child: Scaffold(
+          key: _scaffold,
+          // 窄屏时会话侧边栏从左边滑出来，和宽屏那一栏是同一份。
+          drawer: _index == 0 ? _sidebar() : null,
           body: MediaQuery.removePadding(
           context: context,
           // 底部的系统条距离由下面那条导航条让，页面里不再重复让一次。
@@ -342,7 +346,7 @@ class _HomeShellState extends State<HomeShell> {
                 onChanged: _refresh,
               ),
             )
-          : _chat(s, open),
+          : _chat(s, open, wide: false),
     );
   }
 
@@ -371,7 +375,7 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  Widget _chat(AppServices s, Conversation open) {
+  Widget _chat(AppServices s, Conversation open, {bool wide = true}) {
     return ChatPage(
       key: ValueKey<String>(open.id),
       services: s,
@@ -382,6 +386,33 @@ class _HomeShellState extends State<HomeShell> {
         setState(() => _open = null);
         _refresh();
       },
+      onOpenSidebar: wide ? null : () => _scaffold.currentState?.openDrawer(),
+    );
+  }
+
+  /// 窄屏的侧边栏：和宽屏那一栏同一份，选完自动收起来。
+  Widget _sidebar() {
+    final AppServices s = widget.services;
+    return Drawer(
+      width: ConversationRail.width,
+      backgroundColor: C.paper,
+      shape: const RoundedRectangleBorder(),
+      child: SafeArea(
+        child: ConversationRail(
+          services: s,
+          hub: widget.hub,
+          currentId: _open?.id ?? '',
+          onOpen: (Conversation c) {
+            Navigator.of(context).maybePop();
+            setState(() => _open = c);
+          },
+          onNew: () async {
+            Navigator.of(context).maybePop();
+            await _newConversation();
+          },
+          onDelete: _deleteConversation,
+        ),
+      ),
     );
   }
 
