@@ -3,6 +3,7 @@ import 'core/conversation.dart';
 import 'core/journal.dart';
 import 'core/memory.dart';
 import 'core/models.dart';
+import 'core/plan.dart';
 import 'core/policy.dart';
 import 'core/tools.dart';
 import 'data/device.dart';
@@ -25,6 +26,7 @@ import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
 import 'tools/mail_tool.dart';
 import 'tools/notify_tool.dart';
+import 'tools/plan_tool.dart';
 import 'tools/probe_tool.dart';
 import 'tools/render_tool.dart';
 import 'tools/report_tool.dart';
@@ -124,6 +126,11 @@ class AppServices {
       ..register(TempDownloadTool(files: files, pool: pool, hosts: hosts))
       ..register(RememberTool(store))
       ..register(AskTool())
+      // 计划写在这张对话上，界面照着它画顶上那张卡。
+      ..register(PlanTool(
+        plan: c.plan,
+        onChanged: (WorkPlan next) => c.plan = next,
+      ))
       ..register(NotifyTool())
       ..register(MailSendTool(mail, files: files))
       ..register(ReportRenderTool(files))

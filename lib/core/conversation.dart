@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'models.dart';
+import 'plan.dart';
 
 /// 一份记录最多留这么多字，多出来的从最早的收起。
 ///
@@ -65,6 +66,7 @@ class Conversation {
     this.systemPrompt = '',
     this.advanceMaster = false,
     this.dropped = 0,
+    this.plan,
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -94,6 +96,9 @@ class Conversation {
   /// 因为太长收起过多少条。界面上要如实说一句，不然人以为记录丢了。
   int dropped;
 
+  /// 模型写的这一趟的计划。界面照着它画顶上那张卡。
+  WorkPlan? plan;
+
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
 
@@ -116,6 +121,7 @@ class Conversation {
         if (systemPrompt.trim().isNotEmpty) 'systemPrompt': systemPrompt,
         if (advanceMaster) 'advanceMaster': true,
         if (dropped > 0) 'dropped': dropped,
+        if (plan != null) 'plan': plan!.toJson(),
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -141,6 +147,7 @@ class Conversation {
       systemPrompt: '${json['systemPrompt'] ?? ''}',
       advanceMaster: json['advanceMaster'] == true,
       dropped: (json['dropped'] as num?)?.toInt() ?? 0,
+      plan: WorkPlan.fromJson(json['plan']),
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],
