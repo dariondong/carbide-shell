@@ -307,6 +307,8 @@ class SessionHub extends ChangeNotifier {
     c.messages.removeRange(0, cut);
     c.messages.insert(0, LlmMessage.assistant('$kCompactMark\n$text'));
     c.dropped += cut;
+    // 收掉的那一段连同它们占的位置一起去掉，做完的那张计划仍停在它自己那一行。
+    c.planAnchor = (c.planAnchor - cut + 1).clamp(0, c.messages.length).toInt();
     live.loop.onHistoryChanged();
     await services.persist(c);
     return text;

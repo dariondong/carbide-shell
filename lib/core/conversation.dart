@@ -67,6 +67,7 @@ class Conversation {
     this.advanceMaster = false,
     this.dropped = 0,
     this.plan,
+    this.planAnchor = 0,
     List<String>? kindApprovals,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
@@ -99,6 +100,9 @@ class Conversation {
   /// 模型写的这一趟的计划。界面照着它画顶上那张卡。
   WorkPlan? plan;
 
+  /// 计划做完时记录有多长。做完的那一张就停在那个位置，不再钉在顶上。
+  int planAnchor;
+
   /// Approved kinds, `tool:firstword`. Same kind runs without asking again.
   final List<String> kindApprovals;
 
@@ -122,6 +126,7 @@ class Conversation {
         if (advanceMaster) 'advanceMaster': true,
         if (dropped > 0) 'dropped': dropped,
         if (plan != null) 'plan': plan!.toJson(),
+        if (planAnchor > 0) 'planAnchor': planAnchor,
         'kindApprovals': kindApprovals,
         'messages': messages.map(messageToJson).toList(),
       };
@@ -148,6 +153,7 @@ class Conversation {
       advanceMaster: json['advanceMaster'] == true,
       dropped: (json['dropped'] as num?)?.toInt() ?? 0,
       plan: WorkPlan.fromJson(json['plan']),
+      planAnchor: (json['planAnchor'] as num?)?.toInt() ?? 0,
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],

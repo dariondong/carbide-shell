@@ -10,6 +10,7 @@ import '../core/compact.dart';
 import '../core/conversation.dart';
 import '../core/docx.dart';
 import '../core/models.dart';
+import '../core/plan.dart';
 import '../data/hub.dart';
 import '../services.dart';
 import '../tools/ask_tool.dart';
@@ -676,7 +677,15 @@ class _ChatPageState extends State<ChatPage> {
     if (dropped > 0) {
       rows.add(_Row(_RowKind.trim, text: '更早的 $dropped 条已收起'));
     }
-    for (final LlmMessage m in _messages) {
+    final WorkPlan? plan = widget.conversation.plan;
+    final bool planDone = plan != null && plan.finished;
+    final int anchor = widget.conversation.planAnchor;
+    for (int i = 0; i < _messages.length; i += 1) {
+      final LlmMessage m = _messages[i];
+      // 做完的计划不再钉在顶上，而是留在当时那一段对话的末尾。
+      if (planDone && i == anchor) {
+        rows.add(const _Row(_RowKind.plan));
+      }
       if (m.role == LlmRole.user) {
         rows.add(_Row(_RowKind.user, message: m));
       } else if (m.role == LlmRole.assistant) {
@@ -689,6 +698,10 @@ class _ChatPageState extends State<ChatPage> {
         }
         if (m.calls.isNotEmpty) rows.add(_Row(_RowKind.tool, message: m));
       }
+    }
+    // 计划是在最后一条之后做完的：它排在那一段的末尾。
+    if (planDone && anchor >= _messages.length) {
+      rows.add(const _Row(_RowKind.plan));
     }
     // 没活干的时候，记录最后面躺一只睡着的。
     if (!_running && rows.isNotEmpty && rows.last.kind != _RowKind.empty) {
@@ -740,6 +753,8 @@ class _ChatPageState extends State<ChatPage> {
         );
       case _RowKind.summary:
         return _summaryCard(r.message!.text.substring(kCompactMark.length).trim());
+      case _RowKind.plan:
+        return _finishedPlan();
       case _RowKind.pet:
         return _sleepingCat();
       case _RowKind.thinking:
@@ -899,6 +914,16 @@ class _ChatPageState extends State<ChatPage> {
           if (shown.isNotEmpty) OutputPreview(files: widget.services.files, paths: shown),
         ],
       ),
+    );
+  }
+
+  /// 做完的那张计划：已经落进记录里，跟对话一起滚。
+  Widget _finishedPlan() {
+    final WorkPlan? plan = widget.conversation.plan;
+    if (plan == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: PlanBar(plan: plan, pad: EdgeInsets.zero),
     );
   }
 
@@ -1084,7 +1109,8 @@ class _ChatPageState extends State<ChatPage> {
             ],
           ),
         ),
-        if (widget.conversation.plan != null) PlanBar(plan: widget.conversation.plan!),
+        if (widget.conversation.plan != null && !widget.conversation.plan!.finished)
+          PlanBar(plan: widget.conversation.plan!),
         Expanded(
           child: Stack(
             children: <Widget>[
@@ -1383,7 +1409,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// 一行的身份与内容。不拿 Widget 当缓存，状态一变也不必把整份记录重造。
-enum _RowKind { trim, summary, user, answer, tool, streaming, thinking, pet, empty }
+enum _RowKind { trim, summary, plan, user, answer, tool, streaming, thinking, pet, empty }
 
 class _Row {
   const _Row(this.kind, {this.message, this.text = ''});

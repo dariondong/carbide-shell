@@ -131,7 +131,11 @@ class AppServices {
       // 计划写在这张对话上，界面照着它画顶上那张卡。
       ..register(PlanTool(
         plan: c.plan,
-        onChanged: (WorkPlan next) => c.plan = next,
+        onChanged: (WorkPlan next) {
+          c.plan = next;
+          // 做完了就把这一张停在当时的位置，后面的新活另起一张。
+          if (next.finished) c.planAnchor = c.messages.length;
+        },
       ))
       ..register(NotifyTool())
       ..register(MailSendTool(mail, files: files))
