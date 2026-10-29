@@ -895,7 +895,12 @@ class _ChatPageState extends State<ChatPage> {
             streaming: streaming,
             base: C.answer.copyWith(fontSize: widget.services.settings.value.answerFont),
           ),
-          if (out.isNotEmpty) OutputPreview(files: widget.services.files, paths: out),
+          if (out.isNotEmpty)
+            OutputPreview(
+              files: widget.services.files,
+              paths: out,
+              onMore: _openTempFiles,
+            ),
         ],
       ),
     );
@@ -915,7 +920,12 @@ class _ChatPageState extends State<ChatPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           ToolRunGroup(calls: calls, outputs: outputs, runningId: runningId),
-          if (shown.isNotEmpty) OutputPreview(files: widget.services.files, paths: shown),
+          if (shown.isNotEmpty)
+            OutputPreview(
+              files: widget.services.files,
+              paths: shown,
+              onMore: _openTempFiles,
+            ),
         ],
       ),
     );
@@ -1042,6 +1052,19 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 产物多的时候，剩下那些在临时文件页里看。
+  void _openTempFiles() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TempFilesPage(
+          files: widget.services.files,
+          hosts: widget.services.hosts,
+          pool: widget.services.pool,
+        ),
       ),
     );
   }
@@ -1686,23 +1709,33 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
           Expanded(
             child: AnimatedSwitcher(
               duration: Motion.swap,
-              child: Text(
-                _kVerses[_verse % _kVerses.length],
-                key: ValueKey<int>(_verse),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 11,
-                  height: 1.3,
-                  color: C.grey2,
-                  letterSpacing: 0.4,
-                ),
-              ),
+              child: _verseText(_kVerses[_verse % _kVerses.length]),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// 一句诗分两行写：逗号前一行、逗号后一行，放不下就自己折，不拿省略号剪。
+  Widget _verseText(String line) {
+    final int cut = line.indexOf('，');
+    final String head = cut < 0 ? line : line.substring(0, cut);
+    final String tail = cut < 0 ? '' : line.substring(cut + 1);
+    const TextStyle style = TextStyle(
+      fontSize: 11,
+      height: 1.45,
+      color: C.grey2,
+      letterSpacing: 0.4,
+    );
+    return Column(
+      key: ValueKey<String>(line),
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(head, textAlign: TextAlign.right, style: style),
+        if (tail.isNotEmpty) Text(tail, textAlign: TextAlign.right, style: style),
+      ],
     );
   }
 

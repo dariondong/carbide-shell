@@ -403,11 +403,11 @@ class _HomeShellState extends State<HomeShell> {
           hub: widget.hub,
           currentId: _open?.id ?? '',
           onOpen: (Conversation c) {
-            Navigator.of(context).maybePop();
+            _scaffold.currentState?.closeDrawer();
             setState(() => _open = c);
           },
           onNew: () async {
-            Navigator.of(context).maybePop();
+            _scaffold.currentState?.closeDrawer();
             await _newConversation();
           },
           onDelete: _deleteConversation,

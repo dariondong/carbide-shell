@@ -25,22 +25,64 @@ List<String> localOutputs(TempFiles files, String text) {
 
 /// 模型写出来的图和网页，在对话里直接看：图是一张小样，网页先收成文字再画。
 class OutputPreview extends StatelessWidget {
-  const OutputPreview({super.key, required this.files, required this.paths});
+  const OutputPreview({
+    super.key,
+    required this.files,
+    required this.paths,
+    this.max = 4,
+    this.onMore,
+  });
 
   final TempFiles files;
   final List<String> paths;
 
+  /// 最多摊几个。摊多了把对话刷成一堵墙，剩下的一并收到临时文件页。
+  final int max;
+
+  /// 点「还有 N 个」时去哪儿。
+  final VoidCallback? onMore;
+
   @override
   Widget build(BuildContext context) {
     if (paths.isEmpty) return const SizedBox.shrink();
+    final List<String> shown = paths.length > max ? paths.sublist(0, max) : paths;
+    final int rest = paths.length - shown.length;
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: <Widget>[
-          for (final String path in paths) _tile(context, path),
+          for (final String path in shown) _tile(context, path),
+          if (rest > 0) _moreTile(rest),
         ],
+      ),
+    );
+  }
+
+  /// 多出来的那几个：一张牌说清还有多少，点开去临时文件页。
+  Widget _moreTile(int rest) {
+    final VoidCallback? tap = onMore;
+    return GestureDetector(
+      onTap: tap,
+      child: Container(
+        width: 116,
+        height: 92,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+          border: Border.all(color: C.rule),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('+$rest', style: C.mono.copyWith(fontSize: 15, color: C.ink)),
+            const SizedBox(height: 3),
+            Text('还有 $rest 个',
+                style: C.monoSmall.copyWith(fontSize: 9.5, color: C.grey)),
+          ],
+        ),
       ),
     );
   }
