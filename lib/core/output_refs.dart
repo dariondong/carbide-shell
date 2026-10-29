@@ -21,17 +21,20 @@ const Set<String> kPreviewExt = <String>{
 List<String> outputRefs(String text) {
   if (text.isEmpty || !text.contains('.')) return const <String>[];
   final RegExp re = RegExp(
-    r'[^\s`"（），。；、()\[\]<>|,;:]+\.(?:png|jpe?g|gif|webp|bmp|html?)',
+    r'[^\s`"()\[\]<>|,;:\u3000-\u303f\uff00-\uffef]+\.(?:png|jpe?g|gif|webp|bmp|html?)',
     caseSensitive: false,
   );
   final List<String> out = <String>[];
   for (final RegExpMatch m in re.allMatches(text)) {
+    final int at = m.start;
+    // 前面紧跟着冒号或斜杠的是外链或 data URL 的一段，不是临时区里的文件。
+    if (at > 0) {
+      final String prev = text[at - 1];
+      if (prev == ':' || prev == '/') continue;
+    }
     String path = m.group(0) ?? '';
     if (path.isEmpty) continue;
-    if (path.startsWith('http://') ||
-        path.startsWith('https://') ||
-        path.startsWith('data:') ||
-        path.startsWith('file:')) {
+    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('file:')) {
       continue;
     }
     while (path.startsWith('./')) {
