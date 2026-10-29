@@ -80,8 +80,8 @@ class _ChatPageState extends State<ChatPage> {
   /// 正在往底跳：这几帧里滚动位置一直在变，别把它当成读者往上翻。
   bool _settling = false;
 
-  /// 刚进来时先跳到最新那条，不用等人先往下翻。
-  bool _opened = false;
+  /// 正在追尾巴：同一条尾巴不叠两次动画。
+  bool _chasing = false;
   Timer? _openJump;
   final List<String> _images = <String>[];
   final List<String> _attachNames = <String>[];
@@ -128,10 +128,7 @@ class _ChatPageState extends State<ChatPage> {
     _openJump?.cancel();
     _toEnd();
     _openJump = Timer(const Duration(milliseconds: 90), _toEnd);
-    Timer(const Duration(milliseconds: 260), () {
-      _toEnd();
-      _opened = true;
-    });
+    Timer(const Duration(milliseconds: 260), _toEnd);
   }
 
   void _toEnd() {
@@ -176,24 +173,43 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
+  /// 离底多少像素以内还算「在底部」。只差几十像素不该停止跟随。
+  static const double _tailSlack = 56;
+
+  bool get _nearTail {
+    if (!_scroll.hasClients) return true;
+    final ScrollPosition p = _scroll.position;
+    return p.maxScrollExtent - p.pixels <= _tailSlack;
+  }
+
   void _onScroll() {
     if (_settling || !_scroll.hasClients) return;
-    final bool atBottom = _scroll.position.maxScrollExtent - _scroll.position.pixels < 200;
+    final bool atBottom = _nearTail;
     if (atBottom == _atBottom) return;
     setState(() => _atBottom = atBottom);
   }
 
-  void _jumpToBottom() {
+  /// 点右下角那颗：一段一段追下去，直到真的落底。
+  ///
+  /// 行是边滚边建的，末尾高度先是估的，一次动画到不了底，所以要接着追。
+  Future<void> _jumpToBottom() async {
     if (!_scroll.hasClients) return;
-    _scroll
-        .animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic,
-        )
-        .then((_) {
-      if (mounted) _settle(0);
-    });
+    if (!_atBottom) setState(() => _atBottom = true);
+    _settling = true;
+    for (int i = 0; i < 30; i += 1) {
+      if (!mounted || !_scroll.hasClients) break;
+      final ScrollPosition p = _scroll.position;
+      final double gap = p.maxScrollExtent - p.pixels;
+      if (gap <= 1) break;
+      await _scroll.animateTo(
+        p.maxScrollExtent,
+        duration: Duration(milliseconds: gap > 900 ? 260 : 170),
+        curve: Curves.easeOutCubic,
+      );
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    _settling = false;
+    if (mounted) setState(() => _atBottom = true);
   }
 
   void _refresh() {
@@ -204,13 +220,29 @@ class _ChatPageState extends State<ChatPage> {
 
   /// 跟着尾巴走，但读者往上翻看旧内容时不要把他拽回来。
   void _followTail() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      final ScrollPosition p = _scroll.position;
-      // 刚打开的那几帧不看他翻到哪儿了，直接落到最新一条。
-      if (_opened && p.maxScrollExtent - p.pixels > 180) return;
-      _settle(0);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _chase());
+  }
+
+  /// 平滑追一次尾巴。字还在往外冒的时候每几十毫秒追一下，看上去才是跟着走。
+  Future<void> _chase() async {
+    if (!mounted || !_scroll.hasClients || !_atBottom || _chasing || _settling) return;
+    _chasing = true;
+    try {
+      for (int i = 0; i < 8; i += 1) {
+        if (!mounted || !_scroll.hasClients || !_atBottom) break;
+        final ScrollPosition p = _scroll.position;
+        final double gap = p.maxScrollExtent - p.pixels;
+        if (gap <= 1) break;
+        await _scroll.animateTo(
+          p.maxScrollExtent,
+          duration: Duration(milliseconds: gap > 400 ? 200 : 110),
+          curve: Curves.easeOut,
+        );
+        await WidgetsBinding.instance.endOfFrame;
+      }
+    } finally {
+      _chasing = false;
+    }
   }
 
   Future<void> _allowKind() async {
