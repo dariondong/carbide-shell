@@ -35,7 +35,7 @@ class _HostsPageState extends State<HostsPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -55,7 +55,7 @@ class _HostsPageState extends State<HostsPage> {
                     color: C.blue,
                     borderRadius: BorderRadius.circular(C.radiusSmall),
                   ),
-                  child: const Icon(Icons.add, size: 17, color: Colors.white),
+                  child: Icon(Icons.add, size: 17, color: C.onAccent),
                 ),
               ),
             ],
@@ -63,7 +63,7 @@ class _HostsPageState extends State<HostsPage> {
         ),
         Expanded(
           child: list.isEmpty
-              ? const Padding(
+              ? Padding(
                   padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +95,7 @@ class _HostsPageState extends State<HostsPage> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-          child: const Text(
+          child: Text(
             '密钥保存在本机安全存储，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
           ),
@@ -121,7 +121,7 @@ class _HostsPageState extends State<HostsPage> {
                 color: C.blueSoft,
                 borderRadius: BorderRadius.circular(C.radiusSmall),
               ),
-              child: const Icon(Icons.monitor_heart_outlined, size: 18, color: C.blue),
+              child: Icon(Icons.monitor_heart_outlined, size: 18, color: C.blue),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -138,7 +138,7 @@ class _HostsPageState extends State<HostsPage> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -288,15 +288,15 @@ class _HostsPageState extends State<HostsPage> {
                       await widget.secrets.delete(hostSudoKey(entry.id));
                       if (ctx.mounted) Navigator.of(ctx).pop('delete');
                     },
-                    child: const Text('删除', style: TextStyle(fontSize: 13, color: C.grey)),
+                    child: Text('删除', style: TextStyle(fontSize: 13, color: C.grey)),
                   ),
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+                  child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop('save'),
-                  child: const Text('保存', style: TextStyle(fontSize: 13, color: C.ink)),
+                  child: Text('保存', style: TextStyle(fontSize: 13, color: C.ink)),
                 ),
               ],
             );
@@ -348,7 +348,7 @@ class _HostsPageState extends State<HostsPage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }

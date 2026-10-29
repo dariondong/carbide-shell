@@ -101,7 +101,7 @@ class _MdTextState extends State<MdText> {
       case MdBlockKind.quote:
         return Container(
           padding: const EdgeInsets.only(left: 11),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(left: BorderSide(color: C.rule2, width: 2)),
           ),
           child: _rich(b.text, base.copyWith(color: C.grey)),

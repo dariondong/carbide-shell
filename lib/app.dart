@@ -31,7 +31,7 @@ import 'ui/usage_page.dart';
 import 'ui/terminal_page.dart';
 import 'ui/theme.dart';
 
-class CarbideApp extends StatelessWidget {
+class CarbideApp extends StatefulWidget {
   const CarbideApp({
     super.key,
     required this.services,
@@ -52,17 +52,50 @@ class CarbideApp extends StatelessWidget {
   final NoticeReply replies;
 
   @override
+  State<CarbideApp> createState() => _CarbideAppState();
+}
+
+/// 外观这一层只有一件事：设置或系统亮度一变，把色板换过来。
+class _CarbideAppState extends State<CarbideApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.services.settings.addListener(_syncPalette);
+    // 第一帧之前先把色板对上，免得开机闪一下另一个颜色。
+    C.useDark(themeIsDark(widget.services.settings.value.themeMode));
+    C.applySystemChrome();
+  }
+
+  @override
+  void dispose() {
+    widget.services.settings.removeListener(_syncPalette);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 跟系统走的时候，系统换了深浅色也要跟着换。
+  @override
+  void didChangePlatformBrightness() => _syncPalette();
+
+  void _syncPalette() {
+    if (!C.useDark(themeIsDark(widget.services.settings.value.themeMode))) return;
+    C.applySystemChrome();
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Carbide Shell',
       debugShowCheckedModeBanner: false,
       theme: C.theme(),
       home: HomeShell(
-        services: services,
-        hub: hub,
-        scheduler: scheduler,
-        triggers: triggers,
-        replies: replies,
+        services: widget.services,
+        hub: widget.hub,
+        scheduler: widget.scheduler,
+        triggers: widget.triggers,
+        replies: widget.replies,
       ),
     );
   }
@@ -161,7 +194,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('以后再说', style: TextStyle(fontSize: 13, color: C.grey)),
+              child: Text('以后再说', style: TextStyle(fontSize: 13, color: C.grey)),
             ),
             TextButton(
               onPressed: () {
@@ -169,7 +202,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 final String url = best.apkUrl.isEmpty ? best.pageUrl : best.apkUrl;
                 launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
               },
-              child: const Text('去下载', style: TextStyle(fontSize: 13, color: C.blue)),
+              child: Text('去下载', style: TextStyle(fontSize: 13, color: C.blue)),
             ),
           ],
         ),
@@ -340,7 +373,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
         ),
         bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(top: BorderSide(color: C.rule)),
           ),
@@ -399,7 +432,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           onNew: _newConversation,
           onDelete: _deleteConversation,
         ),
-        const VerticalDivider(width: 1, thickness: 1, color: C.rule),
+        VerticalDivider(width: 1, thickness: 1, color: C.rule),
         Expanded(
           child: AnimatedSwitcher(
             duration: Motion.swap,
@@ -473,7 +506,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           const Text('左边选一个对话',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 8),
-          const Text('也可以新开一个，指定它管哪台主机。',
+          Text('也可以新开一个，指定它管哪台主机。',
               style: TextStyle(fontSize: 12.5, color: C.grey, height: 1.6)),
           const SizedBox(height: 18),
           SquareButton(label: '新对话', filled: true, onPressed: _newConversation),

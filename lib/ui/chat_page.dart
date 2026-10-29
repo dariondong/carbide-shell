@@ -309,7 +309,7 @@ class _ChatPageState extends State<ChatPage> {
       builder: (BuildContext ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.paper,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
@@ -337,7 +337,7 @@ class _ChatPageState extends State<ChatPage> {
               const SizedBox(height: 4),
               Text(
                 follows ? '现在跟这套配置的提示词走（没配就是设置里那份）。在这里写就是只换这个对话。' : '这个对话用自己的一份，不跟设置走。',
-                style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
+                style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
               ),
               const SizedBox(height: 10),
               Container(
@@ -408,7 +408,7 @@ class _ChatPageState extends State<ChatPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('这场对话',
+            Text('这场对话',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
             const SizedBox(height: 3),
             Text('压缩只动更早的那些，后面几条原样留着。', style: C.monoSmall),
@@ -466,11 +466,11 @@ class _ChatPageState extends State<ChatPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('压缩', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('压缩', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -502,7 +502,7 @@ class _ChatPageState extends State<ChatPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('给它带东西',
+            Text('给它带东西',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
             const SizedBox(height: 3),
             Text(running ? '这一轮还在跑，跑完再进文件。' : '文件跟着下一条消息一起发出去。',
@@ -575,7 +575,7 @@ class _ChatPageState extends State<ChatPage> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -759,7 +759,7 @@ class _ChatPageState extends State<ChatPage> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 18),
           child: Text(r.text,
-              style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+              style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
         );
       case _RowKind.summary:
         return _summaryCard(r.message!.text.substring(kCompactMark.length).trim());
@@ -794,7 +794,7 @@ class _ChatPageState extends State<ChatPage> {
               color: C.blueSoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text('❯',
+            child: Text('❯',
                 style: TextStyle(fontSize: 12, color: C.blue, height: 1.1)),
           ),
           const SizedBox(width: 10),
@@ -847,7 +847,7 @@ class _ChatPageState extends State<ChatPage> {
   Widget _photoImage(String url, {required BoxFit fit}) {
     final Uint8List? bytes = photoBytes(url);
     if (bytes == null) {
-      return const Center(
+      return Center(
         child: Text('读不出这张图',
             style: TextStyle(fontSize: 11, color: C.grey2)),
       );
@@ -857,7 +857,7 @@ class _ChatPageState extends State<ChatPage> {
       fit: fit,
       gaplessPlayback: true,
       errorBuilder: (BuildContext ctx, Object error, StackTrace? stack) =>
-          const Center(
+          Center(
         child: Text('读不出这张图',
             style: TextStyle(fontSize: 11, color: C.grey2)),
       ),
@@ -868,7 +868,7 @@ class _ChatPageState extends State<ChatPage> {
   void _openPhoto(List<String> photos, int start) {
     Navigator.of(context).push<void>(PageRouteBuilder<void>(
       opaque: false,
-      barrierColor: const Color(0xF2181C23),
+      barrierColor: C.scrim,
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (BuildContext ctx, Animation<double> a, Animation<double> b) =>
           _PhotoViewer(photos: photos, start: start),
@@ -980,7 +980,7 @@ class _ChatPageState extends State<ChatPage> {
           const Text('说说要做什么',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 10),
-          const Text('例如：看磁盘使用率，清掉 nginx 的老日志。', style: C.answer),
+          Text('例如：看磁盘使用率，清掉 nginx 的老日志。', style: C.answer),
           const SizedBox(height: 22),
           Container(
             width: double.infinity,
@@ -993,7 +993,7 @@ class _ChatPageState extends State<ChatPage> {
               widget.conversation.multiHost
                   ? '这个对话可以操作全部主机，用哪一台由它选。'
                   : '这个对话只操作一台主机，记忆也保存在这台机器名下。',
-              style: const TextStyle(fontSize: 12.5, height: 1.6, color: C.grey),
+              style: TextStyle(fontSize: 12.5, height: 1.6, color: C.grey),
             ),
           ),
         ],
@@ -1060,7 +1060,7 @@ class _ChatPageState extends State<ChatPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('这场对话用哪套模型',
+            Text('这场对话用哪套模型',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
             const SizedBox(height: 3),
             Text('换过去之后，新消息按那一套的提示词和参数走，记录不动。', style: C.monoSmall),
@@ -1133,7 +1133,7 @@ class _ChatPageState extends State<ChatPage> {
                 ],
               ),
             ),
-            if (on) const Icon(Icons.check, size: 16, color: C.blue),
+            if (on) Icon(Icons.check, size: 16, color: C.blue),
           ],
         ),
       ),
@@ -1184,7 +1184,7 @@ class _ChatPageState extends State<ChatPage> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (running) ...<Widget>[
-            const SizedBox(
+            SizedBox(
               width: 9,
               height: 9,
               child: CircularProgressIndicator(strokeWidth: 1.4, color: C.blue),
@@ -1248,7 +1248,7 @@ class _ChatPageState extends State<ChatPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -1276,7 +1276,7 @@ class _ChatPageState extends State<ChatPage> {
               GestureDetector(
                 onTap: _openTrace,
                 behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 34,
                   height: 56,
                   child: Icon(Icons.timeline, size: 17, color: C.grey),
@@ -1285,7 +1285,7 @@ class _ChatPageState extends State<ChatPage> {
               GestureDetector(
                 onTap: _moreSheet,
                 behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 34,
                   height: 56,
                   child: Icon(Icons.more_horiz, size: 18, color: C.grey),
@@ -1330,7 +1330,7 @@ class _ChatPageState extends State<ChatPage> {
                         border: Border.all(color: C.rule2),
                         boxShadow: C.softShadow,
                       ),
-                      child: const Icon(Icons.arrow_downward, size: 17, color: C.blue),
+                      child: Icon(Icons.arrow_downward, size: 17, color: C.blue),
                     ),
                   ),
                 ),
@@ -1393,7 +1393,7 @@ class _ChatPageState extends State<ChatPage> {
     return Container(
       width: 212,
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: C.card,
         border: Border(left: BorderSide(color: C.rule)),
       ),
@@ -1401,7 +1401,7 @@ class _ChatPageState extends State<ChatPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(greeting.line,
-              style: const TextStyle(fontSize: 13, height: 1.75, color: C.ink)),
+              style: TextStyle(fontSize: 13, height: 1.75, color: C.ink)),
           const SizedBox(height: 14),
           if (greeting.hasPeak) ...<Widget>[
             Container(
@@ -1422,11 +1422,11 @@ class _ChatPageState extends State<ChatPage> {
                       )),
                   const SizedBox(height: 5),
                   Text(greeting.peakLine,
-                      style: const TextStyle(fontSize: 11.5, height: 1.65, color: C.ink)),
+                      style: TextStyle(fontSize: 11.5, height: 1.65, color: C.ink)),
                   if (greeting.hint.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 4),
                     Text(greeting.hint,
-                        style: const TextStyle(fontSize: 11, height: 1.65, color: C.grey)),
+                        style: TextStyle(fontSize: 11, height: 1.65, color: C.grey)),
                   ],
                 ],
               ),
@@ -1530,7 +1530,7 @@ class _ChatPageState extends State<ChatPage> {
                         shape: BoxShape.circle,
                         border: Border.all(color: C.paper, width: 1.5),
                       ),
-                      child: const Icon(Icons.close, size: 11, color: Colors.white),
+                      child: Icon(Icons.close, size: 11, color: C.onAccent),
                     ),
                   ),
                 ),
@@ -1591,7 +1591,7 @@ class _ChatPageState extends State<ChatPage> {
               canType ? _attachSheet : null,
               size: 21,
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 2, bottom: 9),
               child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
             ),
@@ -1678,15 +1678,15 @@ class _ChatPageState extends State<ChatPage> {
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: C.onAccent,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 )
-              : const Icon(
+              : Icon(
                   Icons.arrow_upward,
                   key: ValueKey<String>('send'),
                   size: 19,
-                  color: Colors.white,
+                  color: C.onAccent,
                 ),
         ),
       ),
@@ -1734,9 +1734,9 @@ class _SummaryCardState extends State<_SummaryCard> {
             onTap: () => setState(() => _open = !_open),
             child: Row(
               children: <Widget>[
-                const Icon(Icons.compress, size: 13, color: C.grey),
+                Icon(Icons.compress, size: 13, color: C.grey),
                 const SizedBox(width: 6),
-                const Text('更早的对话已压缩',
+                Text('更早的对话已压缩',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.4)),
                 const Spacer(),
                 Icon(_open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -1789,7 +1789,7 @@ class _AskCardState extends State<_AskCard> {
   @override
   Widget build(BuildContext context) {
     return CardBox(
-      border: const Color(0xFFD9DEF7),
+      border: C.approveBorder,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1826,7 +1826,7 @@ class _AskCardState extends State<_AskCard> {
                         border: Border.all(color: C.blue),
                       ),
                       child: Text(option,
-                          style: const TextStyle(fontSize: 12, color: C.blue)),
+                          style: TextStyle(fontSize: 12, color: C.blue)),
                     ),
                   ),
               ],
@@ -1959,7 +1959,7 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
                         child: Container(
                           width: 5,
                           height: 5,
-                          decoration: const BoxDecoration(color: C.blue, shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: C.blue, shape: BoxShape.circle),
                         ),
                       ),
                     ),
@@ -1987,7 +1987,7 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
 
   /// 一首诗：题目与作者弱化着写在上头，正文分两行，读得清比什么都要紧。
   Widget _poemBlock(Poem poem) {
-    const TextStyle style = TextStyle(
+    TextStyle style = TextStyle(
       fontSize: 11,
       height: 1.5,
       color: C.grey2,
@@ -2002,7 +2002,7 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
             textAlign: TextAlign.right,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 9, height: 1.3, color: C.grey2)),
+            style: TextStyle(fontSize: 9, height: 1.3, color: C.grey2)),
         Text(poem.head, textAlign: TextAlign.right, style: style),
         if (poem.tail.isNotEmpty)
           Text(poem.tail, textAlign: TextAlign.right, style: style),
@@ -2057,7 +2057,7 @@ class _PhotoViewerState extends State<_PhotoViewer> {
                   maxScale: 4,
                   child: Center(
                     child: photoBytes(widget.photos[i]) == null
-                        ? const Text('读不出这张图',
+                        ? Text('读不出这张图',
                             style: TextStyle(color: C.onInk, fontSize: 13))
                         : Image.memory(
                             photoBytes(widget.photos[i])!,
@@ -2076,7 +2076,7 @@ class _PhotoViewerState extends State<_PhotoViewer> {
                     widget.photos.length > 1
                         ? '${_index + 1} / ${widget.photos.length}'
                         : '',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 12, color: C.onInk, letterSpacing: 0.4),
                   ),
                 ),

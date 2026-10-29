@@ -11,13 +11,15 @@ class CardBox extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(14),
-    this.border = C.rule,
+    this.border,
     this.tint,
   });
 
   final Widget child;
   final EdgeInsets padding;
-  final Color border;
+
+  /// 不指定就用主题的发丝线。
+  final Color? border;
   final Color? tint;
 
   @override
@@ -27,7 +29,7 @@ class CardBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: tint ?? C.card,
         borderRadius: BorderRadius.circular(C.radius),
-        border: Border.all(color: border),
+        border: Border.all(color: border ?? C.rule),
         boxShadow: C.softShadow,
       ),
       child: child,
@@ -75,7 +77,7 @@ class KeyValueRow extends StatelessWidget {
         children: <Widget>[
           SizedBox(
             width: 96,
-            child: Text(label, style: const TextStyle(fontSize: 12.5, color: C.grey)),
+            child: Text(label, style: TextStyle(fontSize: 12.5, color: C.grey)),
           ),
           Expanded(
             child: Text(
@@ -110,7 +112,7 @@ class SquareButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color accent = tone == 'ink' ? C.ink : C.blue;
     final Color bg = filled ? accent : C.card;
-    final Color fg = filled ? Colors.white : (onPressed == null ? C.grey2 : C.ink);
+    final Color fg = filled ? C.onAccent : (onPressed == null ? C.grey2 : C.ink);
     return SizedBox(
       height: 38,
       child: TextButton(
@@ -252,7 +254,7 @@ class _ToolStepRowState extends State<ToolStepRow> {
   Widget _dot() {
     final Color color = widget.running
         ? C.blue
-        : (widget.output == null ? C.rule2 : const Color(0xFF3FA96B));
+        : (widget.output == null ? C.rule2 : C.ok);
     if (widget.running) {
       return SizedBox(
         width: 10,
@@ -374,7 +376,7 @@ class ApprovalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CardBox(
-      border: const Color(0xFFD9DEF7),
+      border: C.approveBorder,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,7 +422,7 @@ class ApprovalCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               _warning,
-              style: const TextStyle(fontSize: 12, height: 1.6, color: Color(0xFFD7443E)),
+              style: TextStyle(fontSize: 12, height: 1.6, color: C.danger),
             ),
           ],
           const SizedBox(height: 13),
@@ -506,7 +508,7 @@ class RuleField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+        Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -560,7 +562,7 @@ class ToggleKnob extends StatelessWidget {
           child: Container(
             width: 20,
             height: 20,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: C.knob, shape: BoxShape.circle),
           ),
         ),
       ),
@@ -584,7 +586,7 @@ class SheetCard extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: C.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -629,7 +631,7 @@ class SheetHead extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(title,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
               const SizedBox(height: 3),
               Text(note,
@@ -642,7 +644,7 @@ class SheetHead extends StatelessWidget {
         GestureDetector(
           onTap: () => Navigator.of(context).pop(),
           behavior: HitTestBehavior.opaque,
-          child: const SizedBox(
+          child: SizedBox(
             width: 30,
             height: 30,
             child: Icon(Icons.close, size: 17, color: C.grey),

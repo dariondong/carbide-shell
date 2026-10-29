@@ -79,7 +79,7 @@ class _TracePageState extends State<TracePage> {
             Container(
               height: 56,
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -101,7 +101,7 @@ class _TracePageState extends State<TracePage> {
                   GestureDetector(
                     onTap: _load,
                     behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 34,
                       height: 56,
                       child: Icon(Icons.refresh, size: 18, color: C.grey),
@@ -118,7 +118,7 @@ class _TracePageState extends State<TracePage> {
                         _loading
                             ? '正在读这一轮的日志。'
                             : '这个对话还没有跑过工具。模型一旦叫了工具，这里就按时间记下来：第几步、做了什么、用了多久、回来的是什么。',
-                        style: const TextStyle(fontSize: 12.5, height: 1.7, color: C.body),
+                        style: TextStyle(fontSize: 12.5, height: 1.7, color: C.body),
                       ),
                     )
                   : ListView.builder(
@@ -167,7 +167,7 @@ class _TracePageState extends State<TracePage> {
               ask,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5, height: 1.5, color: C.body),
+              style: TextStyle(fontSize: 12.5, height: 1.5, color: C.body),
             ),
           ],
         ],
@@ -185,7 +185,7 @@ class _TracePageState extends State<TracePage> {
       padding: const EdgeInsets.only(left: 2, bottom: 6),
       child: Row(
         children: <Widget>[
-          const Icon(Icons.memory, size: 13, color: C.grey2),
+          Icon(Icons.memory, size: 13, color: C.grey2),
           const SizedBox(width: 7),
           Text('模型第 ${trace.step} 步', style: C.monoSmall.copyWith(color: C.grey)),
           if (tokens.isNotEmpty) ...<Widget>[
@@ -207,7 +207,7 @@ class _TracePageState extends State<TracePage> {
     final String arg = trace.argText;
     final Color dot = !trace.hasResult
         ? C.rule2
-        : (trace.ok ? const Color(0xFF3FA96B) : const Color(0xFFD7443E));
+        : (trace.ok ? C.ok : C.danger);
     final String right = !trace.hasResult
         ? (widget.live ? '跑着' : '没回来')
         : '${trace.ms > 0 ? '${trace.ms} ms' : '完成'}${trace.ok ? '' : ' · 失败'}';
@@ -289,14 +289,14 @@ class _TracePageState extends State<TracePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Icon(Icons.flag_outlined, size: 13, color: C.grey2),
+          Icon(Icons.flag_outlined, size: 13, color: C.grey2),
           const SizedBox(width: 7),
           Expanded(
             child: Text(
               text.replaceAll('\n', ' '),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11.5, height: 1.6, color: C.grey),
+              style: TextStyle(fontSize: 11.5, height: 1.6, color: C.grey),
             ),
           ),
         ],

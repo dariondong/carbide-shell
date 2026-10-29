@@ -134,9 +134,9 @@ class OutputPreview extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.language, size: 13, color: C.blue),
+                Icon(Icons.language, size: 13, color: C.blue),
                 const SizedBox(width: 6),
-                const Text('网页',
+                Text('网页',
                     style: TextStyle(fontSize: 10, color: C.blue, height: 1.3)),
                 const Spacer(),
                 Text(tempSize(bytes),
@@ -164,7 +164,7 @@ class OutputPreview extends StatelessWidget {
     if (bytes == null) return;
     Navigator.of(context).push<void>(PageRouteBuilder<void>(
       opaque: false,
-      barrierColor: const Color(0xF2181C23),
+      barrierColor: C.scrim,
       transitionDuration: Motion.swap,
       pageBuilder: (BuildContext ctx, Animation<double> a, Animation<double> b) =>
           _ImageViewer(bytes: bytes, name: name),
@@ -228,7 +228,7 @@ class _ImageViewer extends StatelessWidget {
                 top: 6,
                 child: Center(
                   child: Text(name,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 12, color: C.onInk, letterSpacing: 0.3)),
                 ),
               ),
@@ -310,8 +310,8 @@ class _HtmlSheetState extends State<_HtmlSheet> {
                     ),
                     child: Text(
                       _saving ? '正在存' : '存到手机',
-                      style: const TextStyle(
-                          fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.white),
+                      style: TextStyle(
+                          fontSize: 11.5, fontWeight: FontWeight.w600, color: C.onAccent),
                     ),
                   ),
                 ),

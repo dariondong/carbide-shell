@@ -101,7 +101,7 @@ class _AboutPageState extends State<AboutPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -110,7 +110,7 @@ class _AboutPageState extends State<AboutPage> {
               GestureDetector(
                 onTap: () => Navigator.of(context).maybePop(),
                 behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
+                child: SizedBox(
                   width: 36,
                   height: 36,
                   child: Icon(Icons.arrow_back, size: 19, color: C.ink),
@@ -167,7 +167,7 @@ class _AboutPageState extends State<AboutPage> {
                       fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3),
                 ),
                 const SizedBox(height: 3),
-                const Text('碳壳 · 通过 SSH 操作服务器的 agent',
+                Text('碳壳 · 通过 SSH 操作服务器的 agent',
                     style: TextStyle(fontSize: 12.5, color: C.grey, height: 1.4)),
                 const SizedBox(height: 8),
                 Container(
@@ -285,7 +285,7 @@ class _AboutPageState extends State<AboutPage> {
                         const SizedBox(height: 8),
                         Text(
                           shortNotes(_found!.notes),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 12.5, height: 1.65, color: C.body),
                         ),
                         const SizedBox(height: 12),
@@ -347,7 +347,7 @@ class _AboutPageState extends State<AboutPage> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: <Widget>[
-            Text(label, style: const TextStyle(fontSize: 13.5, color: C.ink)),
+            Text(label, style: TextStyle(fontSize: 13.5, color: C.ink)),
             const Spacer(),
             Flexible(
               child: Text(url,
@@ -357,7 +357,7 @@ class _AboutPageState extends State<AboutPage> {
                   style: C.monoSmall),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.north_east, size: 13, color: C.grey2),
+            Icon(Icons.north_east, size: 13, color: C.grey2),
           ],
         ),
       ),
@@ -372,7 +372,7 @@ class _AboutPageState extends State<AboutPage> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const Icon(Icons.lock_outline, size: 15, color: C.grey),
+              Icon(Icons.lock_outline, size: 15, color: C.grey),
               const SizedBox(width: 6),
               Text('存在本机', style: C.label),
             ],
@@ -382,7 +382,7 @@ class _AboutPageState extends State<AboutPage> {
           const KeyValueRow('对话与记忆', '应用数据目录'),
           const KeyValueRow('设置', '应用数据目录'),
           const SizedBox(height: 2),
-          const Text(
+          Text(
             '本页只请求一次 GitHub 的版本列表，别的都不往外发。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),

@@ -122,7 +122,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -130,7 +130,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
                 children: <Widget>[
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
+                    icon: Icon(Icons.arrow_back, size: 19, color: C.ink),
                   ),
                   const Text('资源监看',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -139,7 +139,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
                   const Spacer(),
                   IconButton(
                     onPressed: _pollAll,
-                    icon: const Icon(Icons.refresh, size: 18, color: C.grey),
+                    icon: Icon(Icons.refresh, size: 18, color: C.grey),
                   ),
                 ],
               ),
@@ -148,7 +148,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Row(
                 children: <Widget>[
-                  const Text('多久读一次', style: TextStyle(fontSize: 11.5, color: C.grey)),
+                  Text('多久读一次', style: TextStyle(fontSize: 11.5, color: C.grey)),
                   const SizedBox(width: 10),
                   for (final int s in <int>[5, 15, 0]) ...<Widget>[
                     _chip(s == 0 ? '暂停' : '$s 秒', _every == s, () {
@@ -162,7 +162,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
             ),
             Expanded(
               child: hosts.isEmpty
-                  ? const Padding(
+                  ? Padding(
                       padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
                       child: Text('还没有主机。先在主机页添加一台。',
                           style: TextStyle(fontSize: 13.5, height: 1.6, color: C.body)),
@@ -182,7 +182,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-              child: const Text(
+              child: Text(
                 '读取 /proc 与 df，只读，不需要 root。离开本页后停止读取，不在后台保持连接。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
               ),
@@ -300,8 +300,8 @@ class _ResourcesPageState extends State<ResourcesPage> {
             : row.done
                 ? '${row.ms} ms'
                 : '等着';
-    final Color fg = row.error.isNotEmpty ? const Color(0xFFD7443E) : C.blue;
-    final Color bg = row.error.isNotEmpty ? const Color(0xFFFBEDEC) : C.blueSoft;
+    final Color fg = row.error.isNotEmpty ? C.danger : C.blue;
+    final Color bg = row.error.isNotEmpty ? C.dangerSoft : C.blueSoft;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
@@ -317,7 +317,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
         children: <Widget>[
           SizedBox(
             width: 40,
-            child: Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+            child: Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
           ),
           Expanded(
             child: Text(value,
@@ -336,7 +336,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
     final int lit = (v * 1000).round();
     final Color fill = percent == null
         ? C.rule2
-        : (v >= 0.9 ? const Color(0xFFD7443E) : C.blue);
+        : (v >= 0.9 ? C.danger : C.blue);
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Column(
@@ -346,7 +346,7 @@ class _ResourcesPageState extends State<ResourcesPage> {
             children: <Widget>[
               SizedBox(
                 width: 40,
-                child: Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+                child: Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
               ),
               Expanded(
                 child: Text(value,

@@ -38,7 +38,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -59,7 +59,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
                     color: C.blue,
                     borderRadius: BorderRadius.circular(C.radiusSmall),
                   ),
-                  child: const Icon(Icons.add, size: 17, color: Colors.white),
+                  child: Icon(Icons.add, size: 17, color: C.onAccent),
                 ),
               ),
             ],
@@ -95,7 +95,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
           const Text('还没有对话',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '一个对话可以管全部主机，也可以只管某一台。只管一台的时候，记忆也存在那台机器名下。',
             style: C.answer,
           ),
@@ -148,14 +148,14 @@ class _ConversationsPageState extends State<ConversationsPage> {
                   Text(meta,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11.5, color: C.grey2, height: 1.5)),
+                      style: TextStyle(fontSize: 11.5, color: C.grey2, height: 1.5)),
                 ],
               ),
             ),
             const SizedBox(width: 10),
             IconButton(
               onPressed: () => _delete(c),
-              icon: const Icon(Icons.close, size: 15, color: C.grey2),
+              icon: Icon(Icons.close, size: 15, color: C.grey2),
               splashRadius: 16,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               padding: EdgeInsets.zero,

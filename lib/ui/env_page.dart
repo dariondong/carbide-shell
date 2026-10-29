@@ -54,7 +54,7 @@ class _EnvPageState extends State<EnvPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('值只写进本机安全存储，页面上只显示末尾两位，日志里一个字的明文都不留。',
+              Text('值只写进本机安全存储，页面上只显示末尾两位，日志里一个字的明文都不留。',
                   style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
               const SizedBox(height: 12),
               if (existing == null) ...<Widget>[
@@ -81,11 +81,11 @@ class _EnvPageState extends State<EnvPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -127,11 +127,11 @@ class _EnvPageState extends State<EnvPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('删除', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -154,7 +154,7 @@ class _EnvPageState extends State<EnvPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -162,7 +162,7 @@ class _EnvPageState extends State<EnvPage> {
                 children: <Widget>[
                   IconButton(
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
+                    icon: Icon(Icons.arrow_back, size: 19, color: C.ink),
                   ),
                   const Text('环境密钥',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -190,7 +190,7 @@ class _EnvPageState extends State<EnvPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           if (keys.isEmpty)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 16),
                               child: Text('还没有存过。右上角「加一把」写第一把。',
                                   style: TextStyle(fontSize: 12.5, color: C.grey, height: 1.6)),
@@ -230,7 +230,7 @@ class _EnvPageState extends State<EnvPage> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  const Text(
+                  Text(
                     '值只在本机安全存储里，界面只显示末尾两位。AI 要写一把也得你先点批准，日志只记谁动了哪一把。',
                     style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
                   ),
@@ -261,7 +261,7 @@ class _EnvPageState extends State<EnvPage> {
                   ].join(' · '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: C.grey, height: 1.5),
+                  style: TextStyle(fontSize: 11, color: C.grey, height: 1.5),
                 ),
               ],
             ),
@@ -270,7 +270,7 @@ class _EnvPageState extends State<EnvPage> {
           GestureDetector(
             onTap: () => _edit(existing: key),
             behavior: HitTestBehavior.opaque,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: Text('更新', style: TextStyle(fontSize: 11.5, color: C.blue)),
             ),
@@ -278,7 +278,7 @@ class _EnvPageState extends State<EnvPage> {
           GestureDetector(
             onTap: () => _delete(key),
             behavior: HitTestBehavior.opaque,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: Text('删除', style: TextStyle(fontSize: 11.5, color: C.grey)),
             ),

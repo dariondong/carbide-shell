@@ -128,7 +128,7 @@ class _TerminalPageState extends State<TerminalPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -164,7 +164,7 @@ class _TerminalPageState extends State<TerminalPage> {
               if (live)
                 GestureDetector(
                   onTap: _disconnect,
-                  child: const Text('断开', style: TextStyle(fontSize: 12, color: C.grey)),
+                  child: Text('断开', style: TextStyle(fontSize: 12, color: C.grey)),
                 )
               else
                 SquareButton(label: '连接', onPressed: list.isEmpty ? null : _connect),
@@ -235,7 +235,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         color: live ? C.blue : C.rule2,
                         borderRadius: BorderRadius.circular(C.radiusSmall),
                       ),
-                      child: const Icon(Icons.keyboard_return, size: 17, color: Colors.white),
+                      child: Icon(Icons.keyboard_return, size: 17, color: C.onAccent),
                     ),
                   ),
                 ],
@@ -245,12 +245,12 @@ class _TerminalPageState extends State<TerminalPage> {
                 children: <Widget>[
                   Text(
                     live ? '终端本身接受英文键盘输入；中文请用上面这一行。' : '连上之后这里就是它的 shell',
-                    style: const TextStyle(fontSize: 10.5, color: C.grey),
+                    style: TextStyle(fontSize: 10.5, color: C.grey),
                   ),
                   const Spacer(),
                   GestureDetector(
                     onTap: () => _terminal.eraseDisplay(),
-                    child: const Text('清屏', style: TextStyle(fontSize: 10.5, color: C.grey)),
+                    child: Text('清屏', style: TextStyle(fontSize: 10.5, color: C.grey)),
                   ),
                 ],
               ),

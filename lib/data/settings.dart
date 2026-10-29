@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../core/deepseek.dart';
 import '../core/params.dart';
 import '../core/poems.dart';
@@ -149,6 +151,7 @@ class AppSettings {
     this.greetPeak = true,
     this.peakHolidays = const <String>[],
     this.peakMakeup = const <String>[],
+    this.themeMode = 'system',
   }) {
     _profiles = List<ModelProfile>.of(profiles);
     _dedupeIds();
@@ -327,6 +330,11 @@ class AppSettings {
   /// 用户自己补的调休上班日。
   List<String> peakMakeup;
 
+  /// 外观：`system` 跟系统走，`light` 浅色，`dark` 深色。
+  String themeMode;
+
+  static const List<String> themeModes = <String>['system', 'light', 'dark'];
+
   /// 现在用的峰谷时钟：内置表加上用户补的那几天。
   DeepSeekClock deepSeekClock() =>
       DeepSeekClock.withExtra(extraHolidays: peakHolidays, extraMakeup: peakMakeup);
@@ -371,6 +379,7 @@ class AppSettings {
         'greetPeak': greetPeak,
         if (peakHolidays.isNotEmpty) 'peakHolidays': peakHolidays,
         if (peakMakeup.isNotEmpty) 'peakMakeup': peakMakeup,
+        'themeMode': themeMode,
       };
 
   static AppSettings fromJson(Map<String, Object?> json) {
@@ -417,7 +426,14 @@ class AppSettings {
       greetPeak: json['greetPeak'] != false,
       peakHolidays: _lines(json['peakHolidays']),
       peakMakeup: _lines(json['peakMakeup']),
+      themeMode: _themeMode(json['themeMode']),
     );
+  }
+
+  /// 外观只认那三个值，文件被手改坏了就回到跟系统走。
+  static String _themeMode(Object? raw) {
+    final String mode = '${raw ?? ''}'.trim();
+    return themeModes.contains(mode) ? mode : 'system';
   }
 
   /// 一行一个的字符串清单读回来。
@@ -445,11 +461,14 @@ class AppSettings {
   }
 }
 
-class SettingsStore {
+class SettingsStore extends ChangeNotifier {
   SettingsStore(this.file);
 
   final File file;
   AppSettings value = AppSettings();
+
+  /// 上一次通知出去的外观值。只有它变了才叫醒界面。
+  String _themeAnnounced = 'system';
 
   Future<void> load() async {
     if (!file.existsSync()) return;
@@ -461,11 +480,17 @@ class SettingsStore {
     } catch (_) {
       // keep the empty defaults
     }
+    _themeAnnounced = value.themeMode;
   }
 
   Future<void> save() async {
     file.parent.createSync(recursive: true);
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(value.toJson()));
+    // 外观换了要立刻重画一遍：别的设置改一个字不必惊动整个界面。
+    if (value.themeMode != _themeAnnounced) {
+      _themeAnnounced = value.themeMode;
+      notifyListeners();
+    }
   }
 
   /// 老版本只有一套配置，密钥记在 `model:apiKey` 上。

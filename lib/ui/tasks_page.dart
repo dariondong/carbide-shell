@@ -93,9 +93,9 @@ class _TasksPageState extends State<TasksPage> {
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
             children: <Widget>[
-              const Icon(Icons.bolt_outlined, size: 18, color: C.ink),
+              Icon(Icons.bolt_outlined, size: 18, color: C.ink),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text('触发器',
                     style: TextStyle(fontSize: 13.5, color: C.ink)),
               ),
@@ -103,7 +103,7 @@ class _TasksPageState extends State<TasksPage> {
                   style: C.monoSmall.copyWith(
                       color: pending > 0 ? C.blue : C.grey)),
               const SizedBox(width: 6),
-              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+              Icon(Icons.chevron_right, size: 16, color: C.grey2),
             ],
           ),
         ),
@@ -139,7 +139,7 @@ class _TasksPageState extends State<TasksPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -163,7 +163,7 @@ class _TasksPageState extends State<TasksPage> {
                     borderRadius: BorderRadius.circular(C.radiusSmall),
                     border: Border.all(color: C.rule2),
                   ),
-                  child: const Icon(Icons.receipt_long_outlined, size: 16, color: C.ink),
+                  child: Icon(Icons.receipt_long_outlined, size: 16, color: C.ink),
                 ),
               ),
               const SizedBox(width: 8),
@@ -177,7 +177,7 @@ class _TasksPageState extends State<TasksPage> {
                     color: C.blue,
                     borderRadius: BorderRadius.circular(C.radiusSmall),
                   ),
-                  child: const Icon(Icons.add, size: 17, color: Colors.white),
+                  child: Icon(Icons.add, size: 17, color: C.onAccent),
                 ),
               ),
             ],
@@ -220,7 +220,7 @@ class _TasksPageState extends State<TasksPage> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: const Text(
+          child: Text(
             '定时任务在应用里计时。应用被系统清掉时不会触发，三小时内错过的会在下次打开时补跑一次。'
             '到点后自动执行，不再询问；只有危险命令会被拦下。资源监听只读指标，超过阈值时发一条通知。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
@@ -306,7 +306,7 @@ class _TasksPageState extends State<TasksPage> {
               task.prompt.trim().replaceAll('\n', ' '),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5, height: 1.55, color: C.body),
+              style: TextStyle(fontSize: 12.5, height: 1.55, color: C.body),
             ),
           ],
           const SizedBox(height: 10),
@@ -342,7 +342,7 @@ class _TasksPageState extends State<TasksPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(text,
-          style: const TextStyle(fontSize: 12.5, height: 1.65, color: C.body)),
+          style: TextStyle(fontSize: 12.5, height: 1.65, color: C.body)),
     );
   }
 
@@ -361,7 +361,7 @@ class _TasksPageState extends State<TasksPage> {
       context: context,
       backgroundColor: const Color(0x00000000),
       builder: (BuildContext ctx) => Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: C.paper,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -411,13 +411,13 @@ class _TasksPageState extends State<TasksPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(title, style: const TextStyle(fontSize: 13.5, color: C.ink)),
+                  Text(title, style: TextStyle(fontSize: 13.5, color: C.ink)),
                   const SizedBox(height: 3),
-                  Text(note, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+                  Text(note, style: TextStyle(fontSize: 11.5, color: C.grey)),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -430,10 +430,10 @@ class _TasksPageState extends State<TasksPage> {
     final Color dot = last == null
         ? C.rule2
         : last.error.isNotEmpty
-            ? const Color(0xFFD7443E)
+            ? C.danger
             : last.fired
                 ? C.blue
-                : const Color(0xFF3FA96B);
+                : C.ok;
     final String lastText;
     if (last == null) {
       lastText = '还没读过';
@@ -535,8 +535,8 @@ class _TasksPageState extends State<TasksPage> {
     final Color color = last == null
         ? C.rule2
         : last.ok
-            ? const Color(0xFF3FA96B)
-            : const Color(0xFFD7443E);
+            ? C.ok
+            : C.danger;
     return Container(
       width: 7,
       height: 7,
@@ -641,7 +641,7 @@ class _HistorySheetState extends State<_HistorySheet> {
     final List<TaskRun> runs = widget.task.runs;
     return Container(
       height: MediaQuery.of(context).size.height * 0.82,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: C.paper,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -650,7 +650,7 @@ class _HistorySheetState extends State<_HistorySheet> {
           Container(
             height: 54,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: C.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(bottom: BorderSide(color: C.rule)),
@@ -665,14 +665,14 @@ class _HistorySheetState extends State<_HistorySheet> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, size: 18, color: C.grey),
+                  icon: Icon(Icons.close, size: 18, color: C.grey),
                 ),
               ],
             ),
           ),
           Expanded(
             child: runs.isEmpty
-                ? const Padding(
+                ? Padding(
                     padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
                     child: Text('还没跑过。点「跑一次」现在就试。',
                         style: TextStyle(fontSize: 13.5, color: C.body, height: 1.6)),
@@ -696,8 +696,8 @@ class _HistorySheetState extends State<_HistorySheet> {
     final Color fg = run.missed
         ? C.grey
         : run.ok
-            ? const Color(0xFF3FA96B)
-            : const Color(0xFFD7443E);
+            ? C.ok
+            : C.danger;
     final bool open = _open == index;
     final String extra = <String>[
       if (run.late) '补跑',
@@ -729,7 +729,7 @@ class _HistorySheetState extends State<_HistorySheet> {
           ),
           if (run.note.isNotEmpty) ...<Widget>[
             const SizedBox(height: 7),
-            Text(run.note, style: const TextStyle(fontSize: 13, height: 1.6, color: C.body)),
+            Text(run.note, style: TextStyle(fontSize: 13, height: 1.6, color: C.body)),
           ],
           if (run.answer.trim().isNotEmpty && run.answer.trim() != run.note.trim()) ...<Widget>[
             const SizedBox(height: 6),
@@ -892,11 +892,11 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(fontSize: 13, color: Color(0xFFD7443E))),
+            child: Text('删除', style: TextStyle(fontSize: 13, color: C.danger)),
           ),
         ],
       ),
@@ -950,7 +950,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -1029,7 +1029,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                   const SizedBox(height: 22),
                   const SectionLabel('先看条件'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     '到点先读这台机器的数字，符合了才叫它动手。不符合就隔一会儿再看，窗口过了这一轮就不跑。',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
@@ -1044,7 +1044,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              const Text('启用', style: TextStyle(fontSize: 13, color: C.ink)),
+                              Text('启用', style: TextStyle(fontSize: 13, color: C.ink)),
                               const SizedBox(height: 3),
                               Text(
                                 _preview(),
@@ -1061,7 +1061,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     '到点自动执行，不会停下来等人确认。需要确认的动作会跳过，危险命令由策略层拦下。',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
@@ -1072,10 +1072,10 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                       child: TextButton(
                         onPressed: _delete,
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFD7443E),
+                          foregroundColor: C.danger,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(C.radiusSmall),
-                            side: const BorderSide(color: C.rule2),
+                            side: BorderSide(color: C.rule2),
                           ),
                           textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
@@ -1143,7 +1143,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
               if (parent != null)
                 GestureDetector(
                   onTap: () => _removeNode(node, parent),
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 26,
                     height: 26,
                     child: Icon(Icons.close, size: 14, color: C.grey2),
@@ -1211,7 +1211,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
           ),
           GestureDetector(
             onTap: () => _removeNode(node, parent),
-            child: const SizedBox(
+            child: SizedBox(
               width: 30,
               height: 30,
               child: Icon(Icons.close, size: 15, color: C.grey2),
@@ -1234,9 +1234,9 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.add, size: 15, color: C.blue),
+            Icon(Icons.add, size: 15, color: C.blue),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(fontSize: 12, color: C.blue)),
+            Text(label, style: TextStyle(fontSize: 12, color: C.blue)),
           ],
         ),
       ),
@@ -1366,9 +1366,9 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(label(value), style: const TextStyle(fontSize: 12.5, color: C.ink)),
+            Text(label(value), style: TextStyle(fontSize: 12.5, color: C.ink)),
             const SizedBox(width: 4),
-            const Icon(Icons.expand_more, size: 13, color: C.grey2),
+            Icon(Icons.expand_more, size: 13, color: C.grey2),
           ],
         ),
       ),
@@ -1456,12 +1456,12 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
         ),
         child: Row(
           children: <Widget>[
-            Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+            Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(value, style: C.mono.copyWith(fontSize: 13.5, color: C.ink)),
             ),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -1500,7 +1500,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }
@@ -1626,11 +1626,11 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(fontSize: 13, color: Color(0xFFD7443E))),
+            child: Text('删除', style: TextStyle(fontSize: 13, color: C.danger)),
           ),
         ],
       ),
@@ -1671,7 +1671,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -1713,7 +1713,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                   const SectionLabel('盯哪一台'),
                   const SizedBox(height: 8),
                   if (hosts.isEmpty)
-                    const Text('主机列表还是空的，先去主机页加一台。',
+                    Text('主机列表还是空的，先去主机页加一台。',
                         style: TextStyle(fontSize: 12.5, color: C.body, height: 1.6))
                   else
                     Wrap(
@@ -1787,7 +1787,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                   ],
                   if (_kind == WatchKind.loginNew) ...<Widget>[
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       '记住已有的登录来源；首次出现的来源登录时提醒。第一次读取会先记录当前来源，之后才认得出新的。',
                       style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                     ),
@@ -1822,7 +1822,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              const Text('启用', style: TextStyle(fontSize: 13, color: C.ink)),
+                              Text('启用', style: TextStyle(fontSize: 13, color: C.ink)),
                               const SizedBox(height: 3),
                               Text(_preview, style: C.monoSmall.copyWith(color: C.blue)),
                             ],
@@ -1836,7 +1836,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     '到点读一次 /proc，过线直接推一条通知到手机。这一路不叫模型，也不花 token。',
                     style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
@@ -1863,7 +1863,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                                 overflow: TextOverflow.ellipsis,
                                 style: C.monoSmall.copyWith(
                                   color: hit.error.isNotEmpty
-                                      ? const Color(0xFFD7443E)
+                                      ? C.danger
                                       : (hit.fired ? C.blue : C.ink),
                                 ),
                               ),
@@ -1879,10 +1879,10 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
                       child: TextButton(
                         onPressed: _delete,
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFD7443E),
+                          foregroundColor: C.danger,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(C.radiusSmall),
-                            side: const BorderSide(color: C.rule2),
+                            side: BorderSide(color: C.rule2),
                           ),
                           textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
@@ -1919,7 +1919,7 @@ class _WatchEditorPageState extends State<_WatchEditorPage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }

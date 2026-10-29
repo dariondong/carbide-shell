@@ -60,11 +60,11 @@ class _TriggersPageState extends State<TriggersPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('再想想', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('删除', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -110,7 +110,7 @@ class _TriggersPageState extends State<TriggersPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -118,7 +118,7 @@ class _TriggersPageState extends State<TriggersPage> {
                 children: <Widget>[
                   IconButton(
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
+                    icon: Icon(Icons.arrow_back, size: 19, color: C.ink),
                   ),
                   const Text('触发器',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -144,7 +144,7 @@ class _TriggersPageState extends State<TriggersPage> {
                   if (_list.isEmpty) ...<Widget>[
                     const PetAvatar(size: 84),
                     const SizedBox(height: 10),
-                    const Text(
+                    Text(
                       '还没有触发器。加一条试试：手机插上电时发一句通知，或者来了某个关键词的通知就让模型先看一眼。',
                       style: TextStyle(fontSize: 12.5, color: C.grey, height: 1.7),
                     ),
@@ -155,7 +155,7 @@ class _TriggersPageState extends State<TriggersPage> {
                       child: FadeSlideIn(child: _card(t)),
                     ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     '手机状态那一种由模型判断，判断依据、把握和结果都写在这条触发器的记录里。'
                     '触发器跑起来时没有人守着，需要确认的操作一律拒绝，所以它只做读的事。',
                     style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
@@ -190,10 +190,10 @@ class _TriggersPageState extends State<TriggersPage> {
           ),
           const SizedBox(height: 4),
           Text(_conditionLine(t),
-              style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.55)),
+              style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.55)),
           const SizedBox(height: 2),
           Text('→ ${triggerActionName(t.action)}${t.actionText.trim().isEmpty ? '' : '：${_clip(t.actionText.trim(), 40)}'}',
-              style: const TextStyle(fontSize: 11.5, color: C.ink, height: 1.55)),
+              style: TextStyle(fontSize: 11.5, color: C.ink, height: 1.55)),
           if (t.enabled && t.nextAt != null) ...<Widget>[
             const SizedBox(height: 2),
             Text('下一次看它：${_when(t.nextAt!)}', style: C.monoSmall.copyWith(fontSize: 10.5)),
@@ -222,7 +222,7 @@ class _TriggersPageState extends State<TriggersPage> {
                     Text(last.note,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5, color: C.ink, height: 1.5)),
+                        style: TextStyle(fontSize: 11.5, color: C.ink, height: 1.5)),
                   ],
                 ],
               ),
@@ -380,7 +380,7 @@ class _TriggersPageState extends State<TriggersPage> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        const Text('一项都不选就是全部可用的都看。系统没给的那几项本来也不会有。',
+                        Text('一项都不选就是全部可用的都看。系统没给的那几项本来也不会有。',
                             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6)),
                         const SizedBox(height: 14),
                       ],
@@ -515,7 +515,7 @@ class _TriggersPageState extends State<TriggersPage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }
@@ -535,7 +535,7 @@ class _TriggersPageState extends State<TriggersPage> {
                 if (note.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 3),
                   Text(note,
-                      style: const TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
+                      style: TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
                 ],
               ],
             ),
@@ -566,7 +566,7 @@ class _Label extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+      child: Text(text, style: TextStyle(fontSize: 11.5, color: C.grey)),
     );
   }
 }

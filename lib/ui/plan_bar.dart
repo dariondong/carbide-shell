@@ -120,16 +120,16 @@ class _PlanBarState extends State<PlanBar> {
 
   Widget _step(PlanStep step) {
     final Widget mark = switch (step.state) {
-      PlanState.done => const Icon(Icons.check_circle, size: 13, color: Color(0xFF3FA96B)),
+      PlanState.done => Icon(Icons.check_circle, size: 13, color: C.ok),
       PlanState.doing => Container(
           width: 8,
           height: 8,
-          decoration: const BoxDecoration(color: C.blue, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: C.blue, shape: BoxShape.circle),
         ),
       PlanState.todo => Container(
           width: 6,
           height: 6,
-          decoration: const BoxDecoration(color: C.rule2, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: C.rule2, shape: BoxShape.circle),
         ),
     };
     final Color color = switch (step.state) {

@@ -55,7 +55,7 @@ class ConversationRail extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, thickness: 1, color: C.rule),
+          Divider(height: 1, thickness: 1, color: C.rule),
           Expanded(
             child: list.isEmpty
                 ? _empty()
@@ -90,7 +90,7 @@ class ConversationRail extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(top: BorderSide(color: C.rule)),
       ),
       child: Row(
@@ -102,7 +102,7 @@ class ConversationRail extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(mood.label,
-                    style: const TextStyle(fontSize: 12, color: C.ink, height: 1.4)),
+                    style: TextStyle(fontSize: 12, color: C.ink, height: 1.4)),
                 Text(note,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -127,7 +127,7 @@ class ConversationRail extends StatelessWidget {
           color: C.blue,
           borderRadius: BorderRadius.circular(C.radiusSmall),
         ),
-        child: const Icon(Icons.add, size: 17, color: Colors.white),
+        child: Icon(Icons.add, size: 17, color: C.onAccent),
       ),
     );
   }
@@ -141,7 +141,7 @@ class ConversationRail extends StatelessWidget {
           const Text('还没有对话',
               style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1.5)),
           const SizedBox(height: 6),
-          const Text('一个对话管一台主机或者全部主机，记忆跟着它走。',
+          Text('一个对话管一台主机或者全部主机，记忆跟着它走。',
               style: TextStyle(fontSize: 12, height: 1.6, color: C.grey)),
         ],
       ),
@@ -209,7 +209,7 @@ class ConversationRail extends StatelessWidget {
                   height: 26,
                   child: IconButton(
                     onPressed: () => onDelete(c),
-                    icon: const Icon(Icons.close, size: 13, color: C.grey2),
+                    icon: Icon(Icons.close, size: 13, color: C.grey2),
                     splashRadius: 13,
                     constraints: const BoxConstraints.tightFor(width: 26, height: 26),
                     padding: EdgeInsets.zero,
@@ -231,8 +231,8 @@ class ConversationRail extends StatelessWidget {
         width: 8,
         height: 8,
         child: busy
-            ? const CircularProgressIndicator(strokeWidth: 1.4, color: C.blue)
-            : const DecoratedBox(
+            ? CircularProgressIndicator(strokeWidth: 1.4, color: C.blue)
+            : DecoratedBox(
                 decoration: BoxDecoration(color: C.blue, shape: BoxShape.circle),
               ),
       );

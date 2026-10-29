@@ -35,7 +35,7 @@ Future<Conversation?> newConversationDialog(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        const Text('Advance Master', style: TextStyle(fontSize: 13, color: C.ink)),
+                        Text('Advance Master', style: TextStyle(fontSize: 13, color: C.ink)),
                         const SizedBox(height: 3),
                         Text(
                           '管全部主机，还能把新主机写进列表。',
@@ -59,12 +59,12 @@ Future<Conversation?> newConversationDialog(
               ),
               const SizedBox(height: 14),
               if (master)
-                const Text(
+                Text(
                   '开了就是全部主机，范围不用选。加主机前它会先问地址和账号。',
                   style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
                 )
               else ...<Widget>[
-                const Text('范围', style: TextStyle(fontSize: 11.5, color: C.grey)),
+                Text('范围', style: TextStyle(fontSize: 11.5, color: C.grey)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -78,7 +78,7 @@ Future<Conversation?> newConversationDialog(
                 const SizedBox(height: 12),
                 Text(
                   hostId.isEmpty ? '这个对话可以操作全部主机。' : '这个对话只操作这一台，记忆也保存在它名下。',
-                  style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
+                  style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
                 ),
               ],
             ],
@@ -87,11 +87,11 @@ Future<Conversation?> newConversationDialog(
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('开始', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('开始', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -118,11 +118,11 @@ Future<bool> confirmDeleteConversation(BuildContext context, Conversation c) asy
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+          child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('删除', style: TextStyle(fontSize: 13, color: Color(0xFFD7443E))),
+          child: Text('删除', style: TextStyle(fontSize: 13, color: C.danger)),
         ),
       ],
     ),
@@ -141,7 +141,7 @@ Widget _scopeChip(String label, bool on, VoidCallback tap) {
         border: Border.all(color: on ? C.blue : C.rule2),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+          style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
     ),
   );
 }

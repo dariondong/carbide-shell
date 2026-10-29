@@ -59,7 +59,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
 
   Color _statusColor(TaskRun run) {
     if (run.missed || run.skipped) return C.grey;
-    return run.ok ? C.blue : const Color(0xFFD7443E);
+    return run.ok ? C.blue : C.danger;
   }
 
   @override
@@ -73,7 +73,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -107,7 +107,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
                         _filter == _Filter.all
                             ? '还没有运行记录。任务跑过一轮之后，这里按时间记下来。'
                             : '这个分类里没有记录。',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 12.5, height: 1.7, color: C.body),
                       ),
                     )
@@ -135,7 +135,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }
@@ -203,7 +203,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
                   note,
                   maxLines: open ? 200 : 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5, height: 1.6, color: C.body),
+                  style: TextStyle(fontSize: 12.5, height: 1.6, color: C.body),
                 ),
               ],
               if (open && run.answer.trim().isNotEmpty) ...<Widget>[
@@ -212,7 +212,7 @@ class _TaskLogPageState extends State<TaskLogPage> {
                 const SizedBox(height: 8),
                 Text(
                   run.answer.trim(),
-                  style: const TextStyle(fontSize: 12.5, height: 1.65, color: C.body),
+                  style: TextStyle(fontSize: 12.5, height: 1.65, color: C.body),
                 ),
               ],
             ],

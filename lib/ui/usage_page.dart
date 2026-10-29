@@ -35,11 +35,11 @@ class _UsagePageState extends State<UsagePage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('清空', style: TextStyle(fontSize: 13, color: Color(0xFFD7443E))),
+            child: Text('清空', style: TextStyle(fontSize: 13, color: C.danger)),
           ),
         ],
       ),
@@ -68,7 +68,7 @@ class _UsagePageState extends State<UsagePage> {
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -76,7 +76,7 @@ class _UsagePageState extends State<UsagePage> {
                 children: <Widget>[
                   IconButton(
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_ios_new, size: 17, color: C.ink),
+                    icon: Icon(Icons.arrow_back_ios_new, size: 17, color: C.ink),
                   ),
                   const Expanded(
                     child: Text('用量',
@@ -165,7 +165,7 @@ class _UsagePageState extends State<UsagePage> {
                   const SectionLabel('按模型'),
                   const SizedBox(height: 8),
                   if (models.isEmpty)
-                    const Text('这段时间还没有记录。',
+                    Text('这段时间还没有记录。',
                         style: TextStyle(fontSize: 12.5, color: C.body, height: 1.65))
                   else
                     CardBox(
@@ -223,7 +223,7 @@ class _UsagePageState extends State<UsagePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     '一轮对话结束记一笔，只记 token 数，不记内容。命中率是输入里由服务端缓存供上的比例，'
                     '模型没报缓存就是「—」。费用按这套配置的价算：手填的价在先，没填就用内置价目表，'
                     'DeepSeek 的谷时按高峰的一半。',
@@ -250,7 +250,7 @@ class _UsagePageState extends State<UsagePage> {
                 child: Text(row.model,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: C.ink)),
+                    style: TextStyle(fontSize: 13, color: C.ink)),
               ),
               const SizedBox(width: 8),
               Text('${row.totals.turns} 轮',
@@ -274,10 +274,10 @@ class _UsagePageState extends State<UsagePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+          Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
           const SizedBox(height: 5),
           Text(value,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 19, fontWeight: FontWeight.w700, color: C.ink, height: 1.1)),
         ],
       ),
@@ -308,7 +308,7 @@ class _UsagePageState extends State<UsagePage> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(label,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }

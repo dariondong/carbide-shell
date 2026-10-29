@@ -27,21 +27,15 @@ import 'data/usage.dart';
 import 'data/watch.dart';
 import 'services.dart';
 import 'tools/ssh_tools.dart';
+import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 铺到屏幕边上：两条系统栏都用透明底，纸面自己透上去。
+  // 铺到屏幕边上：两条系统栏都用透明底，纸面（或碳面）自己透上去。
   // 三键导航（金刚键）会压掉底下那一截，所以底部由 SafeArea 让出距离。
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Color(0x00000000),
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0x00000000),
-    systemNavigationBarDividerColor: Color(0x00000000),
-    systemNavigationBarIconBrightness: Brightness.dark,
-  ));
+  C.applySystemChrome();
 
   final Directory dir = await getApplicationSupportDirectory();
   final Directory workspace = Directory('${dir.path}/workspace')..createSync(recursive: true);
@@ -50,6 +44,9 @@ Future<void> main() async {
   await hosts.load();
   final SettingsStore settings = SettingsStore(File('${dir.path}/settings.json'));
   await settings.load();
+  // 先按设置里那一条把色板定下来，免得开机闪一下浅色再变深。
+  C.useDark(themeIsDark(settings.value.themeMode));
+  C.applySystemChrome();
 
   final MemoryBook memory = MemoryBook(Directory('${dir.path}/memory'));
   final ConversationStore conversations = ConversationStore(Directory('${dir.path}/conversations'));

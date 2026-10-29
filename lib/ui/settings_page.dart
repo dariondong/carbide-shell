@@ -361,7 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -428,7 +428,7 @@ class _SettingsPageState extends State<SettingsPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -477,14 +477,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
                           child: Row(
                             children: <Widget>[
-                              const Expanded(
+                              Expanded(
                                 child: Text('临时文件',
                                     style: TextStyle(fontSize: 13.5, color: C.ink)),
                               ),
                               const SizedBox(width: 10),
                               Text(widget.filesSummary, style: C.monoSmall),
                               const SizedBox(width: 6),
-                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                              Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
                           ),
                         ),
@@ -496,14 +496,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
                           child: Row(
                             children: <Widget>[
-                              const Expanded(
+                              Expanded(
                                 child: Text('环境密钥',
                                     style: TextStyle(fontSize: 13.5, color: C.ink)),
                               ),
                               const SizedBox(width: 10),
                               Text(widget.envSummary, style: C.monoSmall),
                               const SizedBox(width: 6),
-                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                              Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
                           ),
                         ),
@@ -515,14 +515,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
                           child: Row(
                             children: <Widget>[
-                              const Expanded(
+                              Expanded(
                                 child: Text('用量',
                                     style: TextStyle(fontSize: 13.5, color: C.ink)),
                               ),
                               const SizedBox(width: 10),
                               Text(_usageSummary, style: C.monoSmall),
                               const SizedBox(width: 6),
-                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                              Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
                           ),
                         ),
@@ -534,14 +534,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
                           child: Row(
                             children: <Widget>[
-                              const Expanded(
+                              Expanded(
                                 child: Text('关于 Carbide Shell',
                                     style: TextStyle(fontSize: 13.5, color: C.ink)),
                               ),
                               const SizedBox(width: 10),
                               Text(kAppVersion, style: C.monoSmall),
                               const SizedBox(width: 6),
-                              const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                              Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
                           ),
                         ),
@@ -551,7 +551,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 '改动即时保存：输入停手半秒后落盘，开关类立即生效。',
                 style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
               ),
@@ -572,7 +572,7 @@ class _SettingsPageState extends State<SettingsPage> {
           children: <Widget>[
             Expanded(
               child: Text(module.title,
-                  style: const TextStyle(fontSize: 13.5, color: C.ink)),
+                  style: TextStyle(fontSize: 13.5, color: C.ink)),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -585,7 +585,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -600,6 +600,12 @@ class _SettingsPageState extends State<SettingsPage> {
         if (own.isNotEmpty) return own;
         final String name = _model.text.trim();
         return name.isEmpty ? '还没填' : name;
+      case 'look':
+        return switch (widget.settings.value.themeMode) {
+          'dark' => '深色',
+          'light' => '浅色',
+          _ => '跟随系统',
+        };
       case 'approval':
         return _mode == 'autoAll'
             ? '全部放行'
@@ -670,7 +676,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text('点一下切过去，切过去的就是默认用的那套。',
+                Text('点一下切过去，切过去的就是默认用的那套。',
                     style: TextStyle(fontSize: 11, color: C.grey, height: 1.5)),
                 const SizedBox(height: 14),
                 RuleField(
@@ -687,7 +693,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (_picked.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 9),
                   Text(_picked,
-                      style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.5)),
+                      style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.5)),
                 ],
                 const SizedBox(height: 14),
                 RuleField(
@@ -748,7 +754,7 @@ class _SettingsPageState extends State<SettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(_priceLine(st.active),
-                    style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
                 const SizedBox(height: 12),
                 RuleField(
                   controller: _priceIn,
@@ -803,14 +809,37 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '提示词次序：对话自己写的 > 这里「只给这套写的一份」> 「这套绑定的」> 设置里的全局提示词 > 内置那份。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '密钥只存在本机安全存储，不进对话，也不写日志。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
+          ),
+        ];
+      case 'look':
+        return <Widget>[
+          CardBox(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _choices<String>(
+                  '颜色',
+                  AppSettings.themeModes,
+                  widget.settings.value.themeMode,
+                  (String v) => switch (v) {
+                    'dark' => '深色',
+                    'light' => '浅色',
+                    _ => '跟随系统',
+                  },
+                  (String v) => _apply(() => widget.settings.value.themeMode = v),
+                  last: true,
+                ),
+              ],
+            ),
           ),
         ];
       case 'approval':
@@ -840,7 +869,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '危险命令不因档位放行。定时任务执行时无人确认，除危险命令外一律放行。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
@@ -848,7 +877,7 @@ class _SettingsPageState extends State<SettingsPage> {
       case 'tools':
         return <Widget>[
           if (!const PhoneDevice().supported)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
                 '这些扩展只在安卓上有，这台机器上开不开都一样。',
@@ -882,12 +911,12 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '开着的那几项才进模型的工具清单，关着的它看不见。改完下一句话就生效。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '定位、联系人、短信在打开时向系统要一次权限。工具不会自己弹框，也不会替你发消息。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
@@ -925,7 +954,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '单个对话可以在对话页顶栏的按钮里另写一份，留空则沿用这里。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
@@ -1011,7 +1040,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   maxLines: 4,
                   onChanged: (_) => _touch(),
                 ),
-                const Text(
+                Text(
                   '内置的只有 2025 年那一年的官方排期。新的排期公布后填在上面两格，'
                   '这些日子 DeepSeek 全天按谷时算，调休上班的周末也一样。',
                   style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
@@ -1136,7 +1165,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '发不出去只影响这一封，任务照常跑完。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
@@ -1166,12 +1195,12 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             '长回合与定时任务依赖这个前台服务。系统清掉应用后两者都会停止。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '通知上那一下「回复」写的就是下一句，发出去跟在这里说一样。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
@@ -1308,12 +1337,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(spec.label, style: const TextStyle(fontSize: 13, color: C.ink)),
+                    Text(spec.label, style: TextStyle(fontSize: 13, color: C.ink)),
                     const SizedBox(height: 3),
                     Text(who,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: C.grey, height: 1.4)),
+                        style: TextStyle(fontSize: 11, color: C.grey, height: 1.4)),
                   ],
                 ),
               ),
@@ -1355,7 +1384,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: <Widget>[
               Expanded(
                 child: Text('允许 ${range.text}\u3000${locked ? '锁着，AI 改不动' : 'AI 可以提，批准后生效'}',
-                    style: const TextStyle(fontSize: 10.5, color: C.grey2, height: 1.4)),
+                    style: TextStyle(fontSize: 10.5, color: C.grey2, height: 1.4)),
               ),
               _miniLink('改范围', () => _editParamRange(spec)),
               const SizedBox(width: 10),
@@ -1371,7 +1400,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Text(label, style: const TextStyle(fontSize: 10.5, color: C.blue)),
+      child: Text(label, style: TextStyle(fontSize: 10.5, color: C.blue)),
     );
   }
 
@@ -1390,7 +1419,7 @@ class _SettingsPageState extends State<SettingsPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(hint, style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+            Text(hint, style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
             const SizedBox(height: 10),
             for (int i = 0; i < fields.length; i += 1) ...<Widget>[
               TextField(
@@ -1406,11 +1435,11 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),
-            child: const Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),
@@ -1566,7 +1595,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         child: Text(
           _profileLabel(p),
-          style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink),
+          style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink),
         ),
       ),
     );
@@ -1583,7 +1612,7 @@ class _SettingsPageState extends State<SettingsPage> {
           borderRadius: BorderRadius.circular(C.radiusSmall),
           border: Border.all(color: C.rule2),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(Icons.add, size: 14, color: C.grey),
@@ -1611,7 +1640,7 @@ class _SettingsPageState extends State<SettingsPage> {
           borderRadius: BorderRadius.circular(C.radiusSmall),
           border: Border.all(color: C.rule2),
         ),
-        child: Text(p.name, style: const TextStyle(fontSize: 12, color: C.ink)),
+        child: Text(p.name, style: TextStyle(fontSize: 12, color: C.ink)),
       ),
     );
   }
@@ -1630,7 +1659,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(label, style: const TextStyle(fontSize: 11.5, color: C.grey)),
+          Text(label, style: TextStyle(fontSize: 11.5, color: C.grey)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -1650,7 +1679,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   child: Text(
                     nameOf(v),
-                    style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink),
+                    style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink),
                   ),
                 ),
               );
@@ -1750,9 +1779,9 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(label, style: const TextStyle(fontSize: 13, color: C.ink)),
+                Text(label, style: TextStyle(fontSize: 13, color: C.ink)),
                 const SizedBox(height: 3),
-                Text(note, style: const TextStyle(fontSize: 11, color: C.grey, height: 1.4)),
+                Text(note, style: TextStyle(fontSize: 11, color: C.grey, height: 1.4)),
               ],
             ),
           ),
@@ -1770,7 +1799,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: <Widget>[
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: C.ink))),
+            Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: C.ink))),
             if (note.isNotEmpty) ...<Widget>[
               const SizedBox(width: 10),
               Flexible(
@@ -1784,7 +1813,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ],
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 16, color: C.grey2),
+            Icon(Icons.chevron_right, size: 16, color: C.grey2),
           ],
         ),
       ),
@@ -1801,6 +1830,7 @@ class _Module {
 }
 
 const List<_Module> kSettingsModules = <_Module>[
+  _Module('look', '外观'),
   _Module('model', '模型'),
   _Module('approval', '审批'),
   _Module('tools', '扩展'),
@@ -1821,52 +1851,56 @@ class _SettingsModulePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: C.paper,
-      body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Container(
-              height: 56,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: const BoxDecoration(
-                color: C.card,
-                border: Border(bottom: BorderSide(color: C.rule)),
-              ),
-              child: Row(
-                children: <Widget>[
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
-                  ),
-                  Text(module.title,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: parent._tick,
-                      builder: (BuildContext ctx, int value, Widget? child) => Text(
-                        parent._saved,
-                        style: C.monoSmall.copyWith(
-                          color: parent._saved == '已保存' ? C.blue : C.grey,
+    // 这一页是推上来的路由：换色板时外壳会重画，它靠听 C.revision 自己重画。
+    return ValueListenableBuilder<int>(
+      valueListenable: C.revision,
+      builder: (BuildContext palette, int _, Widget? __) => Scaffold(
+        backgroundColor: C.paper,
+        body: SafeArea(
+          child: Column(
+            children: <Widget>[
+              Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: C.card,
+                  border: Border(bottom: BorderSide(color: C.rule)),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: Icon(Icons.arrow_back, size: 19, color: C.ink),
+                    ),
+                    Text(module.title,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: parent._tick,
+                        builder: (BuildContext ctx, int value, Widget? child) => Text(
+                          parent._saved,
+                          style: C.monoSmall.copyWith(
+                            color: parent._saved == '已保存' ? C.blue : C.grey,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: parent._tick,
-                builder: (BuildContext ctx, int value, Widget? child) => ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-                  children: parent._moduleBody(module.key),
+                  ],
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: parent._tick,
+                  builder: (BuildContext ctx, int value, Widget? child) => ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+                    children: parent._moduleBody(module.key),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

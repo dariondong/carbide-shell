@@ -52,7 +52,7 @@ class _MemoryPageState extends State<MemoryPage> {
         Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: C.card,
             border: Border(bottom: BorderSide(color: C.rule)),
           ),
@@ -73,7 +73,7 @@ class _MemoryPageState extends State<MemoryPage> {
                     color: C.blue,
                     borderRadius: BorderRadius.circular(C.radiusSmall),
                   ),
-                  child: const Icon(Icons.add, size: 17, color: Colors.white),
+                  child: Icon(Icons.add, size: 17, color: C.onAccent),
                 ),
               ),
             ],
@@ -106,7 +106,7 @@ class _MemoryPageState extends State<MemoryPage> {
                             _scope == MemoryBook.globalScope
                                 ? '还没有全局记忆。在对话里说「记住…」，内容会写在这里。'
                                 : '这台机器还没有记忆。在绑定它的对话里说「记住…」，内容会写在这里。',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 13.5, height: 1.6, color: C.body),
                           ),
                         ],
@@ -126,7 +126,7 @@ class _MemoryPageState extends State<MemoryPage> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Text(
             '当前「$_scopeLabel」。绑定单台主机的对话只带它自己的记忆，多机对话带全局记忆。每轮最多 1200 字。',
-            style: const TextStyle(fontSize: 11, color: C.grey, height: 1.6),
+            style: TextStyle(fontSize: 11, color: C.grey, height: 1.6),
           ),
         ),
       ],
@@ -146,7 +146,7 @@ class _MemoryPageState extends State<MemoryPage> {
             borderRadius: BorderRadius.circular(C.radiusSmall),
             border: Border.all(color: on ? C.blue : C.rule2),
           ),
-          child: Text(label, style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+          child: Text(label, style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
         ),
       ),
     );
@@ -191,7 +191,7 @@ class _MemoryPageState extends State<MemoryPage> {
               setState(() {});
               widget.onChanged();
             },
-            icon: const Icon(Icons.close, size: 15, color: C.grey2),
+            icon: Icon(Icons.close, size: 15, color: C.grey2),
             splashRadius: 16,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             padding: EdgeInsets.zero,
@@ -226,11 +226,11 @@ class _MemoryPageState extends State<MemoryPage> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
+            child: Text('取消', style: TextStyle(fontSize: 13, color: C.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
+            child: Text('保存', style: TextStyle(fontSize: 13, color: C.blue)),
           ),
         ],
       ),

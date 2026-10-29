@@ -130,7 +130,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
               note: '${_items.length} 个文件 · ${tempSize(_total)}',
             ),
             const SizedBox(height: 14),
-            const Text('这一块里的文件都会删掉，删完从服务器那头找不回来。',
+            Text('这一块里的文件都会删掉，删完从服务器那头找不回来。',
                 style: TextStyle(fontSize: 12.5, height: 1.55, color: C.grey)),
             const SizedBox(height: 16),
             Row(
@@ -237,7 +237,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
             Container(
               height: 56,
               padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: C.card,
                 border: Border(bottom: BorderSide(color: C.rule)),
               ),
@@ -245,7 +245,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
                 children: <Widget>[
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back, size: 19, color: C.ink),
+                    icon: Icon(Icons.arrow_back, size: 19, color: C.ink),
                   ),
                   const Text('临时文件',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -263,7 +263,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
                         color: C.paper2,
                         borderRadius: BorderRadius.circular(C.radiusSmall),
                       ),
-                      child: const Icon(Icons.cloud_download_outlined,
+                      child: Icon(Icons.cloud_download_outlined,
                           size: 17, color: C.ink),
                     ),
                   ),
@@ -277,7 +277,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
                         color: C.blue,
                         borderRadius: BorderRadius.circular(C.radiusSmall),
                       ),
-                      child: const Icon(Icons.add, size: 17, color: Colors.white),
+                      child: Icon(Icons.add, size: 17, color: C.onAccent),
                     ),
                   ),
                 ],
@@ -340,7 +340,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
           const Text('这里还没有文件',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '模型在这里写文件，你也可以把手机上的文件加进来。写好从这里传到服务器。',
             style: C.answer,
           ),
@@ -376,7 +376,7 @@ class _TempFilesPageState extends State<TempFilesPage> {
                   Text(f.path,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: C.ink)),
+                      style: TextStyle(fontSize: 13, color: C.ink)),
                   const SizedBox(height: 2),
                   Text('${tempSize(f.size)} · ${_when(f.modified)}', style: C.monoSmall),
                 ],
@@ -604,8 +604,8 @@ class _UploadSheetState extends State<_UploadSheet> {
           if (_error.isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
             Text(_error,
-                style: const TextStyle(
-                    fontSize: 12, height: 1.5, color: Color(0xFFD7443E))),
+                style: TextStyle(
+                    fontSize: 12, height: 1.5, color: C.danger)),
           ],
           const SizedBox(height: 18),
           Row(
@@ -650,7 +650,7 @@ class _UploadSheetState extends State<_UploadSheet> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: on ? FontWeight.w600 : FontWeight.w400,
-            color: on ? Colors.white : C.ink,
+            color: on ? C.onAccent : C.ink,
           ),
         ),
       ),
@@ -739,8 +739,8 @@ class _PreviewSheetState extends State<_PreviewSheet> {
             if (_error.isNotEmpty) ...<Widget>[
               const SizedBox(height: 6),
               Text(_error,
-                  style: const TextStyle(
-                      fontSize: 12, height: 1.5, color: Color(0xFFD7443E))),
+                  style: TextStyle(
+                      fontSize: 12, height: 1.5, color: C.danger)),
             ],
             const SizedBox(height: 10),
             Expanded(
@@ -801,20 +801,20 @@ class _PreviewSheetState extends State<_PreviewSheet> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (_saving)
-              const SizedBox(
+              SizedBox(
                 width: 11,
                 height: 11,
-                child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: C.onAccent),
               )
             else
-              const Icon(Icons.download_rounded, size: 14, color: Colors.white),
+              Icon(Icons.download_rounded, size: 14, color: C.onAccent),
             const SizedBox(width: 5),
             Text(
               _saving ? '正在存' : '下载',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: C.onAccent,
               ),
             ),
           ],
@@ -849,7 +849,7 @@ class _PreviewSheetState extends State<_PreviewSheet> {
           color: C.paper2,
           borderRadius: BorderRadius.circular(C.radiusSmall),
         ),
-        child: const Text(
+        child: Text(
           '这是二进制文件，内容读不出来。\n可以下载到手机上，或者传到服务器。',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12.5, height: 1.7, color: C.grey),
@@ -1053,13 +1053,13 @@ class _FetchSheetState extends State<_FetchSheet> {
             if (_error.isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
               Text(_error,
-                  style: const TextStyle(
-                      fontSize: 12, height: 1.5, color: Color(0xFFD7443E))),
+                  style: TextStyle(
+                      fontSize: 12, height: 1.5, color: C.danger)),
             ],
             const SizedBox(height: 8),
             Expanded(
               child: _loading
-                  ? const Center(
+                  ? Center(
                       child: SizedBox(
                         width: 18,
                         height: 18,
@@ -1119,7 +1119,7 @@ class _FetchSheetState extends State<_FetchSheet> {
           border: Border.all(color: on ? C.blue : C.rule2),
         ),
         child: Text(h.name,
-            style: TextStyle(fontSize: 12, color: on ? Colors.white : C.ink)),
+            style: TextStyle(fontSize: 12, color: on ? C.onAccent : C.ink)),
       ),
     );
   }
@@ -1165,13 +1165,13 @@ class _FetchSheetState extends State<_FetchSheet> {
               ),
             ),
             if (busy)
-              const SizedBox(
+              SizedBox(
                 width: 12,
                 height: 12,
                 child: CircularProgressIndicator(strokeWidth: 1.5, color: C.blue),
               )
             else if (!item.dir)
-              const Icon(Icons.download_rounded, size: 15, color: C.grey2),
+              Icon(Icons.download_rounded, size: 15, color: C.grey2),
           ],
         ),
       ),
