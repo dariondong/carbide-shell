@@ -12,6 +12,8 @@ import '../core/docx.dart';
 import '../core/models.dart';
 import '../core/plan.dart';
 import '../data/hub.dart';
+import '../data/llm_settings.dart';
+import '../data/settings.dart';
 import '../services.dart';
 import '../tools/ask_tool.dart';
 import 'components.dart';
@@ -330,7 +332,7 @@ class _ChatPageState extends State<ChatPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                follows ? '现在跟设置里的那份走。在这里写就是只换这个对话。' : '这个对话用自己的一份，不跟设置走。',
+                follows ? '现在跟这套配置的提示词走（没配就是设置里那份）。在这里写就是只换这个对话。' : '这个对话用自己的一份，不跟设置走。',
                 style: const TextStyle(fontSize: 11.5, color: C.grey, height: 1.6),
               ),
               const SizedBox(height: 10),
@@ -991,9 +993,147 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// 这一场现在用哪套配置。
+  ModelProfile get _profile =>
+      profileOf(widget.services.settings.value, widget.conversation.profileId);
+
+  /// 顶栏那颗：现在用的是哪套模型，点一下换一套。
+  Widget _modelPill() {
+    final ModelProfile p = _profile;
+    final bool pinned = widget.conversation.profileId.isNotEmpty;
+    final bool wide = MediaQuery.sizeOf(context).width >= 420;
+    return GestureDetector(
+      onTap: _pickModel,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 24,
+        padding: EdgeInsets.symmetric(horizontal: wide ? 8 : 6),
+        decoration: BoxDecoration(
+          color: pinned ? C.blueSoft : C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.memory, size: 11, color: pinned ? C.blue : C.grey),
+            if (wide) ...<Widget>[
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 96),
+                child: Text(
+                  p.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: C.monoSmall.copyWith(
+                    fontSize: 10,
+                    height: 1.2,
+                    color: pinned ? C.blue : C.grey,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 换这场对话的模型配置：只改这一场，设置里的默认不动。
+  Future<void> _pickModel() async {
+    final AppSettings s = widget.services.settings.value;
+    final String current = widget.conversation.profileId;
+    final String? pick = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => SheetCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('这场对话用哪套模型',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
+            const SizedBox(height: 3),
+            Text('换过去之后，新消息按那一套的提示词和参数走，记录不动。', style: C.monoSmall),
+            const SizedBox(height: 12),
+            for (final ModelProfile p in s.profiles) ...<Widget>[
+              _modelRow(p, current, s.activeProfile),
+              const SizedBox(height: 8),
+            ],
+            _sheetRow(
+              Icons.link,
+              '跟设置走',
+              '设置里换成哪套，这场就用哪套',
+              current.isNotEmpty,
+              () => Navigator.of(ctx).pop('__follow__'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    final Conversation c = widget.conversation;
+    c.profileId = pick == '__follow__' ? '' : pick;
+    await widget.services.persist(c);
+    final LiveSession? live = _live;
+    if (live != null) {
+      // 提示词也跟着换：下一句就按新配置那份执行。
+      live.loop.systemPrompt = promptFor(widget.services.settings, c);
+    }
+    if (!mounted) return;
+    setState(() {});
+    _toast(c.profileId.isEmpty
+        ? '这场对话跟设置走。'
+        : '这场对话换成 ${_profile.label}，下一句就按它走。');
+  }
+
+  Widget _modelRow(ModelProfile p, String current, String defaultId) {
+    final bool on = current.isEmpty ? p.id == defaultId : p.id == current;
+    final String note = <String>[
+      if (p.model.trim().isNotEmpty) p.model.trim(),
+      if (p.id == defaultId) '设置里的默认',
+      if (!p.complete) '还没填完',
+    ].join(' · ');
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(p.id),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
+        decoration: BoxDecoration(
+          color: on ? C.blueSoft : C.paper2,
+          borderRadius: BorderRadius.circular(C.radiusSmall),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.memory,
+                size: 18, color: on ? C.blue : C.grey),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(p.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 13, color: on ? C.blue : C.ink)),
+                  if (note.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 2),
+                    Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: C.monoSmall),
+                  ],
+                ],
+              ),
+            ),
+            if (on) const Icon(Icons.check, size: 16, color: C.blue),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 标题两行：名字在上，跟谁在聊在下。名字太长就收成省略号，不推挤右边。
-  Widget _heading() {
-    return Column(
+  Widget _heading() {    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
@@ -1117,6 +1257,8 @@ class _ChatPageState extends State<ChatPage> {
               ),
               const SizedBox(width: 2),
               Expanded(child: _heading()),
+              _modelPill(),
+              const SizedBox(width: 4),
               _statusPill(loop),
               const SizedBox(width: 4),
               GestureDetector(
