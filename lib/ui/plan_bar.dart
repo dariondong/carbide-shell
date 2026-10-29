@@ -8,9 +8,16 @@ import 'theme.dart';
 ///
 /// 默认展开，点一下收成一行「4 步 · 做完 2 步」，再看记录时它只占一条。
 class PlanBar extends StatefulWidget {
-  const PlanBar({super.key, required this.plan});
+  const PlanBar({
+    super.key,
+    required this.plan,
+    this.pad = const EdgeInsets.fromLTRB(12, 10, 12, 0),
+  });
 
   final WorkPlan plan;
+
+  /// 外面的留白。钉在顶栏下面时留住左右 12，已经落进记录里的那一张不留。
+  final EdgeInsets pad;
 
   @override
   State<PlanBar> createState() => _PlanBarState();
@@ -30,10 +37,10 @@ class _PlanBarState extends State<PlanBar> {
   Widget build(BuildContext context) {
     final WorkPlan plan = widget.plan;
     final List<PlanStep> steps = plan.steps;
-    final bool narrow = steps.length > 6;
-    final int shown = narrow ? 6 : steps.length;
+    // 步骤多了就在条里自己滚，不截断也不抢对话的地方。
+    final double room = (MediaQuery.sizeOf(context).height * 0.26).clamp(132.0, 260.0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: widget.pad,
       child: Container(
         decoration: BoxDecoration(
           color: C.card,
@@ -88,18 +95,20 @@ class _PlanBarState extends State<PlanBar> {
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       padding: const EdgeInsets.fromLTRB(13, 0, 13, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          for (int i = 0; i < shown; i += 1) _step(steps[i]),
-                          if (narrow)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text('还有 ${steps.length - shown} 步',
-                                  style: C.monoSmall.copyWith(
-                                      color: C.grey2, fontSize: 10.5)),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: room),
+                        child: Scrollbar(
+                          thumbVisibility: steps.length > 8,
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.zero,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                for (int i = 0; i < steps.length; i += 1) _step(steps[i]),
+                              ],
                             ),
-                        ],
+                          ),
+                        ),
                       ),
                     ),
             ),
