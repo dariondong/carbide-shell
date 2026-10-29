@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/rules.dart';
 import '../core/schedule.dart';
+import '../core/triggers.dart';
 import '../core/watch.dart';
 import '../data/hosts.dart';
 import '../data/tasks.dart';

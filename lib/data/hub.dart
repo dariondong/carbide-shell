@@ -14,6 +14,7 @@ import '../services.dart';
 import '../tools/ask_tool.dart';
 import 'activity.dart';
 import 'llm_settings.dart';
+import 'settings.dart';
 
 /// 一个对话在跑的时候的全部状态。
 ///
