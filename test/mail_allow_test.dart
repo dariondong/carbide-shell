@@ -72,7 +72,12 @@ void main() {
     );
     expect(out.ok, isTrue);
     expect(out.stdout, contains('已经能发'));
-    expect(store.value.allowedTo.length, 1);
+    // 名单里原本那条 ops 还在，只多了第一次加进去的那一个
+    expect(store.value.allowedTo.length, 2);
+    expect(
+      store.value.allowedTo.where((String e) => e.toLowerCase() == 'night@example.com').length,
+      1,
+    );
   });
 
   test('写坏的地址不动名单', () async {
