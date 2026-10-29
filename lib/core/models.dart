@@ -171,6 +171,7 @@ class ToolContext {
     required this.workspace,
     required this.desktop,
     this.timeout = const Duration(seconds: 15),
+    this.granted = false,
   });
 
   /// Directory the agent may write inside.
@@ -181,10 +182,15 @@ class ToolContext {
 
   final Duration timeout;
 
-  ToolContext copyWith({String? workspace}) => ToolContext(
+  /// 这一步用户已经点过批准。工具自己在跑之前还要再问一句规则的（比如 http_request
+  /// 的域名允许列表），看它就当成已经过了。
+  final bool granted;
+
+  ToolContext copyWith({String? workspace, bool? granted}) => ToolContext(
         workspace: workspace ?? this.workspace,
         desktop: desktop,
         timeout: timeout,
+        granted: granted ?? this.granted,
       );
 }
 

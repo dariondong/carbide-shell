@@ -357,13 +357,19 @@ class ApprovalCard extends StatelessWidget {
 
   /// 这张卡执行下去会发生什么。做的是哪件事就说哪件事，不一律说成命令。
   String get _note => switch (request.tool.name) {
-        'ssh_exec' => '批准后这条命令会在目标主机上执行。危险命令已经在上一步被拦掉了。',
+        'ssh_exec' => '批准后这条命令会在目标主机上执行。',
         'tune_param' => '批准后这套配置的参数就换成新值，之后的消息按新值走。被锁住的参数会回一句改不了。',
         'env_set' || 'env_delete' => '批准后只动本机安全存储里的环境密钥，值不进对话记录，也不写日志。',
         'mail_send' => '批准后才发出去，收件人就是上面这个。',
         'sms_send' => '批准后会用本机号码发出这条短信。',
+        'http_request' => '批准后才发这个请求。设置里加过的域名不会问，没加过的问过这一次就发。',
+        'trigger_save' => '批准后这一个触发器就进清单：条件满足了它会自己跑，那时候没有人守在旁边。',
+        'trigger_delete' => '批准后这一条触发器连同它的运行记录一起删掉。',
         _ => '批准后这一步会执行。',
       };
+
+  /// 会删东西的那一步，在卡上单独说一句。
+  String get _warning => request.dangerous ? '这一步会删掉东西，看清楚再点。' : '';
 
   @override
   Widget build(BuildContext context) {
@@ -408,8 +414,15 @@ class ApprovalCard extends StatelessWidget {
           const SizedBox(height: 11),
           Text(
             _note,
-            style: const TextStyle(fontSize: 12, height: 1.6, color: C.grey),
+            style: TextStyle(fontSize: 12, height: 1.6, color: C.grey),
           ),
+          if (_warning.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              _warning,
+              style: const TextStyle(fontSize: 12, height: 1.6, color: Color(0xFFD7443E)),
+            ),
+          ],
           const SizedBox(height: 13),
           Row(
             children: <Widget>[

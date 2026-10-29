@@ -16,7 +16,16 @@ class HttpTool extends Tool {
   String get name => 'http_request';
 
   @override
-  String get description => '发一个 HTTP 请求。只能访问设置里加过的域名，返回状态码、头前几行和正文。';
+  String get description =>
+      '发一个 HTTP 请求。设置里加过的域名直接发；没加过的会先问一句，批准了这一次才发。'
+      '返回状态码、头前几行和正文。';
+
+  /// 域名在允许列表里没有，就要问一句才发。
+  bool _allowed(String host) => settings.value.allowedDomains
+      .any((String d) => host == d || host.endsWith('.$d'));
+
+  String _hostOf(Map<String, Object?> args) =>
+      Uri.tryParse(readString(args, 'url').trim())?.host ?? '';
 
   @override
   Map<String, Object?> get schema => <String, Object?>{
@@ -36,12 +45,20 @@ class HttpTool extends Tool {
   @override
   ToolRisk classify(Map<String, Object?> args) {
     final String method = readString(args, 'method', fallback: 'GET').toUpperCase();
+    final String host = _hostOf(args);
+    // 没加过的域名一律当成写操作：审批档再宽也会先问一次。
+    if (host.isEmpty || !_allowed(host)) return ToolRisk.write;
     return method == 'GET' || method == 'HEAD' ? ToolRisk.read : ToolRisk.write;
   }
 
   @override
-  String summarize(Map<String, Object?> args) =>
-      '${readString(args, 'method', fallback: 'GET').toUpperCase()} ${readString(args, 'url')}';
+  String summarize(Map<String, Object?> args) {
+    final String host = _hostOf(args);
+    final String line =
+        '${readString(args, 'method', fallback: 'GET').toUpperCase()} ${readString(args, 'url')}';
+    if (host.isNotEmpty && !_allowed(host)) return '$line（$host 不在允许列表）';
+    return line;
+  }
 
   @override
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
@@ -51,10 +68,10 @@ class HttpTool extends Tool {
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       return const ToolOutcome.failure('只支持 http 和 https。');
     }
-    final bool allowed = settings.value.allowedDomains
-        .any((String d) => uri.host == d || uri.host.endsWith('.$d'));
+    final bool allowed = _allowed(uri.host) || context.granted;
     if (!allowed) {
-      return ToolOutcome.failure('${uri.host} 不在允许列表里。先到设置里加上它。');
+      return ToolOutcome.failure('${uri.host} 不在允许列表里。先到设置里加上它，'
+          '或者让用户批准这一次。');
     }
 
     final HttpClient client = HttpClient()

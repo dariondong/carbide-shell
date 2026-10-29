@@ -178,18 +178,56 @@ void main() {
     expect(tool.runs, 1);
   });
 
-  test('危险命令即使批准也被拦', () async {
+  test('删东西的命令会问一句，批准了就执行', () async {
     final SpyTool tool = SpyTool(risk: ToolRisk.write);
     final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
       const LlmReply(calls: <LlmToolCall>[
         LlmToolCall(id: 'c1', name: 'spy', args: <String, Object?>{'command': 'rm -rf /var/log'}),
+      ]),
+      const LlmReply(text: '清掉了。'),
+    ]);
+    final FixedApprover approver = FixedApprover(true);
+    final AgentLoop loop = buildLoop(provider, registryWith(tool), approver: approver);
+
+    await loop.send('清日志');
+
+    expect(approver.seen.length, 1);
+    // 卡上要标明这一步会删东西。
+    expect(approver.seen.single.dangerous, isTrue);
+    expect(tool.runs, 1);
+  });
+
+  test('删东西的命令被拒就不跑', () async {
+    final SpyTool tool = SpyTool(risk: ToolRisk.write);
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      const LlmReply(calls: <LlmToolCall>[
+        LlmToolCall(id: 'c1', name: 'spy', args: <String, Object?>{'command': 'rm -rf /var/log'}),
+      ]),
+      const LlmReply(text: '没动。'),
+    ]);
+    final FixedApprover approver = FixedApprover(false);
+    final AgentLoop loop = buildLoop(provider, registryWith(tool), approver: approver);
+
+    await loop.send('清日志');
+
+    expect(approver.seen.length, 1);
+    expect(tool.runs, 0);
+    final LlmMessage result = loop.history.firstWhere((LlmMessage m) => m.isTool);
+    expect(result.text.contains('用户拒绝'), isTrue);
+  });
+
+  test('会把机器弄坏的命令批准了也不跑', () async {
+    final SpyTool tool = SpyTool(risk: ToolRisk.write);
+    final ScriptedProvider provider = ScriptedProvider(<LlmReply>[
+      const LlmReply(calls: <LlmToolCall>[
+        LlmToolCall(id: 'c1', name: 'spy', args: <String, Object?>{'command': 'mkfs.ext4 /dev/sda1'}),
       ]),
       const LlmReply(text: '这条被拦下了。'),
     ]);
     final FixedApprover approver = FixedApprover(true);
     final AgentLoop loop = buildLoop(provider, registryWith(tool), approver: approver);
 
-    await loop.send('清日志');
+    await loop.send('格式化');
 
     expect(approver.seen, isEmpty);
     expect(tool.runs, 0);

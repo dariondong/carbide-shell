@@ -254,6 +254,11 @@ class AgentLoop {
         ? ApprovalVerdict.ask
         : verdict;
 
+    // 会删东西的那一步：批准卡上要写明，让人看清楚再点。
+    final bool risky = policy.isRisky(summary);
+    // 用户点过批准的那一条才算拿到许可。像 http_request 这种要先问一句才能做的，
+    // 就靠这个标志知道这一次已经问过了。
+    bool granted = verdict == ApprovalVerdict.allow;
     if (ask == ApprovalVerdict.ask) {
       final Approver? who = approver;
       if (who == null) {
@@ -265,7 +270,7 @@ class AgentLoop {
         tool: tool,
         args: call.args,
         summary: summary,
-        dangerous: false,
+        dangerous: risky,
       );
       phase = AgentPhase.waiting;
       _notify();
@@ -282,6 +287,7 @@ class AgentLoop {
         _appendResult(call, '用户拒绝执行。', failed: true);
         return;
       }
+      granted = true;
     }
 
     phase = AgentPhase.acting;
@@ -289,7 +295,10 @@ class AgentLoop {
     final Stopwatch watch = Stopwatch()..start();
     ToolOutcome outcome;
     try {
-      outcome = await tool.run(call.args, context);
+      outcome = await tool.run(
+        call.args,
+        granted ? context.copyWith(granted: true) : context,
+      );
     } catch (e) {
       outcome = ToolOutcome.failure('$e');
     }
