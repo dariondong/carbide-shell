@@ -25,4 +25,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/pet/pet.png
+    - assets/pet/idle.png
+    - assets/pet/work.png
+    - assets/pet/sleep.png

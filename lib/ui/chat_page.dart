@@ -946,7 +946,14 @@ class _ChatPageState extends State<ChatPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const PetAvatar(size: 124, showState: true),
+          PetAvatar(
+            size: 124,
+            mood: petMoodNow(
+              running: widget.hub.runningCount > 0,
+              waiting: widget.hub.waitingOnes.isNotEmpty,
+            ),
+            showState: true,
+          ),
           const SizedBox(height: 16),
           const Text('说说要做什么',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4)),
