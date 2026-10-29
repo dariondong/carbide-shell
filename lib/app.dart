@@ -12,9 +12,13 @@ import 'data/update.dart';
 import 'services.dart';
 import 'ui/about_page.dart';
 import 'ui/chat_page.dart';
+import 'ui/components.dart';
+import 'ui/conversation_actions.dart';
+import 'ui/conversation_rail.dart';
 import 'ui/conversations_page.dart';
 import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
+import 'ui/motion.dart';
 import 'ui/settings_page.dart';
 import 'ui/tasks_page.dart';
 import 'ui/temp_files_page.dart';
@@ -239,26 +243,6 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final AppServices s = widget.services;
-    final Conversation? open = _open;
-
-    final Widget chatTab = open == null
-        ? ConversationsPage(
-            services: s,
-            hub: widget.hub,
-            onOpen: (Conversation c) => setState(() => _open = c),
-            onChanged: _refresh,
-          )
-        : ChatPage(
-            key: ValueKey<String>(open.id),
-            services: s,
-            hub: widget.hub,
-            conversation: open,
-            subtitle: _subtitle(open),
-            onBack: () {
-              setState(() => _open = null);
-              _refresh();
-            },
-          );
 
     return PopScope(
       canPop: _atRoot,
@@ -269,42 +253,48 @@ class _HomeShellState extends State<HomeShell> {
       child: Scaffold(
           body: MediaQuery.removePadding(
           context: context,
-          // 底部的系统栏距离由下面那条导航条让，页面里不再重复让一次。
+          // 底部的系统条距离由下面那条导航条让，页面里不再重复让一次。
           removeBottom: true,
           child: SafeArea(
-            child: IndexedStack(
-              index: _index,
-              children: <Widget>[
-                chatTab,
-                TasksPage(
-                  tasks: s.tasks,
-                  watches: s.watches,
-                  scheduler: widget.scheduler,
-                  hosts: s.hosts,
-                  onChanged: _refresh,
-                ),
-                HostsPage(
-                  hosts: s.hosts,
-                  secrets: s.secrets,
-                  pool: s.pool,
-                  onChanged: _refresh,
-                ),
-                TerminalPage(hosts: s.hosts, pool: s.pool),
-                MemoryPage(services: s, onChanged: _refresh),
-                SettingsPage(
-                  settings: s.settings,
-                  secrets: s.secrets,
-                  policy: s.policy,
-                  conversations: s.conversations.all,
-                  onConversationChanged: (Conversation c) => s.conversations.save(c),
-                  onOpenAbout: _openAbout,
-                  onOpenUsage: _openUsage,
-                  onOpenFiles: _openFiles,
-                  filesSummary: _filesSummary(),
-                  usage: s.usage,
-                  mail: s.mail,
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (BuildContext ctx, BoxConstraints box) {
+                // 宽屏把会话挪到左边一栏：侧边栏选对话，右边一直是正文。
+                final bool rail = box.maxWidth >= 900;
+                return IndexedStack(
+                  index: _index,
+                  children: <Widget>[
+                    rail ? _railTab(s) : _listTab(s),
+                    TasksPage(
+                      tasks: s.tasks,
+                      watches: s.watches,
+                      scheduler: widget.scheduler,
+                      hosts: s.hosts,
+                      onChanged: _refresh,
+                    ),
+                    HostsPage(
+                      hosts: s.hosts,
+                      secrets: s.secrets,
+                      pool: s.pool,
+                      onChanged: _refresh,
+                    ),
+                    TerminalPage(hosts: s.hosts, pool: s.pool),
+                    MemoryPage(services: s, onChanged: _refresh),
+                    SettingsPage(
+                      settings: s.settings,
+                      secrets: s.secrets,
+                      policy: s.policy,
+                      conversations: s.conversations.all,
+                      onConversationChanged: (Conversation c) => s.conversations.save(c),
+                      onOpenAbout: _openAbout,
+                      onOpenUsage: _openUsage,
+                      onOpenFiles: _openFiles,
+                      filesSummary: _filesSummary(),
+                      usage: s.usage,
+                      mail: s.mail,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -333,6 +323,105 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ),
     );
+  }
+
+  /// 窄屏：会话列表是一整页，点进去就是那一场对话。
+  Widget _listTab(AppServices s) {
+    final Conversation? open = _open;
+    return AnimatedSwitcher(
+      duration: Motion.swap,
+      switchInCurve: Motion.curve,
+      child: open == null
+          ? KeyedSubtree(
+              key: const ValueKey<String>('threads'),
+              child: ConversationsPage(
+                services: s,
+                hub: widget.hub,
+                onOpen: (Conversation c) => setState(() => _open = c),
+                onChanged: _refresh,
+              ),
+            )
+          : _chat(s, open),
+    );
+  }
+
+  /// 宽屏：左边一栏会话，右边是选中的那一场。
+  Widget _railTab(AppServices s) {
+    final Conversation? open = _open;
+    return Row(
+      children: <Widget>[
+        ConversationRail(
+          services: s,
+          hub: widget.hub,
+          currentId: open?.id ?? '',
+          onOpen: (Conversation c) => setState(() => _open = c),
+          onNew: _newConversation,
+          onDelete: _deleteConversation,
+        ),
+        const VerticalDivider(width: 1, thickness: 1, color: C.rule),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: Motion.swap,
+            switchInCurve: Motion.curve,
+            child: open == null ? _noOpen() : _chat(s, open),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chat(AppServices s, Conversation open) {
+    return ChatPage(
+      key: ValueKey<String>(open.id),
+      services: s,
+      hub: widget.hub,
+      conversation: open,
+      subtitle: _subtitle(open),
+      onBack: () {
+        setState(() => _open = null);
+        _refresh();
+      },
+    );
+  }
+
+  /// 宽屏还没选对话时右边那一块：说一句，给一个开新对话的按钮。
+  Widget _noOpen() {
+    return Container(
+      key: const ValueKey<String>('none'),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Text('左边选一个对话',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.4)),
+          const SizedBox(height: 8),
+          const Text('也可以新开一个，指定它管哪台主机。',
+              style: TextStyle(fontSize: 12.5, color: C.grey, height: 1.6)),
+          const SizedBox(height: 18),
+          SquareButton(label: '新对话', filled: true, onPressed: _newConversation),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _newConversation() async {
+    final Conversation? c = await newConversationDialog(context, widget.services);
+    if (c == null || !mounted) return;
+    setState(() => _open = c);
+    _refresh();
+  }
+
+  Future<void> _deleteConversation(Conversation c) async {
+    final bool ok = await confirmDeleteConversation(context, c);
+    if (!ok) return;
+    await widget.services.conversations.remove(c.id);
+    widget.hub.forget(c.id);
+    if (!mounted) return;
+    setState(() {
+      if (_open?.id == c.id) _open = null;
+    });
+    _refresh();
   }
 
   Widget _nav(int index, IconData icon, String label) {
