@@ -4,43 +4,56 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// 宠物此刻在干什么。只有「在等」「在想」「在干」这三种，别的都不必演。
+/// 宠物此刻在干什么。待机是常态，另外两个只在跑的时候露一下。
 enum PetMood { idle, thinking, working }
 
-/// 应用的拟人形象：一枚圆的头像，轻轻地呼吸。
+extension PetMoodInfo on PetMood {
+  /// 宠物旁边那一行小字。
+  String get label => switch (this) {
+        PetMood.idle => '待机',
+        PetMood.thinking => '在想',
+        PetMood.working => '在干',
+      };
+}
+
+/// 应用的拟人形象。是一张带透明底的立绘，不是头像框，所以贴在哪里都干净。
 ///
-/// 只在几个空着的地方出现，不挤正文：空对话、正在想、宽屏还没选对话、关于页。
-/// 原图是方的一张，这里裁成圆的，所以不论图里主体在哪个位置都不会露边。
+/// 只在几个空着的地方出现，不挤正文：空对话、正在想的那一行、宽屏还没选对话的右边、
+/// 关于页。默认的待机动作只是很轻地呼吸；在跑的时候换快一点的节奏。
 class PetAvatar extends StatefulWidget {
   const PetAvatar({
     super.key,
-    this.size = 64,
+    this.size = 96,
     this.mood = PetMood.idle,
-    this.ring = true,
+    this.showState = false,
   });
 
+  /// 画多高。宽度按原图比例算。
   final double size;
   final PetMood mood;
 
-  /// 外面那一圈发丝线。贴在小字旁边时可以关掉。
-  final bool ring;
+  /// 底下要不要写一行「待机 / 在想 / 在干」。
+  final bool showState;
 
   @override
   State<PetAvatar> createState() => _PetAvatarState();
 }
 
 class _PetAvatarState extends State<PetAvatar> with SingleTickerProviderStateMixin {
+  static const String _asset = 'assets/pet/pet.png';
+
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    duration: Duration(milliseconds: widget.mood == PetMood.idle ? 3200 : 1700),
+    duration: _span,
   )..repeat();
+
+  Duration get _span => Duration(milliseconds: widget.mood == PetMood.idle ? 3600 : 2000);
 
   @override
   void didUpdateWidget(PetAvatar old) {
     super.didUpdateWidget(old);
-    final int want = widget.mood == PetMood.idle ? 3200 : 1700;
-    if (_ctrl.duration!.inMilliseconds != want) {
-      _ctrl.duration = Duration(milliseconds: want);
+    if (_ctrl.duration != _span) {
+      _ctrl.duration = _span;
       _ctrl.repeat();
     }
   }
@@ -55,42 +68,54 @@ class _PetAvatarState extends State<PetAvatar> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     final bool quiet =
         WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
-    final Widget face = Container(
-      width: widget.size,
+    final Widget figure = _figure();
+    final Widget body = quiet
+        ? figure
+        : AnimatedBuilder(
+            animation: _ctrl,
+            builder: (BuildContext ctx, Widget? child) {
+              final double t = _ctrl.value * 2 * math.pi;
+              // 待机只是呼吸；在想的时候多抬一点，像在点头。
+              final double lift = widget.mood == PetMood.idle
+                  ? math.sin(t) * 1.2
+                  : math.sin(t) * 2.2;
+              final double scale =
+                  1 + (widget.mood == PetMood.idle ? 0.006 : 0.012) * math.sin(t);
+              return Transform.translate(
+                offset: Offset(0, lift),
+                child: Transform.scale(scale: scale, child: child),
+              );
+            },
+            child: figure,
+          );
+    if (!widget.showState) return body;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        body,
+        const SizedBox(height: 6),
+        Text(widget.mood.label, style: C.monoSmall.copyWith(fontSize: 10)),
+      ],
+    );
+  }
+
+  Widget _figure() {
+    return SizedBox(
       height: widget.size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: C.paper2,
-        border: widget.ring ? Border.all(color: C.rule) : null,
-      ),
-      child: ClipOval(
-        child: Image.asset(
-          'assets/pet/pet.png',
-          fit: BoxFit.cover,
-          // 主体大致在画面中间偏上，往下压一点就不会切到脸。
-          alignment: const Alignment(0, -0.06),
-          filterQuality: FilterQuality.medium,
-          errorBuilder: (BuildContext ctx, Object error, StackTrace? stack) => Center(
+      child: Image.asset(
+        _asset,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        // 小的那几处按目标尺寸解码，省下来的内存比清晰度值。
+        cacheWidth: widget.size < 200 ? (widget.size * 2).round() : null,
+        errorBuilder: (BuildContext ctx, Object error, StackTrace? stack) => SizedBox(
+          height: widget.size,
+          width: widget.size,
+          child: Center(
             child: Icon(Icons.hexagon, size: widget.size * 0.5, color: C.blue),
           ),
         ),
       ),
-    );
-    if (quiet) return face;
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (BuildContext ctx, Widget? child) {
-        final double t = _ctrl.value * 2 * math.pi;
-        final double lift = widget.mood == PetMood.idle
-            ? math.sin(t) * 1.4
-            : math.sin(t) * 0.9;
-        final double scale = 1 + (widget.mood == PetMood.idle ? 0.008 : 0.014) * math.sin(t);
-        return Transform.translate(
-          offset: Offset(0, lift),
-          child: Transform.scale(scale: scale, child: child),
-        );
-      },
-      child: face,
     );
   }
 }

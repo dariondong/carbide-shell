@@ -394,7 +394,7 @@ class _HomeShellState extends State<HomeShell> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const PetAvatar(size: 92),
+          const PetAvatar(size: 150, showState: true),
           const SizedBox(height: 16),
           const Text('左边选一个对话',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.4)),

@@ -946,8 +946,8 @@ class _ChatPageState extends State<ChatPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const PetAvatar(size: 78),
-          const SizedBox(height: 14),
+          const PetAvatar(size: 124, showState: true),
+          const SizedBox(height: 16),
           const Text('说说要做什么',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4)),
           const SizedBox(height: 10),
@@ -1578,7 +1578,7 @@ class _ThinkingRowState extends State<_ThinkingRow> with SingleTickerProviderSta
       padding: const EdgeInsets.only(left: 34, bottom: 14),
       child: Row(
         children: <Widget>[
-          const PetAvatar(size: 22, mood: PetMood.thinking, ring: false),
+          const PetAvatar(size: 24, mood: PetMood.thinking, showState: false),
           const SizedBox(width: 8),
           AnimatedBuilder(
             animation: _pulse,

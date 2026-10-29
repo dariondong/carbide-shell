@@ -155,7 +155,7 @@ class _AboutPageState extends State<AboutPage> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: Row(
         children: <Widget>[
-          const PetAvatar(size: 54),
+          const PetAvatar(size: 66),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
