@@ -81,6 +81,12 @@ class TriggerSaveTool extends Tool {
             'description': 'phone 用：允许模型参考哪几项。可选 charging/battery/network/screenOn/'
                 'locked/headset/ringer/dnd/music，留空表示全都允许',
           },
+          'my_names': <String, Object?>{
+            'type': 'array',
+            'items': <String, Object?>{'type': 'string'},
+            'description': 'message 用：我是谁（昵称、呼号、备注名）。写了的话，'
+                '群里只有明确 @ 我的才算冲着我来的；不写就是谁说了都算',
+          },
           'at_time': <String, Object?>{'type': 'string', 'description': 'schedule 用：每天几点，HH:MM'},
           'every_minutes': <String, Object?>{
             'type': 'integer',
@@ -178,6 +184,13 @@ class TriggerSaveTool extends Tool {
     put('signals', (Object? v) {
       if (v is! List) return;
       t.signals = v
+          .map((Object? e) => '$e'.trim())
+          .where((String s) => s.isNotEmpty)
+          .toList();
+    });
+    put('my_names', (Object? v) {
+      if (v is! List) return;
+      t.myNames = v
           .map((Object? e) => '$e'.trim())
           .where((String s) => s.isNotEmpty)
           .toList();

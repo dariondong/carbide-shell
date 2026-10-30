@@ -8,6 +8,7 @@
 library;
 
 import 'phone_signals.dart';
+import 'triggers_mention.dart';
 
 /// 条件从哪儿来。
 enum TriggerKind { phone, message, schedule }
@@ -103,10 +104,12 @@ class Trigger {
     this.actionText = '',
     this.confirm = false,
     this.allowWrite = true,
+    List<String>? myNames,
     this.nextAt,
     this.lastAt,
     List<TriggerRun>? runs,
   })  : signals = signals ?? <String>[],
+        myNames = myNames ?? <String>[],
         runs = runs ?? <TriggerRun>[];
 
   String id;
@@ -138,6 +141,12 @@ class Trigger {
   /// 自动跑起来时，要确认的那些操作放不放行。
   /// 会把机器弄坏的那一档在策略层就拦下了，这里开着也做不了。
   bool allowWrite;
+
+  /// 消息通知：我是谁。昵称、呼号、备注名都写这儿，逗号分开。
+  ///
+  /// 群里有人 @ 我才算冲着我来的；不写这一项就只看关键词，
+  /// 那意味着群里谁说脏话都算。
+  List<String> myNames;
 
   DateTime? nextAt;
   DateTime? lastAt;
@@ -181,6 +190,7 @@ class Trigger {
         'actionText': actionText,
         if (confirm) 'confirm': true,
         if (!allowWrite) 'allowWrite': false,
+        if (myNames.isNotEmpty) 'myNames': myNames,
         if (nextAt != null) 'nextAt': nextAt!.toIso8601String(),
         if (lastAt != null) 'lastAt': lastAt!.toIso8601String(),
         if (runs.isNotEmpty) 'runs': runs.map((TriggerRun r) => r.toJson()).toList(),
@@ -188,6 +198,7 @@ class Trigger {
 
   static Trigger fromJson(Map<String, Object?> json) {
     final Object? rawSignals = json['signals'];
+    final Object? rawMyNames = json['myNames'];
     final Object? rawRuns = json['runs'];
     final List<TriggerRun> runs = <TriggerRun>[];
     if (rawRuns is List) {
@@ -217,6 +228,10 @@ class Trigger {
       confirm: json['confirm'] == true,
       // 没写这一项的是老文件，按能动手算，行为与以前一样。
       allowWrite: json['allowWrite'] != false,
+      // 没写「我是谁」的老文件也照样能用：那就退回只看关键词。
+      myNames: rawMyNames is List
+          ? rawMyNames.map((Object? e) => '$e').where((String s) => s.trim().isNotEmpty).toList()
+          : <String>[],
       nextAt: DateTime.tryParse('${json['nextAt'] ?? ''}'),
       lastAt: DateTime.tryParse('${json['lastAt'] ?? ''}'),
       runs: runs,
@@ -253,7 +268,7 @@ DateTime? nextDueAt(Trigger t, DateTime from) {
 }
 
 /// 一条通知算不算碰上关键词。有大写就按大小写算一遍，没有就忽略大小写。
-bool messageMatches(Trigger t, String title, String text) {
+bool keywordHit(Trigger t, String title, String text) {
   final List<String> words = t.keywords;
   if (words.isEmpty) return false;
   final String haystack = '$title\n$text';
@@ -262,6 +277,24 @@ bool messageMatches(Trigger t, String title, String text) {
     if (haystack.contains(w) || lower.contains(w.toLowerCase())) return true;
   }
   return false;
+}
+
+/// 一条通知算不算「冲着我来的」。
+///
+/// 写清楚了「我是谁」（[Trigger.myNames]）的话，还得看这条是不是冲着主人来的：
+/// 群里别人跟别人斗嘴，不该由主人来接话。
+bool messageMatches(Trigger t, String title, String text) {
+  if (!keywordHit(t, title, text)) return false;
+  // 没写「我是谁」就只看关键词，行为跟以前一样。
+  if (t.myNames.isEmpty) return true;
+  return judgeTarget(title: title, text: text, myNames: t.myNames).atMe;
+}
+
+/// 说得清为什么算冲着我来的，主人一看就懂。
+String targetReason(Trigger t, String title, String text) {
+  if (t.myNames.isEmpty) return '碰上关键词';
+  final MessageTarget j = judgeTarget(title: title, text: text, myNames: t.myNames);
+  return j.atMe ? '冲着我说的（${j.reason}）' : '不是冲着我说的';
 }
 
 /// 消息通知要比对的那一段：上一次看到现在。

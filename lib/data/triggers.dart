@@ -242,18 +242,25 @@ class TriggerRunner {
       final List<DeviceNotification> fresh = list
           .where((DeviceNotification n) => n.at != null && !n.at!.isBefore(since))
           .toList();
+      // 分开数两种：碰上关键词的，和确实冲着我来的。
+      // 写清楚了「我是谁」时，只有后一种才算触发。
+      int keywordHits = 0;
       for (final DeviceNotification n in fresh) {
+        if (!keywordHit(t, n.title, n.text)) continue;
+        keywordHits++;
         if (!messageMatches(t, n.title, n.text)) continue;
         final String what = n.title.trim().isEmpty ? n.text.trim() : n.title.trim();
         await _act(t, at,
-            reason: '${n.app.isEmpty ? '通知' : n.app}「${_clip(what, 40)}」碰上关键词');
+            reason: '${n.app.isEmpty ? '通知' : n.app}「${_clip(what, 40)}」'
+                '${targetReason(t, n.title, n.text)}');
         return;
       }
       await _skip(
         t,
         fresh.isEmpty
             ? '这一段时间（从 ${_clock(since)} 起）一条通知都没收到'
-            : '看了 ${fresh.length} 条通知（从 ${_clock(since)} 起），没碰上关键词',
+            : '看了 ${fresh.length} 条通知（从 ${_clock(since)} 起），'
+                '${keywordHits == 0 ? '没碰上关键词' : '碰上 ${keywordHits} 条但都不是冲着我说的'}',
       );
     } on DeviceError catch (e) {
       await _skip(t, e.message);

@@ -402,6 +402,7 @@ class _TriggersPageState extends State<TriggersPage> {
         Trigger(id: widget.triggers.nextId(), everyMinutes: 15, signals: <String>[]);
     final TextEditingController name = TextEditingController(text: draft.name);
     final TextEditingController intent = TextEditingController(text: draft.intent);
+    final TextEditingController myNames = TextEditingController(text: draft.myNames.join('，'));
     final TextEditingController atTime = TextEditingController(text: draft.atTime);
     final TextEditingController every = TextEditingController(text: '${draft.everyMinutes}');
     final TextEditingController actionText = TextEditingController(text: draft.actionText);
@@ -484,7 +485,7 @@ class _TriggersPageState extends State<TriggersPage> {
                             style: TextStyle(fontSize: 11, color: C.grey, height: 1.6)),
                         const SizedBox(height: 14),
                       ],
-                      if (kind == TriggerKind.message)
+                      if (kind == TriggerKind.message) ...<Widget>[
                         RuleField(
                           controller: intent,
                           label: '关键词',
@@ -492,6 +493,19 @@ class _TriggersPageState extends State<TriggersPage> {
                           minLines: 1,
                           maxLines: 3,
                         ),
+                        const SizedBox(height: 14),
+                        RuleField(
+                          controller: myNames,
+                          label: '我是谁（昵称/呼号/备注名）',
+                          hint: '逗号分开，例如：Darion，BG7LZQ',
+                          minLines: 1,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 6),
+                        Text('写上以后，群里只有明确 @ 你的才算冲着你来的；'
+                            '不写就是谁说了都算。',
+                            style: TextStyle(fontSize: 11, color: C.grey, height: 1.6)),
+                      ],
                       if (kind == TriggerKind.schedule) ...<Widget>[
                         RuleField(
                           controller: atTime,
@@ -613,6 +627,15 @@ class _TriggersPageState extends State<TriggersPage> {
       draft.signals = signals.toList();
     } else {
       draft.signals = <String>[];
+    }
+    if (kind == TriggerKind.message) {
+      draft.myNames = myNames.text
+          .split(RegExp(r'[,，;；\s]+'))
+          .map((String s) => s.trim())
+          .where((String s) => s.isNotEmpty)
+          .toList();
+    } else {
+      draft.myNames = <String>[];
     }
     draft.nextAt = nextDueAt(draft, DateTime.now());
     await _save(draft);
