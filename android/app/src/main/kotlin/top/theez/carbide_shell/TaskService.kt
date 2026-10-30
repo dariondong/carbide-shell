@@ -81,25 +81,28 @@ class TaskService : Service() {
 
     /** 把自己挂成前台；失败返回 false。 */
     private fun declare(text: String): Boolean {
-        // 先发一条普通的：这时还没成为前台服务，问系统「能不能提升」多半是不认，
-        // 也算不出个准。起来之后再换成提升版（relabel 那一下）。
-        val note = ongoing(this, text, promote = false)
+        // 提升版直接交给 startForeground：APRSLocus 就是这么发的，那台机器认。
+        // 有的 ROM 会挡下带提升的那条，那就关掉提升再挂一次。
+        if (start(text, promote = true)) return true
+        return start(text, promote = false)
+    }
+
+    private fun start(text: String, promote: Boolean): Boolean {
+        val note = try {
+            ongoing(this, text, promote = promote)
+        } catch (error: Throwable) {
+            return false
+        }
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else {
                 startForeground(NOTIFICATION_ID, note)
             }
-            // 已经是前台服务了，这会儿再问系统认不认提升，问出来的才算数。
-            relabel(text)
+            sentPromoted = promote && promoCache != PROMO_PLAIN
             true
         } catch (untyped: Throwable) {
-            try {
-                startForeground(NOTIFICATION_ID, note)
-                true
-            } catch (second: Throwable) {
-                false
-            }
+            false
         }
     }
 
@@ -108,6 +111,7 @@ class TaskService : Service() {
         try {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, ongoing(this, text))
+            sentPromoted = promoCache != PROMO_PLAIN
         } catch (error: Throwable) {
             // 通知被拒（安卓 13 没给权限）也不该打断任务。
         }
@@ -145,6 +149,10 @@ class TaskService : Service() {
         /** 本机系统认哪种提升姿势，问过一次就记住。 */
         @Volatile
         private var promoCache: Int = PROMO_UNKNOWN
+
+        /** 最近一次发出去的那条通知带没带提升，诊断里说一句。 */
+        @Volatile
+        private var sentPromoted: Boolean = false
 
         /** 这一轮什么时候开始的，岛上的计时器从这儿走。 */
         @Volatile
@@ -253,6 +261,7 @@ class TaskService : Service() {
             } catch (error: Throwable) {
                 PROMO_UNKNOWN
             }
+            out.add("最近发出的通知：" + (if (sentPromoted) "带提升" else "普通"))
             out.add("系统认的提升：" + when (mode) {
                 PROMO_REQUEST -> "请求接口"
                 PROMO_COLORIZED -> "彩色通知"
@@ -327,7 +336,7 @@ class TaskService : Service() {
                 )
                 val body = text.ifBlank { title }
                 val note = Notification.Builder(context, ALERT_CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_carbide_stat)
+                    .setSmallIcon(R.drawable.ic_carbide_mono)
                     .setContentTitle(title.ifBlank { context.getString(R.string.alert_title) })
                     .setContentText(body)
                     .setStyle(Notification.BigTextStyle().bigText(body))
@@ -389,7 +398,7 @@ class TaskService : Service() {
             )
             val body = tails(text, lines)
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_carbide_stat)
+                .setSmallIcon(R.drawable.ic_carbide_mono)
                 .setContentTitle(context.getString(R.string.task_notification_title))
                 .setContentText(text)
                 .setOngoing(true)
@@ -420,7 +429,7 @@ class TaskService : Service() {
             for (mode in intArrayOf(PROMO_REQUEST, PROMO_COLORIZED)) {
                 val probe = try {
                     NotificationCompat.Builder(context, CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_carbide_stat)
+                        .setSmallIcon(R.drawable.ic_carbide_mono)
                         .setContentTitle("诊断")
                         .setContentText("诊断")
                         .setStyle(NotificationCompat.BigTextStyle().bigText("诊断"))
@@ -513,7 +522,7 @@ class TaskService : Service() {
                     .setLabel(context.getString(R.string.task_reply_hint))
                     .build()
                 val action = NotificationCompat.Action.Builder(
-                    R.drawable.ic_carbide_stat,
+                    R.drawable.ic_carbide_mono,
                     context.getString(R.string.task_reply_action),
                     replyIntent(context),
                 ).addRemoteInput(remote).build()
@@ -526,7 +535,7 @@ class TaskService : Service() {
         private fun done(context: Context, text: String): Notification {
             val body = text.ifBlank { context.getString(R.string.task_done_title) }
             val builder = Notification.Builder(context, DONE_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_carbide_stat)
+                .setSmallIcon(R.drawable.ic_carbide_mono)
                 .setContentTitle(context.getString(R.string.task_done_title))
                 .setContentText(body)
                 .setAutoCancel(true)
@@ -600,7 +609,7 @@ class TaskService : Service() {
                 .setLabel(context.getString(R.string.task_reply_hint))
                 .build()
             return Notification.Action.Builder(
-                Icon.createWithResource(context, R.drawable.ic_carbide_stat),
+                Icon.createWithResource(context, R.drawable.ic_carbide_mono),
                 context.getString(R.string.task_reply_action),
                 replyIntent(context),
             ).addRemoteInput(remote).build()
