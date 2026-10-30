@@ -109,6 +109,7 @@ class MainActivity : FlutterActivity() {
                             call.argument<String>("text").orEmpty(),
                             call.argument<String>("style").orEmpty().ifBlank { "simple" },
                             call.argument<List<String>>("lines") ?: emptyList(),
+                            call.argument<String>("state").orEmpty().ifBlank { TaskService.STATE_RUN },
                         )
                         result.success(null)
                     }
@@ -118,6 +119,7 @@ class MainActivity : FlutterActivity() {
                             this,
                             call.argument<String>("text").orEmpty(),
                             call.argument<List<String>>("lines") ?: emptyList(),
+                            call.argument<String>("state").orEmpty().ifBlank { TaskService.STATE_RUN },
                         )
                         result.success(null)
                     }
@@ -127,12 +129,13 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
-                    "finish" -> {
-                        TaskService.finish(
+                    "complete", "finish" -> {
+                        TaskService.complete(
                             this,
                             call.argument<String>("text").orEmpty(),
                             call.argument<String>("style").orEmpty().ifBlank { "simple" },
                             call.argument<List<String>>("lines") ?: emptyList(),
+                            call.argument<Boolean>("residual") ?: true,
                         )
                         result.success(null)
                     }

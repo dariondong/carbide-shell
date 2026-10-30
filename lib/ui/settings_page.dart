@@ -2051,6 +2051,18 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// 把三条通知状态挨着走一遍，好让人自己看一眼岛上认不认这几种。
+  ///
+  /// 两秒跑着、三秒等人批准、再留几秒「已完成」，然后自己收掉。
+  Future<void> _tryIslandStates() async {
+    await ForegroundTask.begin('试一遍 · 第 1/3 步 · 跑着', state: 'run');
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await ForegroundTask.update('试一遍 · 第 2/3 步 · 等你确认', state: 'wait');
+    await Future<void>.delayed(const Duration(seconds: 3));
+    await ForegroundTask.complete('试一遍 · 已完成',
+        residual: !ForegroundTask.visible);
+  }
+
   /// 这台机器到底缺哪一环：问原生要几行，摆成一个对话框。
   Future<void> _showNotifDiag() async {
     final List<String> lines = await ForegroundTask.diag();
@@ -2075,6 +2087,14 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
         actions: <Widget>[
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              unawaited(_tryIslandStates());
+            },
+            child: Text('试一遍三种状态',
+                style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),

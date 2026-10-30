@@ -58,6 +58,7 @@ class LiveSession {
 
   DateTime lastNote = DateTime.fromMillisecondsSinceEpoch(0);
   String lastNoteText = '';
+  String lastNotePhase = '';
 
   /// 上一次往盘上写记录的时刻。写得太频没意义，太稀又会丢东西。
   DateTime savedAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -199,6 +200,7 @@ class SessionHub extends ChangeNotifier {
     live.cancel = CancelToken();
     live.lastNote = DateTime.fromMillisecondsSinceEpoch(0);
     live.lastNoteText = '';
+    live.lastNotePhase = '';
     loop.maxSteps = services.settings.value.maxSteps;
     loop.extraSystem = services.settings.value.extraPrompt;
     // 设置里的提示词改了，下一轮就用新的；对话自己那份照旧优先。
@@ -385,10 +387,16 @@ class SessionHub extends ChangeNotifier {
   }
 
   /// 通知上写「第 3/12 步 · 执行命令」。1.2 秒一次，字没变就不写。
+  ///
+  /// 状态变了（比如停在那里等人批准）不受这 1.2 秒限制：那一刻通知上要马上说清楚。
   void note(LiveSession live) {
     if (!live.running) return;
+    final bool waiting =
+        live.waiting || live.loop.phase == AgentPhase.waiting;
+    final String phase = waiting ? 'wait' : 'run';
+    final bool flipped = phase != live.lastNotePhase;
     final DateTime now = DateTime.now();
-    if (now.difference(live.lastNote).inMilliseconds < 1200) return;
+    if (!flipped && now.difference(live.lastNote).inMilliseconds < 1200) return;
     live.lastNote = now;
     final String where = switch (live.loop.phase) {
       AgentPhase.thinking => '等模型回话',
@@ -398,9 +406,10 @@ class SessionHub extends ChangeNotifier {
     };
     final String text =
         '${live.conversation.title} · 第 ${live.loop.step}/${live.loop.maxSteps} 步 · $where';
-    if (text == live.lastNoteText) return;
+    if (text == live.lastNoteText && !flipped) return;
     live.lastNoteText = text;
-    board.note('c:${live.conversation.id}', text);
+    live.lastNotePhase = phase;
+    board.note('c:${live.conversation.id}', text, state: phase);
   }
 }
 

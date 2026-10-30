@@ -36,6 +36,7 @@ class TaskService : Service() {
         val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty().ifBlank { DEFAULT_TEXT }
         // 样式和最近几句跟着 intent 进来，服务被重起一次也不会回到默认样子。
         intent?.getStringExtra(EXTRA_STYLE)?.takeIf { it.isNotEmpty() }?.let { style = it }
+        intent?.getStringExtra(EXTRA_STATE)?.takeIf { it.isNotEmpty() }?.let { noteState = it }
         intent?.getStringArrayListExtra(EXTRA_LINES)?.let { lines = it }
         if (!declare(text)) {
             // 系统不让起前台服务（缺权限、被后台限制）：这个任务照常在界面里跑，
@@ -106,11 +107,12 @@ class TaskService : Service() {
         }
     }
 
-    /** 只改那一行字。 */
-    private fun relabel(text: String) {
+    /** 只改那一行字，顺带换状态（跑着 / 待批准 / 已完成）。 */
+    private fun relabel(text: String, state: String = noteState) {
+        noteState = state
         try {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, ongoing(this, text))
+            manager.notify(NOTIFICATION_ID, ongoing(this, text, state = state))
             sentPromoted = promoCache != PROMO_PLAIN
         } catch (error: Throwable) {
             // 通知被拒（安卓 13 没给权限）也不该打断任务。
@@ -121,6 +123,16 @@ class TaskService : Service() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_STYLE = "style"
         const val EXTRA_LINES = "lines"
+        const val EXTRA_STATE = "state"
+
+        /** 跑着。岛/胶囊上的短字是第几步，配一个走着的秒数。 */
+        const val STATE_RUN = "run"
+
+        /** 等人在应用里点批准。短字说「待批准」，不配计时器。 */
+        const val STATE_WAIT = "wait"
+
+        /** 跑完了。短字说「已完成」，留几秒再收掉。 */
+        const val STATE_DONE = "done"
 
         /** 通知上那一格字，以及点了发出去之后走过来的那个 action。 */
         const val REPLY_KEY = "reply_text"
@@ -157,6 +169,19 @@ class TaskService : Service() {
         /** 这一轮什么时候开始的，岛上的计时器从这儿走。 */
         @Volatile
         private var startedAt: Long = System.currentTimeMillis()
+
+        /** 这条通知现在处在哪一步，短字跟着它变。 */
+        @Volatile
+        private var noteState: String = STATE_RUN
+
+        /** 跑完那一下在岛上留多久再收掉。 */
+        private const val DONE_HOLD_MS = 8000L
+
+        /** 收尾那一下排在主线程上，新的一轮开始时取消。 */
+        private val ui = android.os.Handler(android.os.Looper.getMainLooper())
+
+        @Volatile
+        private var closeDone: Runnable? = null
 
         /** 通知长什么样：一行、折开、一行一条、像聊天。 */
         const val STYLE_SIMPLE = "simple"
@@ -201,13 +226,18 @@ class TaskService : Service() {
             text: String,
             style: String = STYLE_SIMPLE,
             lines: List<String> = emptyList(),
+            state: String = STATE_RUN,
         ) {
             TaskService.style = style
             TaskService.lines = lines
+            noteState = state
+            closeDone?.let { ui.removeCallbacks(it) }
+            closeDone = null
             startedAt = System.currentTimeMillis()
             val intent = Intent(context, TaskService::class.java)
                 .putExtra(EXTRA_TEXT, text)
                 .putExtra(EXTRA_STYLE, style)
+                .putExtra(EXTRA_STATE, state)
                 .putStringArrayListExtra(EXTRA_LINES, ArrayList(lines))
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -222,13 +252,57 @@ class TaskService : Service() {
         }
 
         /** 更新通知上那句进度。服务没起来就换成 start，起不来就算了。 */
-        fun update(context: Context, text: String, lines: List<String> = emptyList()) {
+        fun update(
+            context: Context,
+            text: String,
+            lines: List<String> = emptyList(),
+            state: String = STATE_RUN,
+        ) {
             TaskService.lines = lines
             val live = instance
             if (live == null) {
-                start(context, text, style, lines)
+                start(context, text, style, lines, state)
             } else {
-                live.relabel(text)
+                live.relabel(text, state)
+            }
+        }
+
+        /**
+         * 跑完了：先把同一条通知换成「已完成」，岛上看得到结束那一下，
+         * 几秒后再收掉。
+         *
+         * [residual] 为真（人不在应用里）时，收掉之后另留一条能点回来的完成通知。
+         */
+        fun complete(
+            context: Context,
+            text: String,
+            style: String = STYLE_SIMPLE,
+            lines: List<String> = emptyList(),
+            residual: Boolean = true,
+        ) {
+            TaskService.style = style
+            TaskService.lines = lines
+            val app = context.applicationContext
+            try {
+                val live = instance
+                if (live == null) {
+                    start(app, text, style, lines, STATE_DONE)
+                } else {
+                    live.relabel(text, STATE_DONE)
+                }
+            } catch (error: Throwable) {
+                // 换不成就算了，下面照样收尾。
+            }
+            closeDone?.let { ui.removeCallbacks(it) }
+            val close = Runnable {
+                closeDone = null
+                if (residual) finish(app, text, style, lines) else stop(app)
+            }
+            closeDone = close
+            try {
+                ui.postDelayed(close, DONE_HOLD_MS)
+            } catch (error: Throwable) {
+                if (residual) finish(app, text, style, lines) else stop(app)
             }
         }
 
@@ -263,6 +337,11 @@ class TaskService : Service() {
                 PROMO_UNKNOWN
             }
             out.add("最近发出的通知：" + (if (sentPromoted) "带提升" else "普通"))
+            out.add("通知状态：" + when (noteState) {
+                STATE_WAIT -> "待批准"
+                STATE_DONE -> "已完成"
+                else -> "运行中"
+            })
             out.add("系统认的提升：" + when (mode) {
                 PROMO_REQUEST -> "请求接口"
                 PROMO_COLORIZED -> "彩色通知"
@@ -364,7 +443,10 @@ class TaskService : Service() {
         }
 
         fun stop(context: Context) {
+            closeDone?.let { ui.removeCallbacks(it) }
+            closeDone = null
             instance = null
+            noteState = STATE_RUN
             try {
                 context.stopService(Intent(context, TaskService::class.java))
             } catch (error: Throwable) {
@@ -403,6 +485,7 @@ class TaskService : Service() {
             context: Context,
             text: String,
             promote: Boolean = true,
+            state: String = noteState,
         ): Notification {
             ensureChannel(
                 context, CHANNEL_ID,
@@ -424,14 +507,23 @@ class TaskService : Service() {
                     ?: NotificationCompat.BigTextStyle().bigText(body.joinToString("\n"))
             )
             tryAddReplyCompat(context, builder)
-            if (promote) promo(context, builder, shortOf(text))
+            if (promote) promo(context, builder, shortOf(text, state), timer = state == STATE_RUN)
             return builder.build()
         }
 
-        /** 提示条上那几个字：说得出第几步就说步数，说不上就是「运行中」。 */
-        private fun shortOf(text: String): String {
-            val hit = Regex("第\\s*(\\d+)\\s*步").find(text)
-            return if (hit != null) "${hit.groupValues[1]} 步" else "运行中"
+        /**
+         * 岛/胶囊上那句短字。
+         *
+         * 跑着就说第几步；等人批准说「待批准」；跑完了说「已完成」。
+         * 短字超过七个字系统就不画，所以一律三个字。
+         */
+        private fun shortOf(text: String, state: String): String = when (state) {
+            STATE_WAIT -> "待批准"
+            STATE_DONE -> "已完成"
+            else -> {
+                val hit = Regex("第\\s*(\\d+)\\s*步").find(text)
+                if (hit != null) "${hit.groupValues[1]} 步" else "运行中"
+            }
         }
 
         /** 系统认不认提升：两种姿势各造一条真通知问它，认下就缓存。 */
@@ -447,7 +539,7 @@ class TaskService : Service() {
                         .setContentText("诊断")
                         .setStyle(NotificationCompat.BigTextStyle().bigText("诊断"))
                         .setOngoing(true)
-                        .also { hook(it, mode, "9s") }
+                        .also { hook(it, mode, "9s", true) }
                         .build()
                 } catch (error: Throwable) {
                     null
@@ -461,33 +553,44 @@ class TaskService : Service() {
             return decided
         }
 
-        private fun promo(context: Context, builder: NotificationCompat.Builder, short: String) {
+        private fun promo(
+            context: Context,
+            builder: NotificationCompat.Builder,
+            short: String,
+            timer: Boolean,
+        ) {
             val mode = promoMode(context)
             if (mode == PROMO_PLAIN) return
             try {
-                hook(builder, mode, short)
+                hook(builder, mode, short, timer)
             } catch (error: Throwable) {
                 // 请系统考虑提升只是额外一句，挂不上也不能把通知弄丢。
             }
         }
 
         /** 两套门槛：安卓 16 QPR1 要请求标记且不能是彩色，首发版反过来只认彩色。 */
-        private fun hook(builder: NotificationCompat.Builder, mode: Int, short: String) {
+        private fun hook(
+            builder: NotificationCompat.Builder,
+            mode: Int,
+            short: String,
+            timer: Boolean,
+        ) {
             when (mode) {
-                PROMO_REQUEST -> {
-                    builder.setRequestPromotedOngoing(true)
-                    if (short.isNotEmpty()) builder.setShortCriticalText(short)
-                }
-                PROMO_COLORIZED -> {
-                    builder.setColorized(true)
-                    if (short.isNotEmpty()) builder.setShortCriticalText(short)
-                }
+                PROMO_REQUEST -> builder.setRequestPromotedOngoing(true)
+                PROMO_COLORIZED -> builder.setColorized(true)
                 else -> return
             }
-            // 岛上一秒一跳的那串数字交给系统自己走，不用为了它反复重发通知。
-            builder.setWhen(startedAt)
-                .setUsesChronometer(true)
-                .setShowWhen(true)
+            if (short.isNotEmpty()) builder.setShortCriticalText(short)
+            if (timer) {
+                // 岛上一秒一跳的那串数字交给系统自己走，不用为了它反复重发通知。
+                builder.setWhen(startedAt)
+                    .setUsesChronometer(true)
+                    .setShowWhen(true)
+            } else {
+                // 等批准、已完成都没有在走的秒数：把计时器关掉，位置上留给那句短字。
+                builder.setUsesChronometer(false)
+                    .setShowWhen(false)
+            }
         }
 
         private fun promotable(note: Notification): Boolean = try {

@@ -39,27 +39,36 @@ class ForegroundTask {
   ///
   /// [style] 是通知长什么样（`simple` / `big` / `list` / `chat`），
   /// [lines] 是最近说过的几句，大文本和会话样式拿它铺开。
+  /// [state] 是这一步处在哪种状态（`run` 跑着 / `wait` 等人批准），岛上的短字跟着它变。
   static Future<void> begin(
     String text, {
     String style = 'simple',
     List<String> lines = const <String>[],
+    String state = 'run',
   }) =>
-      _call('begin', text, style: style, lines: lines);
+      _call('begin', text, style: style, lines: lines, state: state);
 
   /// 跑完了，把通知收掉。
   static Future<void> end() => _call('end', '');
 
   /// 换通知上那句话。服务没起来就等于再 begin 一次。
-  static Future<void> update(String text, {List<String> lines = const <String>[]}) =>
-      _call('update', text, lines: lines);
+  static Future<void> update(
+    String text, {
+    List<String> lines = const <String>[],
+    String state = 'run',
+  }) =>
+      _call('update', text, lines: lines, state: state);
 
-  /// 跑完了，把通知收掉。人不在这个应用里时留一条「跑完了」，点一下回来。
-  static Future<void> finish(
+  /// 跑完了：先把同一条通知换成「已完成」，岛上留几秒，再收掉。
+  ///
+  /// [residual] 为真（人不在应用里）时，收掉之后另留一条能点回来的完成通知。
+  static Future<void> complete(
     String text, {
     String style = 'simple',
     List<String> lines = const <String>[],
+    bool residual = true,
   }) =>
-      _call('finish', text, style: style, lines: lines);
+      _call('complete', text, style: style, lines: lines, residual: residual);
 
   /// 一条提示：不常驻，点一下回到应用。资源监听过线、模型要提醒人时用。
   ///
@@ -186,6 +195,8 @@ class ForegroundTask {
     int slot = 0,
     String style = '',
     List<String> lines = const <String>[],
+    String state = '',
+    bool residual = true,
   }) async {
     if (!supported) return;
     try {
@@ -197,6 +208,8 @@ class ForegroundTask {
           'slot': slot,
           'style': style,
           'lines': lines,
+          'state': state,
+          'residual': residual,
         },
       );
     } on MissingPluginException {
