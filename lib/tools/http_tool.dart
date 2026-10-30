@@ -18,6 +18,7 @@ class HttpTool extends Tool {
   @override
   String get description =>
       '发一个 HTTP 请求。设置里加过的域名直接发；没加过的会先问一句，批准了这一次才发。'
+      '要以后都能发，用 http_allow 把这个域名加进允许列表。'
       '返回状态码、头前几行和正文。';
 
   /// 域名在允许列表里没有，就要问一句才发。
@@ -70,7 +71,7 @@ class HttpTool extends Tool {
     }
     final bool allowed = _allowed(uri.host) || context.granted;
     if (!allowed) {
-      return ToolOutcome.failure('${uri.host} 不在允许列表里。先到设置里加上它，'
+      return ToolOutcome.failure('${uri.host} 不在允许列表里。要用 http_allow 把它加进允许列表，'
           '或者让用户批准这一次。');
     }
 

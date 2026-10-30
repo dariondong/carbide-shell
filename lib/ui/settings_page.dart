@@ -90,6 +90,12 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _prompt;
   late final TextEditingController _sys;
   late final TextEditingController _domains;
+
+  /// 这一格被人动过没有。模型加的域名不能被这里的旧文本冲掉。
+  bool _domainsTyped = false;
+
+  /// 上一次和这一格对齐时的域名清单，人改的时候只按差异落地。
+  List<String> _domainsBase = <String>[];
   late final TextEditingController _priceIn;
   late final TextEditingController _priceCache;
   late final TextEditingController _priceOut;
@@ -153,6 +159,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _prompt = TextEditingController(text: s.extraPrompt);
     _sys = TextEditingController(text: s.systemPrompt);
     _domains = TextEditingController(text: s.allowedDomains.join('\n'));
+    _domainsBase = List<String>.of(s.allowedDomains);
     _priceIn = TextEditingController();
     _priceCache = TextEditingController();
     _priceOut = TextEditingController();
@@ -275,12 +282,25 @@ class _SettingsPageState extends State<SettingsPage> {
       ..autoCompact = _autoCompact
       ..notifStyle = _notifStyle
       ..peakHolidays = _linesOf(_peakHolidays.text)
-      ..peakMakeup = _linesOf(_peakMakeup.text)
-      ..allowedDomains = _domains.text
+      ..peakMakeup = _linesOf(_peakMakeup.text);
+    // 域名这一格只按「人改了什么」落地：模型用 http_allow 加进来的域名，
+    // 不能因为这里手一动就被旧文本冲掉。
+    if (_domainsTyped) {
+      final List<String> typed = _domains.text
           .split(RegExp(r'[\s,]+'))
           .map((String d) => d.trim())
           .where((String d) => d.isNotEmpty)
           .toList();
+      final List<String> kept = widget.settings.value.allowedDomains
+          .where((String d) => !_domainsBase.contains(d) || typed.contains(d))
+          .toList();
+      for (final String d in typed) {
+        if (!kept.contains(d)) kept.add(d);
+      }
+      widget.settings.value.allowedDomains = kept;
+      _domainsBase = typed;
+      _domainsTyped = false;
+    }
     // 手填的价：三个数都空着就回到内置价目表。
     final double? pin = double.tryParse(_priceIn.text.trim());
     final double? pcache = double.tryParse(_priceCache.text.trim());
@@ -1076,7 +1096,10 @@ class _SettingsPageState extends State<SettingsPage> {
               hint: '一行一个，留空表示一个都不许',
               minLines: 4,
               maxLines: 8,
-              onChanged: (_) => _touch(),
+              onChanged: (_) {
+                _domainsTyped = true;
+                _touch();
+              },
             ),
           ),
         ];

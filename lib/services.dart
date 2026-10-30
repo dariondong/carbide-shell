@@ -28,6 +28,7 @@ import 'tools/host_tools.dart';
 import 'tools/task_tools.dart';
 import 'tools/http_tool.dart';
 import 'tools/local_tools.dart';
+import 'tools/net_tool.dart';
 import 'tools/mail_read_tool.dart';
 import 'tools/mail_tool.dart';
 import 'tools/notify_tool.dart';
@@ -138,6 +139,7 @@ class AppServices {
       ..register(SshExecTool(pool, hosts))
       ..register(SshSftpTool(pool, hosts))
       ..register(HttpTool(settings))
+      ..register(HttpAllowTool(settings))
       ..register(ClockTool())
       ..register(FileTool())
       ..register(TempFileTool(files))
