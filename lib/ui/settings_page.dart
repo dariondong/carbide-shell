@@ -146,6 +146,12 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
   final ValueNotifier<int> _tick = ValueNotifier<int>(0);
 
+  /// 价目表那三个数是不是人刚动过。
+  ///
+  /// 输入框里空着不等于「没价」：没动过就不该把它写回去，否则在别处改一个字，
+  /// 顺手就会把存着的价冲掉。
+  bool _priceTyped = false;
+
   @override
   void initState() {
     super.initState();
@@ -161,9 +167,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _sys = TextEditingController(text: s.systemPrompt);
     _domains = TextEditingController(text: s.allowedDomains.join('\n'));
     _domainsBase = List<String>.of(s.allowedDomains);
-    _priceIn = TextEditingController();
-    _priceCache = TextEditingController();
-    _priceOut = TextEditingController();
+    _priceIn = TextEditingController(text: _priceText(s.active.price['input']));
+    _priceCache = TextEditingController(text: _priceText(s.active.price['cache']));
+    _priceOut = TextEditingController(text: _priceText(s.active.price['output']));
     _peakHolidays = TextEditingController(text: s.peakHolidays.join('\n'));
     _peakMakeup = TextEditingController(text: s.peakMakeup.join('\n'));
     final SmtpConfig m = widget.mail.value;
@@ -214,6 +220,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    // 停手不到 600ms 就退出这一页时，那笔输入还没落盘：现在写一次，别白填。
+    if (_debounce?.isActive ?? false) unawaited(_persist());
     _debounce?.cancel();
     _tick.dispose();
     _base.dispose();
@@ -302,17 +310,21 @@ class _SettingsPageState extends State<SettingsPage> {
       _domainsBase = typed;
       _domainsTyped = false;
     }
-    // 手填的价：三个数都空着就回到内置价目表。
-    final double? pin = double.tryParse(_priceIn.text.trim());
-    final double? pcache = double.tryParse(_priceCache.text.trim());
-    final double? pout = double.tryParse(_priceOut.text.trim());
-    widget.settings.value.active.price
-      ..clear()
-      ..addAll(<String, Object?>{
-        if (pin != null && pin > 0) 'input': pin,
-        if (pcache != null && pcache > 0) 'cache': pcache,
-        if (pout != null && pout > 0) 'output': pout,
-      });
+    // 手填的价：三个数都空着就回到内置价目表。只在这一页真被改过时才写，
+    // 别的地方动一下不该把存着的价冲掉。
+    if (_priceTyped) {
+      final double? pin = double.tryParse(_priceIn.text.trim());
+      final double? pcache = double.tryParse(_priceCache.text.trim());
+      final double? pout = double.tryParse(_priceOut.text.trim());
+      widget.settings.value.active.price
+        ..clear()
+        ..addAll(<String, Object?>{
+          if (pin != null && pin > 0) 'input': pin,
+          if (pcache != null && pcache > 0) 'cache': pcache,
+          if (pout != null && pout > 0) 'output': pout,
+        });
+      _priceTyped = false;
+    }
     await widget.settings.save();
     await widget.secrets
         .write(modelSecretKeyFor(widget.settings.value.activeProfile), _key.text.trim());
@@ -799,21 +811,30 @@ class _SettingsPageState extends State<SettingsPage> {
                   label: '输入价（元 / 百万 token）',
                   hint: '没命中缓存的那部分',
                   keyboard: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => _touch(),
+                  onChanged: (_) {
+                    _priceTyped = true;
+                    _touch();
+                  },
                 ),
                 RuleField(
                   controller: _priceCache,
                   label: '缓存命中价（元 / 百万 token）',
                   hint: '不确定就留空，按输入价算',
                   keyboard: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => _touch(),
+                  onChanged: (_) {
+                    _priceTyped = true;
+                    _touch();
+                  },
                 ),
                 RuleField(
                   controller: _priceOut,
                   label: '输出价（元 / 百万 token）',
                   hint: '模型的输出报价',
                   keyboard: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => _touch(),
+                  onChanged: (_) {
+                    _priceTyped = true;
+                    _touch();
+                  },
                 ),
                 _action('用内置价目表', '清掉上面手填的三个数', _clearPrice),
               ],
@@ -1328,6 +1349,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _picked = '';
     _profilePrompt.text = '';
     _profileUserPrompt.text = '';
+    _priceIn.text = '';
+    _priceCache.text = '';
+    _priceOut.text = '';
+    _priceTyped = false;
     await widget.settings.save();
     if (!mounted) return;
     _setSaved('新建了一套');
@@ -1627,6 +1652,18 @@ class _SettingsPageState extends State<SettingsPage> {
     _setSaved('复制成了 ${copy.label}，密钥要自己填');
   }
 
+  /// 存着的价怎么写进输入框：`2` 不写成 `2.0`，没有就是空。
+  static String _priceText(Object? value) {
+    if (value is num) {
+      if (value <= 0) return '';
+      return value == value.roundToDouble()
+          ? '${value.toInt()}'
+          : '$value';
+    }
+    final String text = '${value ?? ''}'.trim();
+    return text == 'null' ? '' : text;
+  }
+
   /// 这套配置的价从哪儿来，一句话说清。
   String _priceLine(ModelProfile p) {
     final PriceQuote quote = quotePrice(manual: p.price, model: p.model);
@@ -1643,6 +1680,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _priceIn.text = '';
     _priceCache.text = '';
     _priceOut.text = '';
+    _priceTyped = true;
     setState(() {});
     await _persist();
     _setSaved('改回内置价目表');
@@ -1655,12 +1693,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _model.text = s.model;
     _profilePrompt.text = s.active.prompt;
     _profileUserPrompt.text = s.active.userPrompt;
-    final String pin = '${s.active.price['input'] ?? ''}';
-    final String pcache = '${s.active.price['cache'] ?? ''}';
-    final String pout = '${s.active.price['output'] ?? ''}';
-    _priceIn.text = pin.isEmpty || pin == 'null' ? '' : pin;
-    _priceCache.text = pcache.isEmpty || pcache == 'null' ? '' : pcache;
-    _priceOut.text = pout.isEmpty || pout == 'null' ? '' : pout;
+    _priceIn.text = _priceText(s.active.price['input']);
+    _priceCache.text = _priceText(s.active.price['cache']);
+    _priceOut.text = _priceText(s.active.price['output']);
+    _priceTyped = false;
     _picked = '';
   }
 
