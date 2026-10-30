@@ -139,9 +139,21 @@ object SpeechHelper {
 
     /** 起一段新的识别。手指按着就一直有这一段。 */
     private fun open() {
+        if (appContext == null) return
+        val had = recognizer != null
+        release()
+        // 上一段刚销毁就新建、立刻 startListening，有的引擎会立刻回 ERROR_CLIENT。
+        // 换段时留一小口气，第一次按下去就不用等。
+        if (had) {
+            ui.postDelayed({ create() }, 120L)
+        } else {
+            create()
+        }
+    }
+
+    private fun create() {
         val ctx = appContext ?: return
         try {
-            release()
             val engine = SpeechRecognizer.createSpeechRecognizer(ctx)
             engine.setRecognitionListener(Listener())
             recognizer = engine
@@ -251,7 +263,7 @@ object SpeechHelper {
             val code = reasonOf(error)
             SpeechHelper.lastError = "$code（$error）"
             // 还没开口就没认出来、手指也还按着：重开一段，别一下子就结束。
-            if (code == "no-match" || code == "no-speech") {
+            if (code == "no-match" || code == "no-speech" || code == "client") {
                 if (SpeechHelper.reopen()) return
             }
             SpeechHelper.emit("error", code = code)

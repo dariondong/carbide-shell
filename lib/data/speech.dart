@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,26 @@ class Speech {
 
   /// 现在是不是在听。界面上那个「正在听」看它。
   static final ValueNotifier<bool> listening = ValueNotifier<bool>(false);
+
+  /// 输入框上方那一行小字：正听着说「正在听」，没认出来时说一句为什么。
+  ///
+  /// 走的是这一行字而不是弹窗：长按说话本来就是手上的动作，屏幕上再弹一条挡着更烦。
+  static final ValueNotifier<String> hint = ValueNotifier<String>('');
+
+  static const String _listeningText = '正在听，松手结束';
+
+  static Timer? _clearHint;
+
+  /// 改那一行字。[hold] 之后自己收起来，0 表示一直留着。
+  static void _say(String text, {Duration hold = const Duration(seconds: 3)}) {
+    _clearHint?.cancel();
+    _clearHint = null;
+    hint.value = text;
+    if (text.isEmpty || hold == Duration.zero) return;
+    _clearHint = Timer(hold, () {
+      if (hint.value == text) hint.value = '';
+    });
+  }
 
   /// 这句话送给谁：每条结果都从这儿出去。
   static void Function(String text, bool done)? _onText;
@@ -134,13 +155,28 @@ class Speech {
           _onText?.call('${args['text'] ?? ''}', args['done'] == true);
           break;
         case 'state':
-          listening.value = args['on'] == true;
+          final bool on = args['on'] == true;
+          listening.value = on;
+          if (on) {
+            _say(_listeningText, hold: const Duration(minutes: 5));
+          } else if (hint.value == _listeningText) {
+            _say('');
+          }
           break;
         case 'error':
           listening.value = false;
           final String code = '${args['code'] ?? 'error'}';
-          // 没听到话、没认出来都不算错，别拿这个烦人。
-          if (code != 'no-speech' && code != 'no-match') _onError?.call(code);
+          // 没听到话不算错，只说一句「没听清」；别的原因把代号一起写出来，
+          // 真出问题时看一眼就知道是哪一环。
+          _say(switch (code) {
+            'no-match' || 'no-speech' => '没听清，再按一次',
+            'permission' => '没有麦克风权限',
+            'no-service' => '这台机器没有语音识别服务',
+            'network' => '语音识别要联网，这次没连上',
+            'busy' => '识别服务正忙着，等一下再说',
+            _ => '识别没起来（$code）',
+          });
+          _onError?.call(code);
           break;
       }
       return null;

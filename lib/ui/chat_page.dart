@@ -1903,28 +1903,42 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// 说的是不是正听着：一条小字挂在输入框上方。
+  /// 输入框上方那一行小字：正听着、没听清，都写在这里，不弹窗。
   Widget _listeningHint() {
-    return ValueListenableBuilder<bool>(
-      valueListenable: Speech.listening,
-      builder: (BuildContext ctx, bool on, Widget? child) {
+    return ValueListenableBuilder<String>(
+      valueListenable: Speech.hint,
+      builder: (BuildContext ctx, String note, Widget? child) {
+        final bool listening = Speech.listening.value;
         return AnimatedSize(
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
           alignment: Alignment.topCenter,
-          child: on
-              ? Padding(
+          child: note.isEmpty
+              ? const SizedBox(width: double.infinity)
+              : Padding(
                   padding: const EdgeInsets.only(left: 4, bottom: 6),
                   child: Row(
                     children: <Widget>[
-                      Icon(Icons.graphic_eq, size: 13, color: C.blue),
+                      Icon(
+                        listening ? Icons.graphic_eq : Icons.info_outline,
+                        size: 13,
+                        color: listening ? C.blue : C.grey,
+                      ),
                       const SizedBox(width: 5),
-                      Text('正在听，松手结束',
-                          style: TextStyle(fontSize: 11, color: C.blue)),
+                      Expanded(
+                        child: Text(
+                          note,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: listening ? C.blue : C.grey,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                )
-              : const SizedBox(width: double.infinity),
+                ),
         );
       },
     );

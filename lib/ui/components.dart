@@ -729,7 +729,7 @@ class _HoldToTalkState extends State<HoldToTalk> {
   void _begin() {
     if (!widget.enabled || !Speech.supported) return;
     _base = widget.controller.text;
-    Speech.listen(onText: _apply, onError: _complain);
+    Speech.listen(onText: _apply);
   }
 
   /// 松手：说完这一句。
@@ -757,20 +757,6 @@ class _HoldToTalkState extends State<HoldToTalk> {
     if (base.endsWith(' ') || base.endsWith('\n')) return '$base$add';
     final bool ascii = RegExp(r'^[A-Za-z0-9]').hasMatch(add);
     return ascii ? '$base $add' : '$base$add';
-  }
-
-  void _complain(String code) {
-    if (!mounted) return;
-    final String text = switch (code) {
-      'permission' => '没有麦克风权限',
-      'no-service' => '这台机器没有语音识别服务',
-      'network' => '语音识别要联网，这次没连上',
-      'busy' => '识别服务正忙着，等一下再说',
-      _ => '这次没听清',
-    };
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(text), duration: const Duration(seconds: 2)),
-    );
   }
 
   @override
