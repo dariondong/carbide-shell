@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'conversation.dart';
 import 'models.dart';
 
@@ -36,14 +34,14 @@ class TreeNode {
 
   bool get onPath => pathIndex >= 0;
 
-  /// 离根几层，画的时候决定半径。
+  /// 第几列：离根几层。
   int depth = 0;
 
-  /// 从圆心看过去的角度（弧度）。
-  double angle = 0;
+  /// 第几条线：主干占第 0 条，分出去的每一叉往右开一条。
+  int lane = 0;
 }
 
-/// 把主线加挂着的分支拼成一棵树：主线是树干，退掉的每一段从分出去的地方长出来。
+/// 把主线加挂着的分支拼成一棵树：主线是主干，退掉的每一段从分出去的地方岔开。
 List<TreeNode> buildTree(List<LlmMessage> path, List<ConvBranch> branches) {
   final List<TreeNode> nodes = <TreeNode>[];
   int? last;
@@ -103,9 +101,10 @@ int? _roundIdAt(List<TreeNode> nodes, int pathIndex) {
   return null;
 }
 
-/// 同心圆布局：深度决定半径，叶子平分一整圈，中间的节点取孩子角度的中点。
+/// 排位置：一行一轮，一列一条线。
 ///
-/// 一条链（还没有分支的时候）就是一根笔直的射线；分出几段，就在分叉处掰开几个角。
+/// 从上往下：第一个孩子接自己这条线直着往下走，所以主干是一根笔直的竖线；
+/// 其余的孩子各往右开一条新线，从岔口拐出去再往下。
 void layoutTree(List<TreeNode> nodes) {
   if (nodes.isEmpty) return;
   final Map<int, List<int>> kids = <int, List<int>>{};
@@ -131,50 +130,38 @@ void layoutTree(List<TreeNode> nodes) {
     n.depth = depth;
   }
 
-  int leaves = 0;
-  void countLeaves(int id) {
+  int nextLane = 0;
+  void assign(int id, int lane) {
+    nodes[id].lane = lane;
     final List<int> ch = kids[id] ?? const <int>[];
-    if (ch.isEmpty) {
-      leaves += 1;
-      return;
-    }
     for (final int k in ch) {
-      countLeaves(k);
+      // 同一条线接着走就留在这一列；开一条新支线就拐到右边新的一列。
+      assign(k, nodes[k].branch == nodes[id].branch ? lane : nextLane++);
     }
   }
 
   for (final int r in roots) {
-    countLeaves(r);
-  }
-  if (leaves <= 0) return;
-  final double step = 2 * math.pi / leaves;
-  int slot = 0;
-
-  void assign(int id) {
-    final List<int> ch = kids[id] ?? const <int>[];
-    if (ch.isEmpty) {
-      nodes[id].angle = -math.pi / 2 + slot * step;
-      slot += 1;
-      return;
-    }
-    for (final int k in ch) {
-      assign(k);
-    }
-    final double first = nodes[ch.first].angle;
-    final double last = nodes[ch.last].angle;
-    nodes[id].angle = (first + last) / 2;
-  }
-
-  for (final int r in roots) {
-    assign(r);
+    // 先把这一列的号占下来，分支才不会跟主干抢同一列。
+    final int lane = nextLane;
+    nextLane += 1;
+    assign(r, lane);
   }
 }
 
-/// 树上一共几层，画的时候定半径。
+/// 树上一共几层，也就是画出来有几行。
 int treeDepth(List<TreeNode> nodes) {
   int max = 0;
   for (final TreeNode n in nodes) {
     if (n.depth > max) max = n.depth;
   }
   return max;
+}
+
+/// 树上一共几条线，也就是画出来有几列。
+int treeLanes(List<TreeNode> nodes) {
+  int max = 0;
+  for (final TreeNode n in nodes) {
+    if (n.lane > max) max = n.lane;
+  }
+  return max + 1;
 }

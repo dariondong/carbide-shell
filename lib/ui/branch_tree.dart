@@ -5,34 +5,43 @@ import 'package:flutter/material.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/tree.dart';
-
 import 'components.dart';
 import 'theme.dart';
 
-/// 一场对话的树。
+/// 一场对话的线路图。
 ///
-/// 同心圆：中间是这场对话的起点，往外一圈是一句。主线是一根笔直的射线，
-/// 退掉的每一段在它分出去的那一圈掰开一个角，一直长到最外圈。
-/// 点一个点先选中，下面写清这是哪一句、能做什么，按按钮才真的动。
+/// 从上往下：一格一轮，主干在左边一列笔直往下走，退掉的每一段从岔口往右拐一条线，
+/// 自己再往下走。线条是直角加圆角的，跟电路图一个样子。
 class ConvTreePanel extends StatefulWidget {
   const ConvTreePanel({
     super.key,
     required this.messages,
     required this.branches,
     required this.onAct,
-    this.side = 300,
+    this.height = 320,
   });
 
   final List<LlmMessage> messages;
   final List<ConvBranch> branches;
   final void Function(TreeNode node) onAct;
-  final double side;
+
+  /// 画布多高，超过就上下滚。
+  final double height;
 
   @override
   State<ConvTreePanel> createState() => _ConvTreePanelState();
 }
 
 class _ConvTreePanelState extends State<ConvTreePanel> {
+  static const double _boxW = 132;
+  static const double _boxH = 52;
+  static const double _gapY = 26;
+  static const double _gapX = 22;
+  static const double _pad = 14;
+
+  final ScrollController _down = ScrollController();
+  final ScrollController _across = ScrollController();
+
   late List<TreeNode> _nodes = _build();
   int? _picked;
 
@@ -40,6 +49,23 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
     final List<TreeNode> nodes = buildTree(widget.messages, widget.branches);
     layoutTree(nodes);
     return nodes;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 新的一轮在最下面：打开就到底。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_down.hasClients) return;
+      _down.jumpTo(_down.position.maxScrollExtent);
+    });
+  }
+
+  @override
+  void dispose() {
+    _down.dispose();
+    _across.dispose();
+    super.dispose();
   }
 
   @override
@@ -52,6 +78,21 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
     }
   }
 
+  double get _width {
+    final int lanes = treeLanes(_nodes);
+    return _pad * 2 + lanes * _boxW + (lanes - 1) * _gapX;
+  }
+
+  double get _height {
+    final int rows = treeDepth(_nodes) + 1;
+    return _pad * 2 + rows * _boxH + (rows - 1) * _gapY;
+  }
+
+  Offset _topLeft(TreeNode n) => Offset(
+        _pad + n.lane * (_boxW + _gapX),
+        _pad + n.depth * (_boxH + _gapY),
+      );
+
   TreeNode? get _node {
     final int? id = _picked;
     if (id == null) return null;
@@ -59,33 +100,6 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
       if (n.id == id) return n;
     }
     return null;
-  }
-
-  double get _step {
-    final int max = treeDepth(_nodes);
-    if (max <= 0) return 0;
-    return (widget.side / 2 - 24) / max;
-  }
-
-  Offset _at(TreeNode n) {
-    final double r = n.depth * _step;
-    return Offset(
-      widget.side / 2 + math.cos(n.angle) * r,
-      widget.side / 2 + math.sin(n.angle) * r,
-    );
-  }
-
-  void _tap(TapUpDetails d) {
-    TreeNode? best;
-    double bestD = 20;
-    for (final TreeNode n in _nodes) {
-      final double dist = (_at(n) - d.localPosition).distance;
-      if (dist < bestD) {
-        bestD = dist;
-        best = n;
-      }
-    }
-    setState(() => _picked = best?.id);
   }
 
   static String _stamp(DateTime? t) {
@@ -96,8 +110,8 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
 
   static String _line(String text) {
     final String one = text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (one.isEmpty) return '（这一句只带了文件）';
-    return one.length > 60 ? '${one.substring(0, 60)}…' : one;
+    if (one.isEmpty) return '（只带了文件）';
+    return one.length > 90 ? '${one.substring(0, 90)}…' : one;
   }
 
   @override
@@ -107,18 +121,45 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SizedBox(
-          width: widget.side,
-          height: widget.side,
-          child: GestureDetector(
-            onTapUp: _tap,
-            child: CustomPaint(
-              painter: _TreePainter(nodes: _nodes, picked: _picked, step: _step),
+          height: widget.height,
+          child: SingleChildScrollView(
+            controller: _down,
+            child: SingleChildScrollView(
+              controller: _across,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: _width,
+                height: _height,
+                child: Stack(
+                  children: <Widget>[
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _WirePainter(
+                          nodes: _nodes,
+                          topLeft: _topLeft,
+                          boxW: _boxW,
+                          boxH: _boxH,
+                          picked: _picked,
+                        ),
+                      ),
+                    ),
+                    for (final TreeNode node in _nodes)
+                      Positioned(
+                        left: _topLeft(node).dx,
+                        top: _topLeft(node).dy,
+                        width: _boxW,
+                        height: _boxH,
+                        child: _box(node),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
         const SizedBox(height: 8),
         if (n == null)
-          Text('点一个点：主线上的是那一轮，掰到边上的那一串是退掉的一段。',
+          Text('点一格：主干上是那一轮，拐到右边去的是退掉的一段。',
               style: C.monoSmall.copyWith(fontSize: 11, color: C.grey2))
         else ...<Widget>[
           Text(
@@ -136,7 +177,7 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
               style: TextStyle(fontSize: 13, height: 1.5, color: C.ink)),
           const SizedBox(height: 8),
           SquareButton(
-            label: n.onPath ? '从这一句重来' : '接回这一段',
+            label: n.onPath ? '从这一轮重来' : '接回这一段',
             filled: true,
             onPressed: () => widget.onAct(n),
           ),
@@ -144,91 +185,129 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
       ],
     );
   }
-}
 
-class _TreePainter extends CustomPainter {
-  _TreePainter({required this.nodes, required this.picked, required this.step});
-
-  final List<TreeNode> nodes;
-  final int? picked;
-  final double step;
-
-  Offset _at(Size size, TreeNode n) {
-    final double r = n.depth * step;
-    return Offset(
-      size.width / 2 + math.cos(n.angle) * r,
-      size.height / 2 + math.sin(n.angle) * r,
+  Widget _box(TreeNode n) {
+    final bool picked = n.id == _picked;
+    final bool newest = n.onPath && _nodes.where((TreeNode x) => x.onPath).last.id == n.id;
+    final Color edge = picked
+        ? C.blue
+        : (n.onPath ? (newest ? C.blue : C.rule2) : C.blue.withValues(alpha: 0.55));
+    return GestureDetector(
+      onTap: () => setState(() => _picked = n.id),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+        decoration: BoxDecoration(
+          color: picked ? C.blueSoft : C.card,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: edge, width: picked ? 1.6 : 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              '第 ${n.round} 轮${n.onPath ? '' : ' · 退掉'}',
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: C.monoSmall.copyWith(
+                fontSize: 9,
+                letterSpacing: 0.6,
+                color: n.onPath ? C.grey2 : C.blue,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Expanded(
+              child: Text(
+                _line(n.text),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10.5, height: 1.35, color: C.ink),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+}
+
+/// 连线：主干一根竖线往下，岔口拐直角出到右边那一列，再竖直往下进格子。
+class _WirePainter extends CustomPainter {
+  _WirePainter({
+    required this.nodes,
+    required this.topLeft,
+    required this.boxW,
+    required this.boxH,
+    required this.picked,
+  });
+
+  final List<TreeNode> nodes;
+  final Offset Function(TreeNode node) topLeft;
+  final double boxW;
+  final double boxH;
+  final int? picked;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final int max = treeDepth(nodes);
-
-    // 一圈一圈的同心线：这是坛城的底，也是时间的刻度。
-    final Paint ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = C.rule.withValues(alpha: 0.7);
-    for (int d = 1; d <= max; d += 1) {
-      canvas.drawCircle(center, d * step, ring);
-    }
-
-    // 连线：主线一根深色的干，分支用强调色掰出去。
+    // 先画线，再画岔口的接点。
     for (final TreeNode n in nodes) {
       final int? p = n.parent;
       if (p == null || p < 0 || p >= nodes.length) continue;
-      final Offset a = _at(size, nodes[p]);
-      final Offset b = _at(size, n);
-      final Paint line = Paint()
+      final TreeNode par = nodes[p];
+      final Offset from = topLeft(par) + Offset(boxW / 2, boxH);
+      final Offset to = topLeft(n) + Offset(boxW / 2, 0);
+      final Paint paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = n.onPath ? 1.6 : 1.3
-        ..color = n.onPath
-            ? C.ink.withValues(alpha: 0.35)
-            : C.blue.withValues(alpha: 0.55);
-      canvas.drawLine(a, b, line);
-    }
-
-    // 节点。
-    int lastPath = -1;
-    for (final TreeNode n in nodes) {
-      if (n.pathIndex > lastPath) lastPath = n.pathIndex;
+        ..strokeWidth = n.onPath ? 1.5 : 1.3
+        ..strokeCap = StrokeCap.round
+        ..color = n.onPath ? C.ink.withValues(alpha: 0.38) : C.blue.withValues(alpha: 0.6);
+      canvas.drawPath(_wire(from, to), paint);
     }
     for (final TreeNode n in nodes) {
-      final Offset o = _at(size, n);
-      final bool newest = n.onPath && n.pathIndex == lastPath;
-      final bool sel = n.id == picked;
-      if (sel) {
-        canvas.drawCircle(
-          o,
-          9,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.4
-            ..color = C.blue,
-        );
+      // 岔口的接点：有两条以上出口的地方点一个实心小圆。
+      int kids = 0;
+      for (final TreeNode other in nodes) {
+        if (other.parent == n.id) kids += 1;
       }
-      if (n.onPath) {
+      if (kids < 2) continue;
+      final Offset at = topLeft(n) + Offset(boxW / 2, boxH);
+      canvas.drawCircle(at, 2.6, Paint()..color = C.ink.withValues(alpha: 0.55));
+    }
+    if (picked != null) {
+      for (final TreeNode n in nodes) {
+        if (n.id != picked) continue;
         canvas.drawCircle(
-          o,
-          newest ? 5 : 3.4,
-          Paint()..color = newest ? C.blue : C.ink.withValues(alpha: 0.55),
-        );
-      } else {
-        canvas.drawCircle(
-          o,
-          3.4,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..color = C.blue.withValues(alpha: 0.9),
+          topLeft(n) + Offset(boxW / 2, boxH),
+          2.6,
+          Paint()..color = C.blue,
         );
       }
     }
   }
 
+  /// 直角拐弯，拐角带一点圆弧。
+  Path _wire(Offset a, Offset b) {
+    final Path path = Path();
+    if ((a.dx - b.dx).abs() < 0.5) {
+      path.moveTo(a.dx, a.dy);
+      path.lineTo(b.dx, b.dy);
+      return path;
+    }
+    final double midY = (a.dy + b.dy) / 2;
+    final double dir = b.dx > a.dx ? 1 : -1;
+    final double r = math.min(
+      10,
+      math.min((b.dx - a.dx).abs() / 2, (midY - a.dy).abs().clamp(0, 10)),
+    );
+    path.moveTo(a.dx, a.dy);
+    path.lineTo(a.dx, midY - r);
+    path.quadraticBezierTo(a.dx, midY, a.dx + dir * r, midY);
+    path.lineTo(b.dx - dir * r, midY);
+    path.quadraticBezierTo(b.dx, midY, b.dx, midY + r);
+    path.lineTo(b.dx, b.dy);
+    return path;
+  }
+
   @override
-  bool shouldRepaint(_TreePainter old) =>
-      old.picked != picked || old.step != step || old.nodes.length != nodes.length;
+  bool shouldRepaint(_WirePainter old) =>
+      old.picked != picked || old.nodes.length != nodes.length;
 }

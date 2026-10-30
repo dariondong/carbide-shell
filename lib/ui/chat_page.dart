@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -521,9 +520,8 @@ class _ChatPageState extends State<ChatPage> {
       _toast('这场对话里还没有可退的那一句。');
       return;
     }
-    final double room = MediaQuery.sizeOf(context).width - 60;
-    final double tall = MediaQuery.sizeOf(context).height * 0.46;
-    final double side = math.min(room, tall).clamp(200.0, 340.0).toDouble();
+    final double tall = MediaQuery.sizeOf(context).height * 0.42;
+    final double boardH = tall.clamp(200.0, 380.0).toDouble();
     final _TlPick? pick = await showModalBottomSheet<_TlPick>(
       context: context,
       isScrollControlled: true,
@@ -544,7 +542,7 @@ class _ChatPageState extends State<ChatPage> {
               child: ConvTreePanel(
                 messages: msgs,
                 branches: widget.conversation.branches,
-                side: side,
+                height: boardH,
                 onAct: (TreeNode n) {
                   if (!n.onPath) {
                     Navigator.of(ctx)
