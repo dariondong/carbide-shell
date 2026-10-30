@@ -53,6 +53,10 @@
             android:name=".TaskService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+        <!-- 通知上那颗「回复」：收下字递回跑着的应用，不拉界面 -->
+        <receiver
+            android:name=".ReplyReceiver"
+            android:exported="false"/>
         <!-- 读通知：系统在用户给了「通知使用权」之后才会把它拉起来 -->
         <service
             android:name=".CarbideNotificationListener"

@@ -107,9 +107,20 @@ class TaskService : Service() {
         }
     }
 
+    /** 通知里回完一句：重发一次当前这条，只为把输入框收回去。 */
+    private fun repost() {
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, ongoing(this, noteText, state = noteState))
+        } catch (error: Throwable) {
+            // 重发不出去也没什么，任务照跑。
+        }
+    }
+
     /** 只改那一行字，顺带换状态（跑着 / 待批准 / 已完成）。 */
     private fun relabel(text: String, state: String = noteState) {
         noteState = state
+        noteText = text
         try {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, ongoing(this, text, state = state))
@@ -174,6 +185,14 @@ class TaskService : Service() {
         @Volatile
         private var noteState: String = STATE_RUN
 
+        /** 最近一次写进通知的那句话，重发时用。 */
+        @Volatile
+        private var noteText: String = DEFAULT_TEXT
+
+        /** 通知里最近回的那一句。重发时带上，输入框就收回去了。 */
+        @Volatile
+        private var replyHistory: String = ""
+
         /** 跑完那一下在岛上留多久再收掉。 */
         private const val DONE_HOLD_MS = 8000L
 
@@ -231,6 +250,7 @@ class TaskService : Service() {
             TaskService.style = style
             TaskService.lines = lines
             noteState = state
+            noteText = text
             closeDone?.let { ui.removeCallbacks(it) }
             closeDone = null
             startedAt = System.currentTimeMillis()
@@ -349,6 +369,19 @@ class TaskService : Service() {
                 else -> "问不出来"
             })
             return out
+        }
+
+        /**
+         * 通知里回完一句：把那条通知重发一次。
+         *
+         * 回复走的是广播，不打开应用；这里只负责把输入框收回，回的那句记进历史。
+         */
+        fun replied(text: String) {
+            val body = text.trim()
+            if (body.isEmpty()) return
+            replyHistory = body
+            val live = instance ?: return
+            live.repost()
         }
 
         /** 安卓 16 要的这个权限：没声明的话提升请求下去也不生效。 */
@@ -507,6 +540,9 @@ class TaskService : Service() {
                     ?: NotificationCompat.BigTextStyle().bigText(body.joinToString("\n"))
             )
             tryAddReplyCompat(context, builder)
+            if (replyHistory.isNotEmpty()) {
+                builder.setRemoteInputHistory(arrayOf<CharSequence>(replyHistory))
+            }
             if (promote) promo(context, builder, shortOf(text, state), timer = state == STATE_RUN)
             return builder.build()
         }
@@ -734,15 +770,16 @@ class TaskService : Service() {
         /**
          * 回复要一个可变（mutable）的 PendingIntent：那一格字是系统填进来的，
          * 写成不可变的在安卓 12 起会让回复直接丢掉。
+         *
+         * 发的是广播而不是界面：回完一句应用不用跳到眼前。
          */
         private fun replyIntent(context: Context): PendingIntent {
-            val open = Intent(context, MainActivity::class.java).apply {
+            val reply = Intent(context, ReplyReceiver::class.java).apply {
                 action = ACTION_REPLY
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-            return PendingIntent.getActivity(context, REPLY_REQUEST, open, flags)
+            return PendingIntent.getBroadcast(context, REPLY_REQUEST, reply, flags)
         }
 
         private fun ensureChannel(

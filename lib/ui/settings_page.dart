@@ -1279,7 +1279,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            '通知上那一下「回复」写的就是下一句，发出去跟在这里说一样。',
+            '通知上那一下「回复」写的就是下一句，发出去不用打开应用。',
             style: TextStyle(fontSize: 11, color: C.grey, height: 1.7),
           ),
         ];

@@ -1,7 +1,6 @@
 package top.theez.carbide_shell
 
 import android.Manifest
-import android.app.RemoteInput
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -30,9 +29,6 @@ class MainActivity : FlutterActivity() {
 
     /// 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。
     private var replyChannel: MethodChannel? = null
-
-    /// 人在通知里写的那句。Dart 那边还没接上就先挂在这里。
-    private var pendingReply: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,35 +59,14 @@ class MainActivity : FlutterActivity() {
 
     /** 通知上写的那句就在 intent 里，取出来交给 Dart。 */
     private fun readReply(intent: Intent?) {
-        val text = try {
-            val results = RemoteInput.getResultsFromIntent(intent) ?: return
-            results.getCharSequence(TaskService.REPLY_KEY)?.toString()?.trim().orEmpty()
-        } catch (error: Throwable) {
-            ""
-        }
+        val text = ReplyBridge.textOf(intent)
         if (text.isEmpty()) return
-        pendingReply = text
-        flushReply()
+        ReplyBridge.deliver(text)
     }
 
     /** 递一句给 Dart。那边还没接好就留着等它来取。 */
     private fun flushReply() {
-        val channel = replyChannel ?: return
-        val text = pendingReply ?: return
-        pendingReply = null
-        channel.invokeMethod("reply", text, object : MethodChannel.Result {
-            override fun success(result: Any?) {
-                // 已经到 Dart 手上了。
-            }
-
-            override fun error(code: String, message: String?, details: Any?) {
-                if (pendingReply == null) pendingReply = text
-            }
-
-            override fun notImplemented() {
-                if (pendingReply == null) pendingReply = text
-            }
-        })
+        ReplyBridge.attach(this, replyChannel)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -171,16 +146,12 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
-                    "takePendingReply" -> {
-                        val text = pendingReply
-                        pendingReply = null
-                        result.success(text)
-                    }
+                    "takePendingReply" -> result.success(ReplyBridge.take(this))
 
                     else -> result.notImplemented()
                 }
             }
-        // 通知里的回复可能比 Dart 那边接上得早，再接一次。
+        // 通知里的回复可能比 Dart 那边接上得早，这时才把道接上。
         flushReply()
         // 临时文件下载到「下载」目录。Android 10 起走 MediaStore，不要权限。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES)
