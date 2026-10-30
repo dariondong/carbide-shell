@@ -280,6 +280,11 @@ class _TriggersPageState extends State<TriggersPage> {
   }
 
   String _conditionLine(Trigger t) {
+    final String base = _conditionBase(t);
+    return t.allowWrite ? base : '$base · 只读';
+  }
+
+  String _conditionBase(Trigger t) {
     switch (t.kind) {
       case TriggerKind.phone:
         final String what = t.intent.trim().isEmpty ? '（还没写条件）' : t.intent.trim();
@@ -309,6 +314,7 @@ class _TriggersPageState extends State<TriggersPage> {
     TriggerKind kind = draft.kind;
     TriggerActionKind action = draft.action;
     bool confirm = draft.confirm;
+    bool allowWrite = draft.allowWrite;
     final Set<String> signals = draft.signals.toSet();
 
     final bool? ok = await showModalBottomSheet<bool>(
@@ -428,6 +434,14 @@ class _TriggersPageState extends State<TriggersPage> {
                         maxLines: 6,
                       ),
                       _toggleRow(
+                        '自动跑时能动手',
+                        allowWrite,
+                        (bool v) => setSheet(() => allowWrite = v),
+                        note: allowWrite
+                            ? '需要确认的操作直接做；删根、关机、格式化这类仍然会被拒绝'
+                            : '只读：需要确认的操作一律不做，动作只剩发通知',
+                      ),
+                      _toggleRow(
                         '做之前问我一句',
                         confirm && action == TriggerActionKind.prompt,
                         action != TriggerActionKind.prompt
@@ -491,7 +505,8 @@ class _TriggersPageState extends State<TriggersPage> {
       ..everyMinutes = typedEvery < 1 ? 1 : typedEvery
       ..action = action
       ..actionText = typedAction
-      ..confirm = confirm && action == TriggerActionKind.prompt;
+      ..confirm = confirm && action == TriggerActionKind.prompt
+      ..allowWrite = allowWrite;
     if (kind == TriggerKind.phone) {
       draft.signals = signals.toList();
     } else {

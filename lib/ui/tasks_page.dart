@@ -803,6 +803,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
   late final TextEditingController _interval;
   late String _hostId;
   late bool _enabled;
+  late bool _allowWrite;
   late ScheduleKind _kind;
   late int _minuteOfDay;
   late List<int> _weekdays;
@@ -824,6 +825,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     _interval = TextEditingController(text: '${t?.intervalMinutes ?? 60}');
     _hostId = t?.hostId ?? '';
     _enabled = t?.enabled ?? true;
+    _allowWrite = t?.allowWrite ?? true;
     _kind = t?.kind ?? ScheduleKind.daily;
     _minuteOfDay = t?.minuteOfDay ?? 180;
     _weekdays = List<int>.of(t?.weekdays ?? <int>[1]);
@@ -891,6 +893,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     task.prompt = prompt;
     task.hostId = _hostId;
     task.enabled = _enabled;
+    task.allowWrite = _allowWrite;
     task.kind = _kind;
     task.minuteOfDay = _minuteOfDay;
     task.weekdays = days;
@@ -1029,6 +1032,22 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
                       for (final HostEntry h in hosts)
                         _chip(h.name, _hostId == h.id, () => setState(() => _hostId = h.id)),
                     ],
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('自动跑时'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _chip('只读', !_allowWrite, () => setState(() => _allowWrite = false)),
+                      _chip('能动手', _allowWrite, () => setState(() => _allowWrite = true)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '只读时，要确认的操作一律不做。能动手时照做。删根、关机这类两边都不会做。',
+                    style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.7),
                   ),
                   const SizedBox(height: 22),
                   const SectionLabel('什么时候'),

@@ -81,7 +81,7 @@ class TaskStore {
   static String newId() => 'k${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
 }
 
-/// 定时任务没人能回答它的追问，所以除危险命令之外一律照做。
+/// 定时任务没人能回答它的追问：写权限按任务自己的设置走。
 /// 危险命令在策略层就被拦下了，这里不重复判断。
 class _AutoApprove implements Approver {
   const _AutoApprove();
@@ -90,10 +90,22 @@ class _AutoApprove implements Approver {
   Future<bool> confirm(ApprovalRequest request) async => true;
 }
 
+class _ReadOnlyApprove implements Approver {
+  const _ReadOnlyApprove();
+
+  @override
+  Future<bool> confirm(ApprovalRequest request) async => false;
+}
+
 /// 每次自动执行时拼在系统提示后面的那一段。
 const String kTaskRunNote = '''
 这一次是定时任务的自动执行，没有人在旁边回答。
 需要用户确认、需要输入或者要等很久的操作直接跳过，并在结论里说清楚跳过了什么。
+结论写短一点，第一行就是结果。''';
+
+const String kTaskRunNoteWrite = '''
+这一次是定时任务的自动执行，没有人在旁边回答，需要确认的操作已经放行。
+危险的那一类（删根、关机、格式化）仍然会被拒绝，被拒了就在结论里说一句。
 结论写短一点，第一行就是结果。''';
 
 /// 应用的计时器：每 20 秒看一次有没有到点的任务，到点就开跑。
@@ -404,10 +416,11 @@ class TaskScheduler {
       );
       final AgentSession session = await services.sessionFor(scope);
       final AgentLoop loop = session.loop;
-      loop.approver = const _AutoApprove();
+      loop.approver = task.allowWrite ? const _AutoApprove() : const _ReadOnlyApprove();
       loop.maxSteps = services.settings.value.maxSteps;
       final String extra = services.settings.value.extraPrompt.trim();
-      loop.extraSystem = extra.isEmpty ? kTaskRunNote : '$extra\n$kTaskRunNote';
+      final String runNote = task.allowWrite ? kTaskRunNoteWrite : kTaskRunNote;
+      loop.extraSystem = extra.isEmpty ? runNote : '$extra\n$runNote';
       loop.onChanged = () => _noteProgress(task, loop);
 
       answer = await loop.send(task.prompt);

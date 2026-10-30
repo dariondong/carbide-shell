@@ -79,7 +79,8 @@ class TriggerStore {
   }
 }
 
-/// 触发器跑起来时没有人守在旁边：需要确认的一律不放行，危险规则照旧。
+/// 触发器跑起来时没有人守在旁边。要确认的那一档按这条触发器自己的设置走：
+/// 放行就照做，只读就一律拒绝。会把机器弄坏的那一档在策略层就拦下了，两边都一样。
 class _ReadOnlyApprover implements Approver {
   const _ReadOnlyApprover();
 
@@ -87,9 +88,21 @@ class _ReadOnlyApprover implements Approver {
   Future<bool> confirm(ApprovalRequest request) async => false;
 }
 
+class _AutoApprover implements Approver {
+  const _AutoApprover();
+
+  @override
+  Future<bool> confirm(ApprovalRequest request) async => true;
+}
+
 const String kTriggerRunNote = '''
 这一次是触发器自动跑起来的，没有人在旁边回答。
 只做读的事：需要确认的操作会被拒绝，被拒了就在结论里说一句。
+结论写短一点，第一行就是结果。''';
+
+const String kTriggerRunNoteWrite = '''
+这一次是触发器自动跑起来的，没有人在旁边回答，需要确认的操作已经放行。
+危险的那一类（删根、关机、格式化）仍然会被拒绝，被拒了就在结论里说一句。
 结论写短一点，第一行就是结果。''';
 
 /// 触发器每半分钟看一次：到点的、碰上关键词的、手机状态符合的，各走各自的路。
@@ -317,8 +330,9 @@ class TriggerRunner {
         hostId: '',
       );
       final AgentSession session = await services.sessionFor(scope);
-      session.loop.approver = const _ReadOnlyApprover();
-      session.loop.extraSystem = kTriggerRunNote;
+      session.loop.approver =
+          t.allowWrite ? const _AutoApprover() : const _ReadOnlyApprover();
+      session.loop.extraSystem = t.allowWrite ? kTriggerRunNoteWrite : kTriggerRunNote;
       answer = await session.loop.send('$prompt\n\n（触发原因：$reason）').timeout(actTimeout);
       note = summaryLine(answer);
     } catch (e) {

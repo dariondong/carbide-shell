@@ -152,6 +152,7 @@ class ScheduledTask {
     this.gateRetryMinutes = 5,
     this.gateWindowMinutes = 60,
     this.gateAt,
+    this.allowWrite = true,
     List<TaskRun>? runs,
   })  : weekdays = weekdays ?? <int>[1],
         createdAt = createdAt ?? DateTime.now(),
@@ -191,6 +192,10 @@ class ScheduledTask {
 
   /// 正在等条件的下一次判断时刻。null 表示没在等。
   DateTime? gateAt;
+
+  /// 自动跑起来时，要确认的那些操作放不放行。
+  /// 会把机器弄坏的那一档在策略层就拦下了，这里开着也做不了。
+  bool allowWrite;
 
   /// 最新的在最前面。
   final List<TaskRun> runs;
@@ -323,6 +328,7 @@ class ScheduledTask {
         if (gated) 'gateRetryMinutes': gateRetryStep,
         if (gated) 'gateWindowMinutes': gateWindowStep,
         if (gateAt != null) 'gateAt': gateAt!.toIso8601String(),
+        if (!allowWrite) 'allowWrite': false,
         'runs': runs.map((TaskRun r) => r.toJson()).toList(),
       };
 
@@ -358,6 +364,8 @@ class ScheduledTask {
       gateRetryMinutes: (json['gateRetryMinutes'] as num?)?.toInt() ?? 5,
       gateWindowMinutes: (json['gateWindowMinutes'] as num?)?.toInt() ?? 60,
       gateAt: DateTime.tryParse('${json['gateAt'] ?? ''}'),
+      // 老文件没这一项：按能动手算，和以前一样。
+      allowWrite: json['allowWrite'] != false,
       runs: runs,
     );
   }

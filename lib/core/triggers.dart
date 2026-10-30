@@ -101,6 +101,7 @@ class Trigger {
     this.action = TriggerActionKind.notify,
     this.actionText = '',
     this.confirm = false,
+    this.allowWrite = true,
     this.nextAt,
     this.lastAt,
     List<TriggerRun>? runs,
@@ -132,6 +133,10 @@ class Trigger {
 
   /// 真要做之前先问一句。
   bool confirm;
+
+  /// 自动跑起来时，要确认的那些操作放不放行。
+  /// 会把机器弄坏的那一档在策略层就拦下了，这里开着也做不了。
+  bool allowWrite;
 
   DateTime? nextAt;
   DateTime? lastAt;
@@ -173,6 +178,7 @@ class Trigger {
         'action': action.name,
         'actionText': actionText,
         if (confirm) 'confirm': true,
+        if (!allowWrite) 'allowWrite': false,
         if (nextAt != null) 'nextAt': nextAt!.toIso8601String(),
         if (lastAt != null) 'lastAt': lastAt!.toIso8601String(),
         if (runs.isNotEmpty) 'runs': runs.map((TriggerRun r) => r.toJson()).toList(),
@@ -207,6 +213,8 @@ class Trigger {
       ),
       actionText: '${json['actionText'] ?? ''}',
       confirm: json['confirm'] == true,
+      // 没写这一项的是老文件，按能动手算，行为与以前一样。
+      allowWrite: json['allowWrite'] != false,
       nextAt: DateTime.tryParse('${json['nextAt'] ?? ''}'),
       lastAt: DateTime.tryParse('${json['lastAt'] ?? ''}'),
       runs: runs,
