@@ -1,7 +1,6 @@
 package top.theez.carbide_shell
 
 import android.Manifest
-import android.app.AlarmClock
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -19,6 +18,7 @@ import android.os.Environment
 import android.os.Process
 import android.os.StatFs
 import android.provider.ContactsContract
+import android.provider.AlarmClock
 import android.provider.Settings
 import android.telephony.SmsManager
 
