@@ -157,8 +157,9 @@ class MainActivity : FlutterActivity() {
                         TaskService.ensureChannels(this)
                         result.success(TaskService.state(this))
                     }
-
                     "notifyState" -> result.success(TaskService.state(this))
+
+                    "diag" -> result.success(TaskService.diag(this))
 
                     "request" -> requestNotifications(result)
 

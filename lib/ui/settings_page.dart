@@ -1267,6 +1267,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const RuleLine(),
                 _action('系统省电设置', '允许后台运行', ForegroundTask.openBatterySettings),
+                const RuleLine(),
+                _action('通知诊断', '看这台机器认哪一步', _showNotifDiag),
               ],
             ),
           ),
@@ -2044,6 +2046,39 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           ToggleKnob(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+
+  /// 这台机器到底缺哪一环：问原生要几行，摆成一个对话框。
+  Future<void> _showNotifDiag() async {
+    final List<String> lines = await ForegroundTask.diag();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('通知诊断',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (final String line in lines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Text(line,
+                      style: C.monoSmall.copyWith(fontSize: 11.5, color: C.ink)),
+                ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
         ],
       ),
     );

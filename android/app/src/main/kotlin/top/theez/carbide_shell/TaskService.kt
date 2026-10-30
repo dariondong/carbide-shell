@@ -81,13 +81,17 @@ class TaskService : Service() {
 
     /** 把自己挂成前台；失败返回 false。 */
     private fun declare(text: String): Boolean {
-        val note = ongoing(this, text)
+        // 先发一条普通的：这时还没成为前台服务，问系统「能不能提升」多半是不认，
+        // 也算不出个准。起来之后再换成提升版（relabel 那一下）。
+        val note = ongoing(this, text, promote = false)
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else {
                 startForeground(NOTIFICATION_ID, note)
             }
+            // 已经是前台服务了，这会儿再问系统认不认提升，问出来的才算数。
+            relabel(text)
             true
         } catch (untyped: Throwable) {
             try {
@@ -220,6 +224,51 @@ class TaskService : Service() {
             }
         }
 
+        /**
+         * 通知这一套在这台机器上走到哪一步：一行一条。
+         *
+         * 「支持实时更新」不是个是或否的问题，是几个方法加一层系统判据的组合；
+         * 缺哪一环只能由这台机器自己说。
+         */
+        fun diag(context: Context): List<String> {
+            val out = ArrayList<String>()
+            out.add("系统：Android ${Build.VERSION.SDK_INT}")
+            out.add("机型：${Build.MANUFACTURER} ${Build.BRAND} ${Build.MODEL}")
+            val st = state(context)
+            out.add("通知开关：" + if (st["allowed"] == true) "开" else "关")
+            out.add("通知权限：" + if (st["granted"] == true) "给了" else "没给")
+            try {
+                val manager =
+                    context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val channel = manager.getNotificationChannel(CHANNEL_ID)
+                out.add("常驻渠道：" + (if (channel == null) "没有" else "重要级别 ${channel.importance}"))
+            } catch (error: Throwable) {
+                out.add("常驻渠道：读不到")
+            }
+            out.add("hasPromotableCharacteristics：" + has(Notification::class.java, "hasPromotableCharacteristics"))
+            out.add("setShortCriticalText：" + has(Notification.Builder::class.java, "setShortCriticalText", String::class.java))
+            out.add("前台服务：" + (if (instance == null) "没在跑" else "在跑"))
+            val mode = try {
+                promoMode(context)
+            } catch (error: Throwable) {
+                PROMO_UNKNOWN
+            }
+            out.add("系统认的提升：" + when (mode) {
+                PROMO_REQUEST -> "请求接口"
+                PROMO_COLORIZED -> "彩色通知"
+                PROMO_PLAIN -> "不认"
+                else -> "问不出来"
+            })
+            return out
+        }
+
+        private fun has(type: Class<*>, name: String, vararg args: Class<*>): String = try {
+            type.getMethod(name, *args)
+            "有"
+        } catch (error: Throwable) {
+            "没有"
+        }
+
         /** 现在能发通知吗：系统总开关和安卓 13 起那个权限。 */
         fun state(context: Context): Map<String, Any> {
             val allowed = try {
@@ -328,7 +377,11 @@ class TaskService : Service() {
          * 跟进的那两下（setRequestPromotedOngoing / setShortCriticalText）只有它才有，
          * 而 HyperOS 的岛画的正是被提升的那条通知。
          */
-        private fun ongoing(context: Context, text: String): Notification {
+        private fun ongoing(
+            context: Context,
+            text: String,
+            promote: Boolean = true,
+        ): Notification {
             ensureChannel(
                 context, CHANNEL_ID,
                 R.string.task_channel_name, R.string.task_channel_desc,
@@ -349,7 +402,7 @@ class TaskService : Service() {
                     ?: NotificationCompat.BigTextStyle().bigText(body.joinToString("\n"))
             )
             tryAddReplyCompat(context, builder)
-            promo(context, builder, shortOf(text))
+            if (promote) promo(context, builder, shortOf(text))
             return builder.build()
         }
 

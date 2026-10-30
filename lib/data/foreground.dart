@@ -85,6 +85,18 @@ class ForegroundTask {
     );
   }
 
+  /// 通知这一套在这台机器上走到哪一步：一行一条，设置页里的「通知诊断」看的就是它。
+  static Future<List<String>> diag() async {
+    if (!supported) return const <String>[];
+    try {
+      final List<Object?>? lines = await _channel.invokeMethod<List<Object?>>('diag');
+      if (lines == null) return const <String>[];
+      return lines.map((Object? e) => '$e').toList();
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
   /// 主动要一次通知权限。
   static Future<NotifyState> request() async {
     if (!supported) return const NotifyState();
