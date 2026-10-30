@@ -1,5 +1,5 @@
 /// Set this when a tag is cut. It has to match `version:` in pubspec.yaml.
-const String kAppVersion = '0.0.25';
+const String kAppVersion = '0.0.26';
 
 const String kRepoSlug = 'dariondong/carbide-shell';
 const String kReleasesApi = 'https://api.github.com/repos/$kRepoSlug/releases';
