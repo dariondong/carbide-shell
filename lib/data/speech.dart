@@ -66,11 +66,20 @@ class Speech {
   static bool _recording = false;
   static bool _stopAsked = false;
 
+  /// 系统引擎在这台机器上录不到音（叫起来又立刻报 client / audio）。
+  ///
+  /// 记着这一次，后面的长按就直接叫系统认字界面：那个自己在前台，录得到。
+  static bool _engineBroken = false;
+
   /// 一段录音最长多久。真忘了松手也不会把麦克风占着。
   static Timer? _cap;
 
   /// 设置变了就调一次：下一次长按按新的走。
-  static void configure(SpeechConfig config) => _config = config;
+  static void configure(SpeechConfig config) {
+    // 换了方式就把「系统引擎录不到声音」这条记性清掉，让人自己再试一次。
+    if (config.mode != _config.mode) _engineBroken = false;
+    _config = config;
+  }
 
   static SpeechConfig get config => _config;
 
@@ -112,6 +121,7 @@ class Speech {
     if (!supported) return const <String>[];
     final List<String> out = <String>[];
     out.add('识别方式：${_modeName(_config.mode)}');
+    if (_engineBroken) out.add('系统引擎：上次录不到声音，已改用认字界面');
     if (_config.mode == 'cloud') {
       out.add('在线地址：${_config.baseUrl.trim().isEmpty ? '没填' : _config.baseUrl.trim()}');
       out.add('在线模型：${_config.model.trim().isEmpty ? '没填' : _config.model.trim()}');
@@ -161,6 +171,8 @@ class Speech {
       case 'systemInput':
         return _listenSystemInput();
     }
+    // 上一次系统引擎在这台机器上录不到声音：直接叫系统认字界面，别白按一趟。
+    if (_engineBroken) return _listenSystemInput();
     if (await _start()) return true;
     if (!await _grant()) {
       _fail('permission');
@@ -315,8 +327,10 @@ class Speech {
   }
 
   /// 叫起系统自带的认字界面，认完把字接回来。
-  static Future<bool> _listenSystemInput() async {
-    _say('说一句，认完自己回来', hold: const Duration(seconds: 40));
+  static Future<bool> _listenSystemInput({
+    String hint = '说一句，认完自己回来',
+  }) async {
+    _say(hint, hold: const Duration(seconds: 40));
     String text = '';
     try {
       text = await _channel.invokeMethod<String>('systemInput') ?? '';
@@ -395,6 +409,13 @@ class Speech {
     _onError?.call(code);
   }
 
+  /// 系统引擎叫起来了却录不到音：这几个代号出现就换系统认字界面。
+  ///
+  /// `client` 是引擎自己跑了，`audio` 是拿不到麦克风，`start-failed` 是根本没开成。
+  static bool _engineGivesUp(String code) =>
+      _config.mode == 'system' &&
+      (code == 'client' || code == 'audio' || code == 'start-failed');
+
   static String _note(String code) => switch (code) {
         'no-match' || 'no-speech' => '没听清，再按一次',
         'permission' => '没有麦克风权限',
@@ -438,6 +459,13 @@ class Speech {
           listening.value = false;
           final String code = '${args['code'] ?? 'error'}';
           lastError = code;
+          if (_engineGivesUp(code)) {
+            // 系统引擎叫起来了却录不到音：把系统转文字叫到前台来，
+            // 它自己起一个界面才拿得到麦克风。
+            _engineBroken = true;
+            unawaited(_listenSystemInput(hint: '系统引擎录不到声音，改用系统认字界面'));
+            break;
+          }
           // 没听到话不算错，只说一句「没听清」；别的原因把代号一起写出来，
           // 真出问题时看一眼就知道是哪一环。
           _say(_note(code));
