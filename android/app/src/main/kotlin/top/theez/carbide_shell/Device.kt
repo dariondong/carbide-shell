@@ -96,6 +96,8 @@ object Device {
     fun notifications(limit: Int, minutes: Int): List<Map<String, Any?>> {
         val span = minutes.coerceIn(1, 1440) * 60_000L
         val since = System.currentTimeMillis() - span
+        // 通知栏上挂着的那些也要算进来，不然刚起来读就是空的。
+        CarbideNotificationListener.instance?.harvest()
         return NotifLog.recent(limit.coerceIn(1, 100), since)
     }
 

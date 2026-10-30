@@ -25,6 +25,14 @@ object NotifLog {
 
     @Synchronized
     fun add(item: Item) {
+        // 通知栏上挂着的那些会被反复收一遍，同一条只留一份。
+        for (old in ring) {
+            if (old.pkg == item.pkg && old.at == item.at && old.title == item.title &&
+                old.text == item.text
+            ) {
+                return
+            }
+        }
         ring.addLast(item)
         while (ring.size > CAP) ring.removeFirst()
     }
@@ -61,7 +69,36 @@ object NotifLog {
  * 只看标题和正文，不碰通知自带的按钮和回复框；自己发的那几条也不收。
  */
 class CarbideNotificationListener : NotificationListenerService() {
+    override fun onListenerConnected() {
+        instance = this
+        harvest()
+    }
+
+    override fun onDestroy() {
+        if (instance === this) instance = null
+        super.onDestroy()
+    }
+
+    /**
+     * 通知栏上现在挂着的那些。
+     *
+     * 应用刚起来、或者刚拿到通知使用权时，上面那条 ring 还是空的，读出来就是「没有通知」。
+     * 所以每次读之前先问一遍系统，把已经在的都收进来。
+     */
+    fun harvest() {
+        val live = try {
+            activeNotifications ?: return
+        } catch (error: Throwable) {
+            return
+        }
+        for (sbn in live) collect(sbn)
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        collect(sbn)
+    }
+
+    private fun collect(sbn: StatusBarNotification?) {
         val posted = sbn ?: return
         val context = applicationContext ?: return
         if (posted.packageName == context.packageName) return
@@ -84,5 +121,11 @@ class CarbideNotificationListener : NotificationListenerService() {
                 at = posted.postTime,
             ),
         )
+    }
+
+    companion object {
+        /** 系统绑上来的那一个。读通知之前靠它去问系统现在挂着哪些。 */
+        @Volatile
+        var instance: CarbideNotificationListener? = null
     }
 }

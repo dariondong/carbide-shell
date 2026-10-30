@@ -23,6 +23,9 @@ class MainActivity : FlutterActivity() {
     /** 正在等系统回话的扩展权限请求，按请求号存着。 */
     private val deviceWaits = HashMap<Int, MethodChannel.Result>()
 
+    /** 送去系统设置页的那几项：人回来之后再回话，那时才知道给没给。 */
+    private val accessWaits = HashMap<Int, MethodChannel.Result>()
+
     /// 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。
     private var replyChannel: MethodChannel? = null
 
@@ -391,17 +394,37 @@ class MainActivity : FlutterActivity() {
         waiting.success(code != null && Device.has(this, code))
     }
 
+    /** 从系统那两页回来：这一项现在到底给没给。 */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val waiting = accessWaits.remove(requestCode) ?: return
+        val code = if (requestCode == REQ_NOTIF_ACCESS) "notif" else "usage"
+        waiting.success(Device.has(this, code))
+    }
+
     /** 设置里打开一项扩展时问一次权限，结果照实回话。 */
     private fun requestDevice(code: String, result: MethodChannel.Result) {
-        // 通知读取和使用情况不是弹框能给的，只能把人送到系统那一页。
-        if (code == "notif") {
-            Device.openNotifAccess(this)
-            result.success(Device.has(this, code))
-            return
-        }
-        if (code == "usage") {
-            Device.openUsageAccess(this)
-            result.success(Device.has(this, code))
+        // 通知读取和使用情况不是弹框能给的，只能把人送到系统那一页；
+        // 回来之后才问得到答案，所以先挂在这里，人回来再回话。
+        if (code == "notif" || code == "usage") {
+            if (Device.has(this, code)) {
+                result.success(true)
+                return
+            }
+            val requestCode = if (code == "notif") REQ_NOTIF_ACCESS else REQ_USAGE_ACCESS
+            val action = if (code == "notif") {
+                Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+            } else {
+                Settings.ACTION_USAGE_ACCESS_SETTINGS
+            }
+            accessWaits[requestCode] = result
+            try {
+                startActivityForResult(Intent(action), requestCode)
+            } catch (error: Throwable) {
+                accessWaits.remove(requestCode)
+                if (code == "notif") Device.openNotifAccess(this) else Device.openUsageAccess(this)
+                result.success(false)
+            }
             return
         }
         val perm = Device.PERMS[code]
@@ -423,6 +446,10 @@ class MainActivity : FlutterActivity() {
         const val FILES = "top.theez.carbide_shell/files"
         const val DEVICE = "top.theez.carbide_shell/device"
         const val REQ_NOTIFICATIONS = 0xCB02
+
+        /** 送去系统设置页要权限的两个号。 */
+        const val REQ_NOTIF_ACCESS = 0xCB31
+        const val REQ_USAGE_ACCESS = 0xCB32
 
         /** 每一项扩展权限问一次用的号。 */
         val DEVICE_REQ: Map<String, Int> = mapOf(
