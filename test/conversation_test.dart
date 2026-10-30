@@ -15,7 +15,6 @@ void main() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
-void main() {
   group('工具调用和结果对齐', () {
     test('好的记录一条不动', () {
       final List<LlmMessage> m = <LlmMessage>[
