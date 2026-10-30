@@ -1,5 +1,6 @@
 package top.theez.carbide_shell
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -29,9 +30,19 @@ object SpeechHelper {
     /// 一句都没听出来时最多重开几段，别无限重试。
     private const val MAX_RETRY = 3
 
+    /** 新建之后等多久再 startListening：服务还没连上就开口，有的引擎直接回 ERROR_CLIENT。 */
+    private const val START_DELAY_MS = 220L
+
     private var channel: MethodChannel? = null
     private var appContext: Context? = null
     private var recognizer: SpeechRecognizer? = null
+
+    /// 这台机器上装了哪几个识别服务，以及现在试到第几个。
+    private var engines: List<ComponentName> = emptyList()
+    private var engineAt = 0
+
+    /// 连错几次 ERROR_CLIENT 就换下一个服务试试。
+    private var clientFails = 0
 
     /// 手指还按着（这一轮还没松手）。
     private var holding = false
@@ -109,6 +120,7 @@ object SpeechHelper {
         out.add("机型：${android.os.Build.MANUFACTURER} ${android.os.Build.BRAND} ${android.os.Build.MODEL}")
         out.add("语音识别可用：" + if (available(context)) "是" else "否")
         out.add("识别服务：" + services(context))
+        out.add("正在试：" + (engines.getOrNull(engineAt)?.packageName ?: "系统默认"))
         out.add("麦克风权限：" + if (Device.has(context, "mic")) "给了" else "没有")
         out.add("语言：" + language())
         out.add("最近一次出错：" + lastError.ifEmpty { "还没试过" })
@@ -154,15 +166,57 @@ object SpeechHelper {
     private fun create() {
         val ctx = appContext ?: return
         try {
-            val engine = SpeechRecognizer.createSpeechRecognizer(ctx)
+            val engine = engineFor(ctx)
             engine.setRecognitionListener(Listener())
             recognizer = engine
-            engine.startListening(intent())
-            emit("state", on = true)
+            // 服务是异步连上的。连上之前就开口，厂商那几个引擎会回 ERROR_CLIENT（5），
+            // 表现成「根本就拉不起引擎」。等一小会让它连好，人这边察觉不到。
+            ui.postDelayed({
+                if (recognizer !== engine) return@postDelayed
+                try {
+                    engine.startListening(intent())
+                    emit("state", on = true)
+                } catch (error: Throwable) {
+                    close()
+                    emit("error", code = "start-failed")
+                }
+            }, START_DELAY_MS)
         } catch (error: Throwable) {
             close()
             emit("error", code = "start-failed")
         }
+    }
+
+    /** 先用系统默认那一个，一直回 ERROR_CLIENT 就换台上装着的别的服务试。 */
+    private fun engineFor(ctx: Context): SpeechRecognizer {
+        if (engines.isEmpty()) engines = engineList(ctx)
+        val pick = engines.getOrNull(engineAt)
+        if (pick != null) {
+            try {
+                return SpeechRecognizer.createSpeechRecognizer(ctx, pick)
+            } catch (error: Throwable) {
+                // 指定那个服务起不来，退回默认那一个。
+            }
+        }
+        return SpeechRecognizer.createSpeechRecognizer(ctx)
+    }
+
+    private fun engineList(ctx: Context): List<ComponentName> = try {
+        ctx.packageManager.queryIntentServices(
+            Intent(android.speech.RecognitionService.SERVICE_INTERFACE),
+            PackageManager.GET_SERVICES,
+        ).mapNotNull { it.serviceInfo?.let { info -> ComponentName(info.packageName, info.name) } }
+    } catch (error: Throwable) {
+        emptyList()
+    }
+
+    /** 记一次 ERROR_CLIENT；连着两次就换下一个识别服务。 */
+    private fun noteClientError() {
+        clientFails += 1
+        if (clientFails < 2) return
+        clientFails = 0
+        if (engines.isEmpty() && appContext != null) engines = engineList(appContext!!)
+        if (engineAt + 1 < engines.size) engineAt += 1
     }
 
     /** 手指还按着、但这一句结束了：换一段接着听。 */
@@ -200,6 +254,8 @@ object SpeechHelper {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, language())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // 明确要联网那一种：离线包没装、或者只在系统自带的在线服务里认得的字更多。
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
         }
     }
 
@@ -262,6 +318,12 @@ object SpeechHelper {
         override fun onError(error: Int) {
             val code = reasonOf(error)
             SpeechHelper.lastError = "$code（$error）"
+            // ERROR_CLIENT 连着两次：多半是这台机器默认那个引擎根本绑不上，换一个试。
+            if (code == "client") {
+                SpeechHelper.noteClientError()
+            } else {
+                SpeechHelper.clientFails = 0
+            }
             // 还没开口就没认出来、手指也还按着：重开一段，别一下子就结束。
             if (code == "no-match" || code == "no-speech" || code == "client") {
                 if (SpeechHelper.reopen()) return
