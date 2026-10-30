@@ -1,5 +1,6 @@
 package top.theez.carbide_shell
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -37,6 +38,12 @@ object SpeechHelper {
     private var appContext: Context? = null
     private var recognizer: SpeechRecognizer? = null
 
+    /// 现在的界面（用它建识别器，别用应用上下文：有的引擎看不着活着的界面就不录）。
+    private var host: Activity? = null
+
+    /// 界面在不在前台。识别服务在后台绑上去，有的机器直接不开口，所以开口之前先等这一刻。
+    private var foreground = false
+
     /// 这台机器上装了哪几个识别服务，以及现在试到第几个。
     private var engines: List<ComponentName> = emptyList()
     private var engineAt = 0
@@ -67,6 +74,18 @@ object SpeechHelper {
         this.channel = channel
     }
 
+    /** 界面进了前台没有：MainActivity 的 onResume / onPause 告诉它。 */
+    fun setForeground(activity: Activity?, on: Boolean) {
+        host = if (on) {
+            activity
+        } else if (host === activity) {
+            null
+        } else {
+            host
+        }
+        foreground = on
+    }
+
     /** 这台机器有没有能用的识别服务。 */
     fun available(context: Context): Boolean = try {
         SpeechRecognizer.isRecognitionAvailable(context)
@@ -77,6 +96,7 @@ object SpeechHelper {
     /** 开始听。结果走 [emit]，一条一条回给界面。 */
     fun start(context: Context) {
         appContext = context.applicationContext
+        host = context as? Activity ?: host
         if (!available(context)) {
             emit("error", code = "no-service")
             return
@@ -85,7 +105,41 @@ object SpeechHelper {
             holding = true
             closing = false
             retries = 0
+            waitForeground(0)
+        }
+    }
+
+    /**
+     * 等到界面在前台再开口。
+     *
+     * 系统那个转文字服务在后台绑上去时，有的机器直接不录音，报出来的就是「录不到」。
+     * 界面本来就在前台的话这里一次就过，察觉不到。
+     */
+    private fun waitForeground(tries: Int) {
+        if (!holding) return
+        if (foreground) {
             open()
+            return
+        }
+        if (tries == 0) bringToFront()
+        if (tries >= 15) {
+            close()
+            emit("error", code = "background")
+            emit("state", on = false)
+            return
+        }
+        ui.postDelayed({ waitForeground(tries + 1) }, 100L)
+    }
+
+    /** 把界面叫回前台：系统那边不让叫就算了，超时之后界面上会说清楚。 */
+    private fun bringToFront() {
+        val ctx = host ?: appContext ?: return
+        try {
+            val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            ctx.startActivity(intent)
+        } catch (error: Throwable) {
+            // 叫不回来就按超时走。
         }
     }
 
@@ -119,6 +173,7 @@ object SpeechHelper {
         out.add("系统：Android ${android.os.Build.VERSION.SDK_INT}")
         out.add("机型：${android.os.Build.MANUFACTURER} ${android.os.Build.BRAND} ${android.os.Build.MODEL}")
         out.add("语音识别可用：" + if (available(context)) "是" else "否")
+        out.add("界面在前台：" + if (foreground) "是" else "不是")
         out.add("识别服务：" + services(context))
         out.add("正在试：" + (engines.getOrNull(engineAt)?.packageName ?: "系统默认"))
         out.add("麦克风权限：" + if (Device.has(context, "mic")) "给了" else "没有")
@@ -164,7 +219,7 @@ object SpeechHelper {
     }
 
     private fun create() {
-        val ctx = appContext ?: return
+        val ctx = host ?: appContext ?: return
         try {
             val engine = engineFor(ctx)
             engine.setRecognitionListener(Listener())

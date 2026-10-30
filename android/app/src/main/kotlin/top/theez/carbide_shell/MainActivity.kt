@@ -55,6 +55,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** 说话那一路要知道界面在不在前台：后台绑上去，系统转文字不一定录得到音。 */
+    override fun onResume() {
+        super.onResume()
+        SpeechHelper.setForeground(this, true)
+    }
+
+    override fun onPause() {
+        SpeechHelper.setForeground(this, false)
+        super.onPause()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
