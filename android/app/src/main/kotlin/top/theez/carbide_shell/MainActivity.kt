@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
+import android.speech.RecognizerIntent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -27,8 +28,11 @@ class MainActivity : FlutterActivity() {
     /** 送去系统设置页的那几项：人回来之后再回话，那时才知道给没给。 */
     private val accessWaits = HashMap<Int, MethodChannel.Result>()
 
-    /// 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。
+    /** 往 Dart 送消息用的那个道，建好之后才能把通知里的回复递过去。 */
     private var replyChannel: MethodChannel? = null
+
+    /// 等系统认字界面回来的那一次请求。
+    private var systemInput: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,6 +177,27 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "grant" -> requestDevice("mic", result)
+
+                // 在线识别：自己录音，录完交给网上的服务认字。
+                "recordStart" -> {
+                    if (!Device.has(this, "mic") &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                    ) {
+                        result.success(mapOf("ok" to false, "need" to "mic"))
+                    } else {
+                        result.success(mapOf("ok" to VoiceRecorder.start(this)))
+                    }
+                }
+
+                "recordStop" -> result.success(VoiceRecorder.stop(this))
+
+                "recordCancel" -> {
+                    VoiceRecorder.cancel()
+                    result.success(null)
+                }
+
+                // 系统那个认字界面：只认一次，认完把字回回去。
+                "systemInput" -> openSystemInput(result)
 
                 "diag" -> result.success(SpeechHelper.diag(this))
 
@@ -464,9 +489,44 @@ class MainActivity : FlutterActivity() {
     /** 从系统那两页回来：这一项现在到底给没给。 */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_SYSTEM_INPUT) {
+            val waiting = systemInput?.also { systemInput = null } ?: return
+            val text = if (resultCode == RESULT_OK) {
+                data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+                    .orEmpty()
+            } else {
+                ""
+            }
+            waiting.success(text)
+            return
+        }
         val waiting = accessWaits.remove(requestCode) ?: return
         val code = if (requestCode == REQ_NOTIF_ACCESS) "notif" else "usage"
         waiting.success(accessGiven(code))
+    }
+
+    /** 叫起系统自带的认字界面，认完从 onActivityResult 回去。 */
+    private fun openSystemInput(result: MethodChannel.Result) {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE,
+                java.util.Locale.getDefault().toLanguageTag(),
+            )
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "说一句，认完自动回来")
+        }
+        systemInput?.success("")
+        systemInput = result
+        try {
+            startActivityForResult(intent, REQ_SYSTEM_INPUT)
+        } catch (error: Throwable) {
+            if (systemInput === result) systemInput = null
+            result.error("no-activity", "这台机器上没有认字界面", null)
+        }
     }
 
     /** 通知读取得听监听服务那一头的，其余照常问权限。 */
@@ -522,6 +582,9 @@ class MainActivity : FlutterActivity() {
         /** 送去系统设置页要权限的两个号。 */
         const val REQ_NOTIF_ACCESS = 0xCB31
         const val REQ_USAGE_ACCESS = 0xCB32
+
+        /** 叫系统认字界面回来用的号。 */
+        const val REQ_SYSTEM_INPUT = 0xCB41
 
         /** 每一项扩展权限问一次用的号。 */
         val DEVICE_REQ: Map<String, Int> = mapOf(

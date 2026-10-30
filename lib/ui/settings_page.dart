@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
+import '../core/asr.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/params.dart';
@@ -143,6 +144,14 @@ class _SettingsPageState extends State<SettingsPage> {
   String _mailNote = '';
   String _inboxNote = '';
 
+  /// 长按说话：走哪一条、在线识别那两个输入框、密钥，以及试一句的结果。
+  String _asrMode = 'system';
+  String _asrService = '';
+  String _asrNote = '';
+  late final TextEditingController _asrUrl;
+  late final TextEditingController _asrModel;
+  late final TextEditingController _asrKey;
+
   /// 子页靠它重画：控制器在这一层，改动也发生在这一层。
   final ValueNotifier<int> _tick = ValueNotifier<int>(0);
 
@@ -187,6 +196,17 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailSecure = m.secure;
     _mailHtml = m.html;
     _mailImapSecure = m.imapSecure;
+    _asrMode = s.asrMode;
+    _asrUrl = TextEditingController(text: s.asrBaseUrl);
+    _asrModel = TextEditingController(text: s.asrModel);
+    _asrKey = TextEditingController();
+    _asrService = '';
+    for (final AsrService p in kAsrServices) {
+      if (p.baseUrl == s.asrBaseUrl.trim()) _asrService = p.name;
+    }
+    widget.secrets.read(asrSecretKey()).then((String secret) {
+      if (mounted && secret.isNotEmpty) setState(() => _asrKey.text = secret);
+    });
     _mode = s.approvalMode;
     _temperature = s.temperature;
     _font = s.answerFont;
@@ -248,6 +268,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _mailAllowInput.dispose();
     _mailImapHost.dispose();
     _mailImapPort.dispose();
+    _asrUrl.dispose();
+    _asrModel.dispose();
+    _asrKey.dispose();
     widget.mail.removeListener(_onMailChanged);
     super.dispose();
   }
@@ -291,7 +314,10 @@ class _SettingsPageState extends State<SettingsPage> {
       ..autoCompact = _autoCompact
       ..notifStyle = _notifStyle
       ..peakHolidays = _linesOf(_peakHolidays.text)
-      ..peakMakeup = _linesOf(_peakMakeup.text);
+      ..peakMakeup = _linesOf(_peakMakeup.text)
+      ..asrMode = _asrMode
+      ..asrBaseUrl = _asrUrl.text.trim()
+      ..asrModel = _asrModel.text.trim();
     // 域名这一格只按「人改了什么」落地：模型用 http_allow 加进来的域名，
     // 不能因为这里手一动就被旧文本冲掉。
     if (_domainsTyped) {
@@ -328,6 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await widget.settings.save();
     await widget.secrets
         .write(modelSecretKeyFor(widget.settings.value.activeProfile), _key.text.trim());
+    await widget.secrets.write(asrSecretKey(), _asrKey.text.trim());
     widget.mail.value = SmtpConfig(
       enabled: _mailOn,
       host: _mailHost.text.trim(),
@@ -1054,6 +1081,49 @@ class _SettingsPageState extends State<SettingsPage> {
                           ? '标准'
                           : '大',
                   (double v) => _apply(() => _font = v),
+                ),
+                const RuleLine(),
+                _choices<String>(
+                  '长按说话',
+                  AppSettings.asrModes,
+                  _asrMode,
+                  _asrName,
+                  (String v) => _apply(() => _asrMode = v),
+                ),
+                if (_asrMode == 'cloud') ...<Widget>[
+                  _choices<String>(
+                    '识别服务',
+                    <String>[
+                      for (final AsrService p in kAsrServices) p.name,
+                      '自定义',
+                    ],
+                    _asrService,
+                    (String v) => v,
+                    _pickAsrService,
+                  ),
+                  RuleField(
+                    controller: _asrUrl,
+                    label: '识别地址',
+                    hint: 'https://host/v1',
+                    onChanged: (_) => _touch(),
+                  ),
+                  RuleField(
+                    controller: _asrModel,
+                    label: '模型名',
+                    hint: 'whisper-1',
+                    onChanged: (_) => _touch(),
+                  ),
+                  RuleField(
+                    controller: _asrKey,
+                    label: '识别密钥',
+                    obscure: true,
+                    onChanged: (_) => _touch(),
+                  ),
+                ],
+                _action(
+                  '试一句',
+                  _asrNote.isEmpty ? '录三秒，看能不能认出来' : _asrNote,
+                  _testAsr,
                 ),
                 const RuleLine(),
                 _action(
@@ -2092,6 +2162,43 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  /// 长按说话三种走法的名字。
+  static String _asrName(String mode) => switch (mode) {
+        'cloud' => '在线识别',
+        'systemInput' => '系统认字界面',
+        _ => '系统识别',
+      };
+
+  /// 选一家现成的：地址和模型直接填好，密钥还得自己贴。
+  void _pickAsrService(String name) {
+    if (name != '自定义') {
+      for (final AsrService p in kAsrServices) {
+        if (p.name != name) continue;
+        _asrUrl.text = p.baseUrl;
+        _asrModel.text = p.model;
+        break;
+      }
+    }
+    _apply(() => _asrService = name);
+  }
+
+  /// 试一句：现在就开始录，三秒后交给在线识别，结果写在那一行小字上。
+  Future<void> _testAsr() async {
+    _debounce?.cancel();
+    setState(() => _asrNote = '正在录，说三秒…');
+    await _persist();
+    final String result = await Speech.probe(
+      config: SpeechConfig(
+        mode: 'cloud',
+        baseUrl: _asrUrl.text.trim(),
+        model: _asrModel.text.trim(),
+        key: () async => _asrKey.text.trim(),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _asrNote = result);
   }
 
   /// 长按说话在这个机器上走到哪一步：一行一条，看完就知道缺哪一环。

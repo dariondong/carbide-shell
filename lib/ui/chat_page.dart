@@ -20,6 +20,7 @@ import '../core/tree.dart';
 import '../data/balance.dart';
 import '../data/hub.dart';
 import '../data/llm_settings.dart';
+import '../data/secrets.dart';
 import '../data/settings.dart';
 import '../data/speech.dart';
 import '../services.dart';
@@ -1826,6 +1827,14 @@ class _ChatPageState extends State<ChatPage> {
   Widget _composer(AgentLoop? loop) {
     final bool running = _running;
     final bool canType = loop != null;
+    // 长按说话走哪一条、在线识别填的什么，每次都跟着设置走：设置里改完回到这里就生效。
+    final AppSettings spoken = widget.services.settings.value;
+    Speech.configure(SpeechConfig(
+      mode: spoken.asrMode,
+      baseUrl: spoken.asrBaseUrl,
+      model: spoken.asrModel,
+      key: () => widget.services.secrets.read(asrSecretKey()),
+    ));
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
       child: AnimatedContainer(

@@ -28,3 +28,6 @@ String modelSecretKey() => 'model:apiKey';
 
 /// 一套模型配置一把密钥，按配置 id 分开存。
 String modelSecretKeyFor(String profileId) => 'model:$profileId:apiKey';
+
+/// 在线识别那一把密钥，与模型分开。
+String asrSecretKey() => 'asr:apiKey';

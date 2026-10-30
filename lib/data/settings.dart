@@ -151,6 +151,9 @@ class AppSettings {
     this.greetPeak = true,
     this.peakHolidays = const <String>[],
     this.peakMakeup = const <String>[],
+    this.asrMode = 'system',
+    this.asrBaseUrl = '',
+    this.asrModel = '',
     this.themeMode = 'system',
   }) {
     _profiles = List<ModelProfile>.of(profiles);
@@ -379,6 +382,9 @@ class AppSettings {
         'greetPeak': greetPeak,
         if (peakHolidays.isNotEmpty) 'peakHolidays': peakHolidays,
         if (peakMakeup.isNotEmpty) 'peakMakeup': peakMakeup,
+        'asrMode': asrMode,
+        if (asrBaseUrl.isNotEmpty) 'asrBaseUrl': asrBaseUrl,
+        if (asrModel.isNotEmpty) 'asrModel': asrModel,
         'themeMode': themeMode,
       };
 
@@ -426,9 +432,26 @@ class AppSettings {
       greetPeak: json['greetPeak'] != false,
       peakHolidays: _lines(json['peakHolidays']),
       peakMakeup: _lines(json['peakMakeup']),
+      asrMode: asrModes.contains('${json['asrMode'] ?? ''}')
+          ? '${json['asrMode']}'
+          : 'system',
+      asrBaseUrl: '${json['asrBaseUrl'] ?? ''}',
+      asrModel: '${json['asrModel'] ?? ''}',
       themeMode: _themeMode(json['themeMode']),
     );
   }
+
+  /// 长按说话走哪一条：系统识别 / 系统认字界面 / 在线识别。
+  ///
+  /// 系统那个引擎在有些机器上根本拉不起来（一直回 ERROR_CLIENT），所以留了后两条。
+  static const List<String> asrModes = <String>['system', 'systemInput', 'cloud'];
+
+  /// 在外面的引擎拉不起来时，录一段交给网上那个认字接口。
+  String asrMode;
+
+  /// 在线识别的地址与模型名。密钥不在这里，存在安全存储里。
+  String asrBaseUrl;
+  String asrModel;
 
   /// 外观只认那三个值，文件被手改坏了就回到跟系统走。
   static String _themeMode(Object? raw) {
