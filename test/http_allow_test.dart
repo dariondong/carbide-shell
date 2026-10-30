@@ -65,21 +65,28 @@ void main() {
       expect(again.value.allowedDomains, <String>['api.example.com']);
     });
 
-    test('重复加不会变成两条', () async {
+    test('子域被父域放行着就不再多加一条', () async {
       final HttpAllowTool tool = HttpAllowTool(store);
       await tool.run(<String, Object?>{'domain': 'example.com'}, _ctx);
       final ToolOutcome out = await tool.run(
           <String, Object?>{'domain': 'https://www.example.com/', 'action': 'add'}, _ctx);
       expect(out.ok, isTrue);
-      expect(out.stdout, contains('已经在列表里'));
+      expect(out.stdout, contains('一起放行'));
       expect(store.value.allowedDomains, <String>['example.com']);
     });
 
     test('删掉之后又回到要问一句', () async {
       final HttpAllowTool tool = HttpAllowTool(store);
       await tool.run(<String, Object?>{'domain': 'example.com'}, _ctx);
-      final ToolOutcome out =
+      // 删子域没用，得删那一条。
+      final ToolOutcome sub =
           await tool.run(<String, Object?>{'domain': 'www.example.com', 'action': 'remove'}, _ctx);
+      expect(sub.ok, isTrue);
+      expect(sub.stdout, contains('example.com'));
+      expect(store.value.allowedDomains, <String>['example.com']);
+
+      final ToolOutcome out =
+          await tool.run(<String, Object?>{'domain': 'example.com', 'action': 'remove'}, _ctx);
       expect(out.ok, isTrue);
       expect(store.value.allowedDomains, isEmpty);
       expect(

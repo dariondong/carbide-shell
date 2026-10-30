@@ -100,19 +100,35 @@ class HttpAllowTool extends Tool {
     if (action == 'remove') {
       final List<String> next = now.where((String d) => d != host).toList();
       if (next.length == now.length) {
+        // 子域是由父域放行着的：删子域没用，要收紧就得删那一条。
+        final String? parent = _covering(now, host);
+        if (parent != null) {
+          return ToolOutcome.success(stdout: '$host 是由 $parent 放行的，要收紧就删 $parent。');
+        }
         return ToolOutcome.success(stdout: '$host 本来就不在列表里。');
       }
       settings.value.allowedDomains = next;
       await settings.save();
-      return ToolOutcome.success(
-          stdout: '$host 删掉了，现在还有 ${next.length} 个域名。');
+      return ToolOutcome.success(stdout: '$host 删掉了，现在还有 ${next.length} 个域名。');
     }
 
     if (now.contains(host)) {
       return ToolOutcome.success(stdout: '$host 已经在列表里了，直接发就行。');
     }
+    final String? covered = _covering(now, host);
+    if (covered != null) {
+      return ToolOutcome.success(stdout: '$covered 已经把它一起放行了，不用再加。');
+    }
     settings.value.allowedDomains = <String>[...now, host];
     await settings.save();
     return ToolOutcome.success(stdout: '$host 加进去了，现在一共 ${now.length + 1} 个域名。');
+  }
+
+  /// 列表里哪一条连着子域已经覆盖了 [host]。没有就是 null。
+  static String? _covering(List<String> list, String host) {
+    for (final String d in list) {
+      if (host.endsWith('.$d')) return d;
+    }
+    return null;
   }
 }
