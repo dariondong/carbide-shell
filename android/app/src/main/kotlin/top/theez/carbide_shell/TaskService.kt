@@ -253,8 +253,8 @@ class TaskService : Service() {
             } catch (error: Throwable) {
                 out.add("常驻渠道：读不到")
             }
-            out.add("hasPromotableCharacteristics：" + has(Notification::class.java, "hasPromotableCharacteristics"))
-            out.add("setShortCriticalText：" + has(Notification.Builder::class.java, "setShortCriticalText", String::class.java))
+            out.add("提升权限：" + if (promoAllowed(context)) "有" else "没有")
+            out.add("hasPromotableCharacteristics：" + has(Notification::class.java, "hasPromotableCharacteristics"))            out.add("setShortCriticalText：" + has(Notification.Builder::class.java, "setShortCriticalText", String::class.java))
             out.add("前台服务：" + (if (instance == null) "没在跑" else "在跑"))
             val mode = try {
                 promoMode(context)
@@ -269,6 +269,18 @@ class TaskService : Service() {
                 else -> "问不出来"
             })
             return out
+        }
+
+        /** 安卓 16 要的这个权限：没声明的话提升请求下去也不生效。 */
+        private fun promoAllowed(context: Context): Boolean = try {
+            if (Build.VERSION.SDK_INT < 36) {
+                false
+            } else {
+                context.checkSelfPermission("android.permission.POST_PROMOTED_NOTIFICATIONS") ==
+                    PackageManager.PERMISSION_GRANTED
+            }
+        } catch (error: Throwable) {
+            false
         }
 
         private fun has(type: Class<*>, name: String, vararg args: Class<*>): String = try {

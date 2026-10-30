@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 安卓 16 的实时更新（Live Updates）：把常驻通知提到状态栏那个岛/胶囊里。
+         不声明这个权限，setRequestPromotedOngoing 下去也不生效——系统认得出这条通知可提升，
+         却不会真提。不提升时也只是一条普通常驻通知，不影响任务。 -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- 扩展工具的权限：设置里逐项打开时才向系统要一次，平时不碰 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
