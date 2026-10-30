@@ -101,13 +101,13 @@ void main() {
     expect(back.runs.first.status, TriggerRunStatus.skipped);
   });
 
-  test('运行记录最多留二十条', () {
+  test('运行记录留着上限那么多条，新的在前', () {
     final Trigger t = Trigger(id: 't1');
-    for (int i = 0; i < 30; i += 1) {
+    for (int i = 0; i < Trigger.maxRuns + 20; i += 1) {
       t.addRun(TriggerRun(at: DateTime(2026, 10, 28, 8, i), status: TriggerRunStatus.fired));
     }
     expect(t.runs.length, Trigger.maxRuns);
-    expect(t.runs.first.at.minute, 29);
+    expect(t.runs.first.at.minute, (Trigger.maxRuns + 19) % 60);
   });
 
   group('消息通知比对的那一段', () {

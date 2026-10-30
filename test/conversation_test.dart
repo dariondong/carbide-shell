@@ -40,10 +40,10 @@ void main() {
       ];
       expect(repairToolPairs(m), 1);
       expect(m.length, 5);
-      expect(m[2].toolCallId, 'c2');
-      expect(m[2].failed, isTrue);
-      expect(m[2].text, contains('没跑完'));
-      expect(m[3].role, LlmRole.tool);
+      expect(m[2].toolCallId, 'c1');
+      expect(m[3].toolCallId, 'c2', reason: '缺的那条紧跟在同组结果后面');
+      expect(m[3].failed, isTrue);
+      expect(m[3].text, contains('没跑完'));
       expect(m[4].text, '好了吗', reason: '后面那句提问不该被挪走');
     });
 
