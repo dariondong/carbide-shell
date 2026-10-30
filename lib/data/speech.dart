@@ -419,7 +419,7 @@ class Speech {
     _wired = true;
     _channel.setMethodCallHandler((MethodCall call) async {
       final Map<Object?, Object?> args =
-          (call.arguments as Map<Object?, Object?>) ?? const <Object?, Object?>{};
+          (call.arguments as Map<Object?, Object?>?) ?? const <Object?, Object?>{};
       switch (call.method) {
         case 'text':
           _onText?.call('${args['text'] ?? ''}', args['done'] == true);
