@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../core/conversation.dart';
 import '../core/models.dart';
 import '../core/tree.dart';
-import 'components.dart';
 import 'theme.dart';
 
 /// 一场对话的线路图。
