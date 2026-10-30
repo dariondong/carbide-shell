@@ -1,4 +1,5 @@
 import 'package:carbide_shell/core/triggers.dart';
+import 'package:carbide_shell/core/triggers_mention.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
