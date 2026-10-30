@@ -459,7 +459,7 @@ class TaskService : Service() {
                     .setLabel(context.getString(R.string.task_reply_hint))
                     .build()
                 val action = NotificationCompat.Action.Builder(
-                    Icon.createWithResource(context, R.drawable.ic_carbide_stat),
+                    R.drawable.ic_carbide_stat,
                     context.getString(R.string.task_reply_action),
                     replyIntent(context),
                 ).addRemoteInput(remote).build()
