@@ -101,7 +101,7 @@ void main() {
       // 主线没截断：同一轮的另一个说法挂在树上，分叉点上真的长出两个叉。
       final List<TreeNode> t = buildTree(p, <ConvBranch>[b]);
       layoutTree(t);
-      final TreeNode trunkTip = t.last;
+      final TreeNode trunkTip = t.where((TreeNode n) => n.onPath).last;
       final TreeNode forkTip = t.where((TreeNode n) => !n.onPath).last;
       expect(trunkTip.angle, isNot(closeTo(forkTip.angle, 1e-6)));
       expect(forkTip.angle.isFinite, isTrue);
