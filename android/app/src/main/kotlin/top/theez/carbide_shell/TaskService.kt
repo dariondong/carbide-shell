@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.app.RemoteInput as CompatRemoteInput
 
 /**
  * 长任务期间的前台服务。
@@ -455,7 +456,7 @@ class TaskService : Service() {
         /** 通知上那颗「回复」，兼容版。加不上就只发通知，不影响任务。 */
         private fun tryAddReplyCompat(context: Context, builder: NotificationCompat.Builder) {
             try {
-                val remote = RemoteInput.Builder(REPLY_KEY)
+                val remote = CompatRemoteInput.Builder(REPLY_KEY)
                     .setLabel(context.getString(R.string.task_reply_hint))
                     .build()
                 val action = NotificationCompat.Action.Builder(
