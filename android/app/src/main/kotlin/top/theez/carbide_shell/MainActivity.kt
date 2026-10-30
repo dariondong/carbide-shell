@@ -2,12 +2,14 @@ package top.theez.carbide_shell
 
 import android.Manifest
 import android.app.RemoteInput
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -34,7 +36,23 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        rebindNotifListener()
         readReply(intent)
+    }
+
+    /**
+     * 升级之后、或者系统把监听服务丢掉以后，那一头可能迟迟不重新绑上。
+     * 有「通知使用权」就请求系统重绑一次；没有就什么都不做。
+     */
+    private fun rebindNotifListener() {
+        if (!Device.notifAccess(this)) return
+        try {
+            NotificationListenerService.requestRebind(
+                ComponentName(this, CarbideNotificationListener::class.java),
+            )
+        } catch (error: Throwable) {
+            // 系统不给就算了，下一次进来再试。
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -192,7 +210,11 @@ class MainActivity : FlutterActivity() {
                     "phoneState" -> result.success(Device.phoneState(this))
 
                     "has" -> result.success(
-                        Device.has(this, call.argument<String>("perm").orEmpty()),
+                        if (call.argument<String>("perm").orEmpty() == "notif") {
+                            Device.canReadNotifs(this)
+                        } else {
+                            Device.has(this, call.argument<String>("perm").orEmpty())
+                        },
                     )
 
                     "request" -> requestDevice(
@@ -268,7 +290,7 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "notifs" -> {
-                        if (!Device.has(this, "notif")) {
+                        if (!Device.canReadNotifs(this)) {
                             result.error("no-permission", "没有通知读取权限", null)
                             return@setMethodCallHandler
                         }
@@ -433,15 +455,19 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         val waiting = accessWaits.remove(requestCode) ?: return
         val code = if (requestCode == REQ_NOTIF_ACCESS) "notif" else "usage"
-        waiting.success(Device.has(this, code))
+        waiting.success(accessGiven(code))
     }
+
+    /** 通知读取得听监听服务那一头的，其余照常问权限。 */
+    private fun accessGiven(code: String): Boolean =
+        if (code == "notif") Device.canReadNotifs(this) else Device.has(this, code)
 
     /** 设置里打开一项扩展时问一次权限，结果照实回话。 */
     private fun requestDevice(code: String, result: MethodChannel.Result) {
         // 通知读取和使用情况不是弹框能给的，只能把人送到系统那一页；
         // 回来之后才问得到答案，所以先挂在这里，人回来再回话。
         if (code == "notif" || code == "usage") {
-            if (Device.has(this, code)) {
+            if (accessGiven(code)) {
                 result.success(true)
                 return
             }

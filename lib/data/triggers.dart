@@ -199,19 +199,22 @@ class TriggerRunner {
   bool get busy => _busy;
 
   Future<void> _fire(Trigger t, DateTime at) async {
+    // 先记下上一次看的时间再挪：消息通知要按「上一回看到现在」这一段比对，
+    // 先挪就等于拿一个空区间去比，永远碰不上。
+    final DateTime? previous = t.lastAt;
     t.lastAt = at;
     switch (t.kind) {
       case TriggerKind.schedule:
         await _act(t, at, reason: '到点了');
       case TriggerKind.message:
-        await _checkMessage(t, at);
+        await _checkMessage(t, at, previous: previous);
       case TriggerKind.phone:
         await _checkPhone(t, at);
     }
   }
 
-  /// 消息通知：最近这段时间里有没有碰上关键词的那一条。
-  Future<void> _checkMessage(Trigger t, DateTime at) async {
+  /// 消息通知：上一次看到现在，有没有碰上关键词的那一条。
+  Future<void> _checkMessage(Trigger t, DateTime at, {DateTime? previous}) async {
     if (t.keywords.isEmpty) {
       await _skip(t, '还没写关键词');
       return;
@@ -221,25 +224,48 @@ class TriggerRunner {
       await _skip(t, '这台机器上读不到通知');
       return;
     }
-    final DateTime since = t.lastAt ?? at.subtract(const Duration(minutes: 30));
+    try {
+      // 先问一句系统给没给「通知使用权」：没给就不是「没碰上关键词」。
+      final bool granted = await device.has(DevicePerm.notification);
+      if (!granted) {
+        await _skip(t, '系统还没给「通知使用权」，去系统设置里给这一项再回来看');
+        return;
+      }
+    } on DeviceError catch (e) {
+      await _skip(t, e.message);
+      return;
+    }
+    final DateTime since = messageSince(at, previous);
     try {
       final List<DeviceNotification> list =
-          await device.notifications(limit: 40, minutes: 720);
-      for (final DeviceNotification n in list) {
-        final DateTime? when = n.at;
-        if (when == null || when.isBefore(since)) continue;
+          await device.notifications(limit: 100, minutes: 720);
+      final List<DeviceNotification> fresh = list
+          .where((DeviceNotification n) => n.at != null && !n.at!.isBefore(since))
+          .toList();
+      for (final DeviceNotification n in fresh) {
         if (!messageMatches(t, n.title, n.text)) continue;
         final String what = n.title.trim().isEmpty ? n.text.trim() : n.title.trim();
         await _act(t, at,
             reason: '${n.app.isEmpty ? '通知' : n.app}「${_clip(what, 40)}」碰上关键词');
         return;
       }
-      await _skip(t, '这段时间没有碰上关键词的通知');
+      await _skip(
+        t,
+        fresh.isEmpty
+            ? '这一段时间（从 ${_clock(since)} 起）一条通知都没收到'
+            : '看了 ${fresh.length} 条通知（从 ${_clock(since)} 起），没碰上关键词',
+      );
     } on DeviceError catch (e) {
       await _skip(t, e.message);
     } catch (e) {
       await _skip(t, '读通知失败：$e');
     }
+  }
+
+  /// 记录里写的时刻：`10-30 05:12`。
+  static String _clock(DateTime at) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(at.month)}-${two(at.day)} ${two(at.hour)}:${two(at.minute)}';
   }
 
   /// 手机状态：把允许看的那几项交给模型，让它说触发还是不触发。

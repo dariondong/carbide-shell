@@ -262,6 +262,20 @@ bool messageMatches(Trigger t, String title, String text) {
   return false;
 }
 
+/// 消息通知要比对的那一段：上一次看到现在。
+///
+/// 没有上一次、时间反了（改过系统时间）、或者隔得太久，就各自退回去：
+/// 半小时、半小时、最多十二小时。调用前把 lastAt 当成「上一次」传进来，
+/// 不能先把它挪到这一次，否则这一段永远是空的。
+DateTime messageSince(DateTime at, DateTime? previous) {
+  final DateTime fallback = at.subtract(const Duration(minutes: 30));
+  if (previous == null) return fallback;
+  if (previous.isAfter(at)) return fallback;
+  final DateTime oldest = at.subtract(const Duration(hours: 12));
+  if (previous.isBefore(oldest)) return oldest;
+  return previous;
+}
+
 /// 交给模型看的状态清单：只写它被允许看的那几项。
 String signalsForPrompt(Trigger t, PhoneSignals s) {
   final List<String> lines = <String>[];

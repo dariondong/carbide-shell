@@ -109,4 +109,35 @@ void main() {
     expect(t.runs.length, Trigger.maxRuns);
     expect(t.runs.first.at.minute, 29);
   });
+
+  group('消息通知比对的那一段', () {
+    final DateTime at = DateTime(2026, 10, 30, 9, 0);
+
+    test('没有上一次就退回半小时', () {
+      expect(messageSince(at, null), DateTime(2026, 10, 30, 8, 30));
+    });
+
+    test('上一次就是上一次，不往前挤到这一次', () {
+      final DateTime previous = DateTime(2026, 10, 30, 8, 45);
+      expect(messageSince(at, previous), previous);
+    });
+
+    test('时间反了（改过系统）当没有', () {
+      expect(messageSince(at, DateTime(2026, 10, 30, 9, 30)), DateTime(2026, 10, 30, 8, 30));
+    });
+
+    test('隔太久最多往回看十二小时', () {
+      expect(messageSince(at, DateTime(2026, 10, 25, 9, 0)), DateTime(2026, 10, 29, 21, 0));
+    });
+  });
+
+  test('触发器的写权限存得住，老文件默认能动手', () {
+    final Trigger on = Trigger(id: 't1');
+    expect(on.allowWrite, isTrue);
+    on.allowWrite = false;
+    expect(Trigger.fromJson(on.toJson()).allowWrite, isFalse);
+    // 老版本写下的 JSON 没有这一项。
+    final Map<String, Object?> old = <String, Object?>{'id': 't2', 'kind': 'message'};
+    expect(Trigger.fromJson(old).allowWrite, isTrue);
+  });
 }

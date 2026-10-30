@@ -45,6 +45,15 @@ object Device {
         return context.checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * 通知读取到底能不能用。
+     *
+     * 系统那一行字符串有时读不到（有的 ROM 写得不一样），所以监听服务已经绑上来了
+     * 也算数：那一头是真的在收通知，比字符串更可信。
+     */
+    fun canReadNotifs(context: Context): Boolean =
+        notifAccess(context) || CarbideNotificationListener.instance != null
+
     /** 系统里那条「通知使用权」给没给。 */
     fun notifAccess(context: Context): Boolean {
         val flat = try {
