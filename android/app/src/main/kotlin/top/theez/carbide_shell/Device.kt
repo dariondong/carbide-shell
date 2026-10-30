@@ -34,6 +34,7 @@ object Device {
         "sms" to Manifest.permission.SEND_SMS,
         "location" to Manifest.permission.ACCESS_FINE_LOCATION,
         "contacts" to Manifest.permission.READ_CONTACTS,
+        "mic" to Manifest.permission.RECORD_AUDIO,
     )
 
     fun has(context: Context, code: String): Boolean {

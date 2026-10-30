@@ -21,6 +21,7 @@ import '../data/balance.dart';
 import '../data/hub.dart';
 import '../data/llm_settings.dart';
 import '../data/settings.dart';
+import '../data/speech.dart';
 import '../services.dart';
 import '../tools/ask_tool.dart';
 import 'branch_tree.dart';
@@ -1837,57 +1838,95 @@ class _ChatPageState extends State<ChatPage> {
           border: Border.all(color: _typing ? C.blue : C.rule),
           boxShadow: C.softShadow,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _composerKey(
-              Icons.add_circle_outline,
-              canType ? _attachSheet : null,
-              size: 21,
-            ),
-            Padding(
-              padding: EdgeInsets.only(left: 2, bottom: 9),
-              child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _input,
-                focusNode: _focus,
-                enabled: canType,
-                style: const TextStyle(fontSize: 14.5, height: 1.5),
-                minLines: 1,
-                maxLines: 5,
-                // 跑的时候回车只管换行：先把下一句写下来，跑完再发。
-                textInputAction:
-                    running ? TextInputAction.newline : TextInputAction.send,
-                onSubmitted: (_) {
-                  if (!running) _send();
-                },
-                decoration: InputDecoration(
-                  hintText: running ? '这一轮还在跑，可以先写下一句' : '交给它一件事',
-                  contentPadding: const EdgeInsets.symmetric(vertical: 9),
+            _listeningHint(),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                _composerKey(
+                  Icons.add_circle_outline,
+                  canType ? _attachSheet : null,
+                  size: 21,
+                ),
+                Padding(
+                  padding: EdgeInsets.only(left: 2, bottom: 9),
+                  child: Text('❯', style: TextStyle(fontSize: 14, color: C.blue)),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: HoldToTalk(
+                  controller: _input,
+                  enabled: canType,
+                  child: TextField(
+                    controller: _input,
+                    focusNode: _focus,
+                    enabled: canType,
+                    style: const TextStyle(fontSize: 14.5, height: 1.5),
+                    minLines: 1,
+                    maxLines: 5,
+                    // 跑的时候回车只管换行：先把下一句写下来，跑完再发。
+                    textInputAction:
+                        running ? TextInputAction.newline : TextInputAction.send,
+                    onSubmitted: (_) {
+                      if (!running) _send();
+                    },
+                    decoration: InputDecoration(
+                      hintText: running ? '这一轮还在跑，可以先写下一句' : '交给它一件事',
+                      contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _input,
-              builder: (BuildContext ctx, TextEditingValue value, Widget? child) {
-                final bool typed = value.text.trim().isNotEmpty || _images.isNotEmpty;
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    if (value.text.isNotEmpty && !running)
-                      _composerKey(Icons.close, _input.clear, size: 16),
-                    _sendKey(running: running, canType: canType, typed: typed),
-                  ],
-                );
-              },
+              const SizedBox(width: 4),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _input,
+                builder: (BuildContext ctx, TextEditingValue value, Widget? child) {
+                  final bool typed = value.text.trim().isNotEmpty || _images.isNotEmpty;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (value.text.isNotEmpty && !running)
+                        _composerKey(Icons.close, _input.clear, size: 16),
+                      _sendKey(running: running, canType: canType, typed: typed),
+                    ],
+                  );
+                },
+              ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// 说的是不是正听着：一条小字挂在输入框上方。
+  Widget _listeningHint() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: Speech.listening,
+      builder: (BuildContext ctx, bool on, Widget? child) {
+        return AnimatedSize(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: on
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 6),
+                  child: Row(
+                    children: <Widget>[
+                      Icon(Icons.graphic_eq, size: 13, color: C.blue),
+                      const SizedBox(width: 5),
+                      Text('正在听，松手结束',
+                          style: TextStyle(fontSize: 11, color: C.blue)),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        );
+      },
     );
   }
 

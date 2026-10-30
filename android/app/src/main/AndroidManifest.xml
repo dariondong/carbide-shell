@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <uses-permission android:name="android.permission.SEND_SMS"/>
+    <!-- 长按输入框说话：系统的语音识别要录一段音 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- 临时文件存到下载目录：Android 10 起走 MediaStore 不要权限，更早的系统才要 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -82,6 +84,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- 安卓 11 起要声明看得见语音识别服务，否则 SpeechRecognizer 绑不上 -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>

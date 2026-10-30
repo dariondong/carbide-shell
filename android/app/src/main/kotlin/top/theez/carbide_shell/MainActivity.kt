@@ -153,6 +153,40 @@ class MainActivity : FlutterActivity() {
             }
         // 通知里的回复可能比 Dart 那边接上得早，这时才把道接上。
         flushReply()
+        // 长按输入框说话：系统自带的语音识别，认出来的字一条条回给界面。
+        val speech = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH)
+        SpeechHelper.attach(speech)
+        speech.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "available" -> result.success(SpeechHelper.available(this))
+
+                "start" -> {
+                    if (!Device.has(this, "mic") &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                    ) {
+                        // 没给麦克风权限：先回一句，界面去要，要到了再叫一次 start。
+                        result.success(mapOf("ok" to false, "need" to "mic"))
+                    } else {
+                        SpeechHelper.start(this)
+                        result.success(mapOf("ok" to true))
+                    }
+                }
+
+                "grant" -> requestDevice("mic", result)
+
+                "stop" -> {
+                    SpeechHelper.stop()
+                    result.success(null)
+                }
+
+                "cancel" -> {
+                    SpeechHelper.cancel()
+                    result.success(null)
+                }
+
+                else -> result.notImplemented()
+            }
+        }
         // 临时文件下载到「下载」目录。Android 10 起走 MediaStore，不要权限。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES)
             .setMethodCallHandler { call, result ->
@@ -480,6 +514,7 @@ class MainActivity : FlutterActivity() {
         const val CHANNEL = "top.theez.carbide_shell/foreground"
         const val FILES = "top.theez.carbide_shell/files"
         const val DEVICE = "top.theez.carbide_shell/device"
+        const val SPEECH = "top.theez.carbide_shell/speech"
         const val REQ_NOTIFICATIONS = 0xCB02
 
         /** 送去系统设置页要权限的两个号。 */
@@ -491,6 +526,7 @@ class MainActivity : FlutterActivity() {
             "sms" to 0xCB21,
             "location" to 0xCB22,
             "contacts" to 0xCB23,
+            "mic" to 0xCB24,
         )
     }
 }

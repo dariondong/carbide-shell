@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../core/agent.dart';
 import '../core/models.dart';
+import '../data/speech.dart';
 import 'md_text.dart';
 import 'theme.dart';
 
@@ -681,6 +683,111 @@ class SheetHead extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 长按说话那一下的等待时长。
+///
+/// 比输入框自己选文字那一下（500ms）短，两条长按同时开始计时时这里先赢，
+/// 于是长按输入框不会弹出选字菜单，而是直接开始听。
+const Duration kHoldToTalkDelay = Duration(milliseconds: 320);
+
+/// 长按输入框说话：按下去开始听，认出来的字跟着话筒往框里长，松手收尾。
+///
+/// 只在 Android 上真做事，别的平台长按还是原来的选字。
+class HoldToTalk extends StatefulWidget {
+  const HoldToTalk({
+    super.key,
+    required this.controller,
+    required this.child,
+    this.enabled = true,
+  });
+
+  /// 认出来的字往这个框里写。
+  final TextEditingController controller;
+
+  final Widget child;
+
+  /// 这一格能不能说话：输入框本身禁用时也不听。
+  final bool enabled;
+
+  @override
+  State<HoldToTalk> createState() => _HoldToTalkState();
+}
+
+class _HoldToTalkState extends State<HoldToTalk> {
+  /// 按下去那一刻框里已经有的字：认出来的接在后面。
+  String _base = '';
+
+  @override
+  void dispose() {
+    Speech.forget();
+    super.dispose();
+  }
+
+  void _begin() {
+    if (!widget.enabled || !Speech.supported) return;
+    _base = widget.controller.text;
+    Speech.listen(onText: _apply, onError: _complain);
+  }
+
+  /// 松手：说完这一句。
+  void _end() {
+    if (!Speech.supported) return;
+    Speech.stop();
+  }
+
+  void _apply(String text, bool done) {
+    if (!mounted) return;
+    final String body = text.trim();
+    if (done) Speech.forget();
+    if (body.isEmpty) return;
+    final String joined = _join(_base, body);
+    widget.controller.value = TextEditingValue(
+      text: joined,
+      selection: TextSelection.collapsed(offset: joined.length),
+    );
+  }
+
+  /// 接在前一句后面。英文接在中文后面留一个空格，中文直接连着。
+  String _join(String base, String add) {
+    if (base.isEmpty) return add;
+    if (base.endsWith(' ') || base.endsWith('\n')) return '$base$add';
+    final bool ascii = RegExp(r'^[A-Za-z0-9]').hasMatch(add);
+    return ascii ? '$base $add' : '$base$add';
+  }
+
+  void _complain(String code) {
+    if (!mounted) return;
+    final String text = switch (code) {
+      'permission' => '没有麦克风权限',
+      'no-service' => '这台机器没有语音识别服务',
+      'network' => '语音识别要联网，这次没连上',
+      'busy' => '识别服务正忙着，等一下再说',
+      _ => '这次没听清',
+    };
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(text), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.translucent,
+      gestures: <Type, GestureRecognizerFactory>{
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+          () => LongPressGestureRecognizer(duration: kHoldToTalkDelay),
+          (LongPressGestureRecognizer r) {
+            r
+              ..onLongPress = _begin
+              ..onLongPressEnd = (LongPressEndDetails _) => _end();
+          },
+        ),
+      },
+      child: widget.child,
     );
   }
 }
