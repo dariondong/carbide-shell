@@ -254,7 +254,8 @@ class TaskService : Service() {
                 out.add("常驻渠道：读不到")
             }
             out.add("提升权限：" + if (promoAllowed(context)) "有" else "没有")
-            out.add("hasPromotableCharacteristics：" + has(Notification::class.java, "hasPromotableCharacteristics"))            out.add("setShortCriticalText：" + has(Notification.Builder::class.java, "setShortCriticalText", String::class.java))
+            out.add("hasPromotableCharacteristics：" + has(Notification::class.java, "hasPromotableCharacteristics"))
+            out.add("setShortCriticalText：" + has(Notification.Builder::class.java, "setShortCriticalText", String::class.java))
             out.add("前台服务：" + (if (instance == null) "没在跑" else "在跑"))
             val mode = try {
                 promoMode(context)
