@@ -111,6 +111,10 @@ class _ChatPageState extends State<ChatPage> {
   /// 这一轮是不是在跑，看托管处，不看页面自己。
   bool get _running => _live?.running ?? false;
 
+  /// 记录里还有没有能退回去的那一句。
+  bool get _canRollback =>
+      !_running && _messages.any((LlmMessage m) => m.role == LlmRole.user);
+
   AgentLoop? get _loop => _live?.loop;
 
   ApprovalRequest? get _pending => _live?.pending;
@@ -415,6 +419,39 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   /// 顶栏那三颗里的第一颗：这个对话自己的事，提示词和压缩。
+  /// 退一步：把最后那句提问和它后面的一起删掉，那句话放回输入框。
+  ///
+  /// 跑不动的、模型拒了的那一轮用得上：退回去改两个字再发，
+  /// 不用重开一场对话，也不用看着一段报错留在记录里。
+  Future<bool> _rollback() async {
+    if (_running) {
+      _toast('这一轮还在跑，先停下再退。');
+      return false;
+    }
+    final List<LlmMessage> msgs = _messages;
+    int at = -1;
+    for (int i = msgs.length - 1; i >= 0; i -= 1) {
+      if (msgs[i].role == LlmRole.user) {
+        at = i;
+        break;
+      }
+    }
+    if (at < 0) {
+      _toast('这场对话里还没有可退的那一句。');
+      return false;
+    }
+    final String text = msgs[at].text;
+    msgs.removeRange(at, msgs.length);
+    _live?.loop.onHistoryChanged();
+    _input.text = text;
+    _input.selection = TextSelection.collapsed(offset: text.length);
+    await widget.services.persist(widget.conversation);
+    if (!mounted) return true;
+    setState(() {});
+    _focus.requestFocus();
+    return true;
+  }
+
   Future<void> _moreSheet() async {
     final int cut = compactCut(_messages);
     final String? pick = await showModalBottomSheet<String>(
@@ -441,6 +478,14 @@ class _ChatPageState extends State<ChatPage> {
             ),
             const SizedBox(height: 8),
             _sheetRow(
+              Icons.undo_rounded,
+              '回退一步',
+              _canRollback ? '删掉最后那句提问和它后面的，放回输入框' : '没有可退的那一句',
+              _canRollback,
+              () => Navigator.of(ctx).pop('rollback'),
+            ),
+            const SizedBox(height: 8),
+            _sheetRow(
               Icons.compress,
               '压缩对话',
               cut <= 0
@@ -457,6 +502,10 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted || pick == null) return;
     if (pick == 'prompt') {
       await _editPrompt();
+      return;
+    }
+    if (pick == 'rollback') {
+      await _rollback();
       return;
     }
     await _compact();
@@ -754,11 +803,15 @@ class _ChatPageState extends State<ChatPage> {
       case _RowKind.answer:
         // 这条回答花了多少 token，就写在它下面。
         final LlmUsage used = r.message?.usage ?? const LlmUsage();
+        // 模型那一行报错的时候，就在它下面给一个回退：退回去改两个字再发。
+        final bool broke = r.message?.role == LlmRole.assistant &&
+            r.text.startsWith('模型请求失败');
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            _answer(r.text, bottom: used.total > 0 ? 5 : 18),
+            _answer(r.text, bottom: used.total > 0 || broke ? 5 : 18),
             if (used.total > 0) _usageLine(used),
+            if (broke) _rollbackLine(),
           ],
         );
       case _RowKind.tool:
@@ -906,6 +959,32 @@ class _ChatPageState extends State<ChatPage> {
       child: Text(
         '${_fmtTokens(usage.prompt)} 进 · ${_fmtTokens(usage.completion)} 出$hit',
         style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
+      ),
+    );
+  }
+
+  /// 报错那一轮下面的那一行：回退一句，再发一遍。
+  Widget _rollbackLine() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 34, bottom: 16),
+      child: GestureDetector(
+        onTap: _canRollback ? () => _rollback() : null,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.undo_rounded, size: 14, color: _canRollback ? C.blue : C.grey2),
+            const SizedBox(width: 5),
+            Text(
+              _canRollback ? '回退这一步，改一改再发' : '跑着的时候不能退',
+              style: TextStyle(
+                fontSize: 12,
+                color: _canRollback ? C.blue : C.grey2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1302,6 +1381,19 @@ class _ChatPageState extends State<ChatPage> {
                   width: 34,
                   height: 56,
                   child: Icon(Icons.timeline, size: 17, color: C.grey),
+                ),
+              ),
+              GestureDetector(
+                onTap: _canRollback ? () => _rollback() : null,
+                behavior: HitTestBehavior.opaque,
+                child: SizedBox(
+                  width: 34,
+                  height: 56,
+                  child: Icon(
+                    Icons.undo_rounded,
+                    size: 18,
+                    color: _canRollback ? C.ink : C.grey.withValues(alpha: 0.45),
+                  ),
                 ),
               ),
               GestureDetector(
