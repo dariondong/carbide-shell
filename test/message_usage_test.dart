@@ -50,4 +50,28 @@ void main() {
       expect(back.usage.cacheHitRate, 0);
     });
   });
+
+  group('提问的时间', () {
+    test('存下来读回来还是那一刻', () {
+      final DateTime at = DateTime(2026, 10, 30, 14, 5);
+      final Map<String, Object?> json =
+          messageToJson(LlmMessage.user('看一下磁盘', at: at));
+      expect(json['at'], at.toIso8601String());
+      final LlmMessage back = messageFromJson(json)!;
+      expect(back.at, at);
+    });
+
+    test('老记录里没有这一项也不报错', () {
+      final LlmMessage back = messageFromJson(<String, Object?>{
+        'role': 'user',
+        'text': '以前的提问',
+      })!;
+      expect(back.at, isNull);
+    });
+
+    test('没有时间就不写这个键', () {
+      final Map<String, Object?> json = messageToJson(const LlmMessage.user('在吗'));
+      expect(json.containsKey('at'), isFalse);
+    });
+  });
 }

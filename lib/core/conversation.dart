@@ -231,6 +231,7 @@ int repairToolPairs(List<LlmMessage> messages) {
 Map<String, Object?> messageToJson(LlmMessage m) => <String, Object?>{
       'role': m.role.name,
       'text': m.text,
+      if (m.at != null) 'at': m.at!.toIso8601String(),
       if (m.images.isNotEmpty) 'images': m.images,
       if (m.calls.isNotEmpty)
         'calls': m.calls
@@ -268,6 +269,12 @@ LlmUsage usageFromJson(Object? raw) {
   );
 }
 
+/// 记录里存的是 ISO 串；老记录里没有这个键。
+DateTime? _timeOf(Object? raw) {
+  if (raw is! String || raw.isEmpty) return null;
+  return DateTime.tryParse(raw);
+}
+
 LlmMessage? messageFromJson(Map<String, Object?> json) {
   final String role = '${json['role'] ?? ''}';
   final String text = '${json['text'] ?? ''}';
@@ -290,7 +297,7 @@ LlmMessage? messageFromJson(Map<String, Object?> json) {
       final List<String> images = rawImages is List
           ? rawImages.map((Object? e) => '$e').toList()
           : const <String>[];
-      return LlmMessage.user(text, images: images);
+      return LlmMessage.user(text, images: images, at: _timeOf(json['at']));
     case 'assistant':
       return LlmMessage.assistant(text,
           calls: calls, usage: usageFromJson(json['usage']));

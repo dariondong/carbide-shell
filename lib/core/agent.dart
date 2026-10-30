@@ -141,7 +141,7 @@ class AgentLoop {
       journal.add(<String, Object?>{'event': 'repair', 'at': history.length});
       _checkpoint();
     }
-    history.add(LlmMessage.user(text, images: images));
+    history.add(LlmMessage.user(text, images: images, at: DateTime.now()));
     journal.add(<String, Object?>{'event': 'user', 'text': text});
     // 用户这句先落到盘上：接下来一场跑多久都不再冒丢字的险。
     _checkpoint();
@@ -392,7 +392,7 @@ class AgentLoop {
     for (int i = 0; i < newest; i += 1) {
       final LlmMessage m = kept[i];
       if (m.images.isEmpty) continue;
-      kept[i] = LlmMessage.user(m.text.trim().isEmpty ? '（图片已收起）' : m.text);
+      kept[i] = LlmMessage.user(m.text.trim().isEmpty ? '（图片已收起）' : m.text, at: m.at);
     }
     return kept;
   }

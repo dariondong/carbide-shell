@@ -449,7 +449,19 @@ class _ChatPageState extends State<ChatPage> {
       _toast('这场对话里还没有可退的那一句。');
       return false;
     }
+    return _rollbackTo(at);
+  }
+
+  /// 退到 [at] 那一句：它和它后面的记录一起删掉，那句话放回输入框。
+  Future<bool> _rollbackTo(int at) async {
+    if (_running) {
+      _toast('这一轮还在跑，先停下再退。');
+      return false;
+    }
+    final List<LlmMessage> msgs = _messages;
+    if (at < 0 || at >= msgs.length || msgs[at].role != LlmRole.user) return false;
     final String text = msgs[at].text;
+    final int dropped = msgs.length - at - 1;
     msgs.removeRange(at, msgs.length);
     _live?.loop.onHistoryChanged();
     _input.text = text;
@@ -458,7 +470,53 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted) return true;
     setState(() {});
     _focus.requestFocus();
+    _toast(dropped <= 0 ? '退回来了，那句话在输入框里。' : '退回来了，删掉了 $dropped 条记录。');
     return true;
+  }
+
+  /// 回退做成一页时间线：哪一句都能退，不只退最后一句。
+  ///
+  /// 从下往上排，最新的在最下面，跟聊天记录一个方向；点哪一句就退到哪一句。
+  Future<void> _rollbackTimeline() async {
+    if (_running) {
+      _toast('这一轮还在跑，先停下再退。');
+      return;
+    }
+    final List<LlmMessage> msgs = _messages;
+    final List<int> stops = <int>[];
+    for (int i = msgs.length - 1; i >= 0; i -= 1) {
+      if (msgs[i].role == LlmRole.user) stops.add(i);
+    }
+    if (stops.isEmpty) {
+      _toast('这场对话里还没有可退的那一句。');
+      return;
+    }
+    final int? at = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => SheetCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('回退到哪一句',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
+            const SizedBox(height: 3),
+            Text('退到哪一句，那一句和它后面的记录就一起删掉，那句话放回输入框。', style: C.monoSmall),
+            const SizedBox(height: 10),
+            _RollbackTimeline(
+              stops: stops,
+              messages: msgs,
+              onPick: (int index) => Navigator.of(ctx).pop(index),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || at == null) return;
+    await _rollbackTo(at);
   }
 
   Future<void> _moreSheet() async {
@@ -488,10 +546,10 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(height: 8),
             _sheetRow(
               Icons.undo_rounded,
-              '回退一步',
-              _canRollback ? '删掉最后那句提问和它后面的，放回输入框' : '没有可退的那一句',
+              '回退到某一句',
+              _canRollback ? '按时间线挑一句，它和它后面的一起删掉' : '没有可退的那一句',
               _canRollback,
-              () => Navigator.of(ctx).pop('rollback'),
+              () => Navigator.of(ctx).pop('timeline'),
             ),
             const SizedBox(height: 8),
             _sheetRow(
@@ -513,8 +571,8 @@ class _ChatPageState extends State<ChatPage> {
       await _editPrompt();
       return;
     }
-    if (pick == 'rollback') {
-      await _rollback();
+    if (pick == 'rollback' || pick == 'timeline') {
+      await _rollbackTimeline();
       return;
     }
     await _compact();
@@ -1393,7 +1451,7 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
               GestureDetector(
-                onTap: _canRollback ? () => _rollback() : null,
+                onTap: _canRollback ? _rollbackTimeline : null,
                 behavior: HitTestBehavior.opaque,
                 child: SizedBox(
                   width: 34,
@@ -1855,6 +1913,124 @@ class _Row {
 }
 
 /// 压缩出来的那一段：默认收三行，想看全文再展开。
+/// 回退那一页的名单：一句一句排下来，最新的在最下面，点谁退到谁。
+class _RollbackTimeline extends StatelessWidget {
+  const _RollbackTimeline({
+    required this.stops,
+    required this.messages,
+    required this.onPick,
+  });
+
+  /// 每一句提问在记录里的位置，从新到旧。
+  final List<int> stops;
+  final List<LlmMessage> messages;
+  final void Function(int index) onPick;
+
+  /// 一句话剪成一行，太长就留头。
+  static String _line(String text) {
+    String body = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (body.isEmpty) return '（这一轮只带了文件）';
+    if (body.length > 140) body = '${body.substring(0, 140)}…';
+    return body;
+  }
+
+  static String _stamp(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final DateTime now = DateTime.now();
+    final String hm = '${two(t.hour)}:${two(t.minute)}';
+    final bool today = t.year == now.year && t.month == now.month && t.day == now.day;
+    return today ? hm : '${t.month}-${t.day} $hm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double h = MediaQuery.sizeOf(context).height * 0.5;
+    final int total = stops.length;
+    return SizedBox(
+      height: h < 180 ? 180 : (h > 440 ? 440 : h),
+      child: ListView.builder(
+        // 倒过来建：最新的落在最下面，跟上面那份记录一个方向，一打开就在眼前。
+        reverse: true,
+        padding: EdgeInsets.zero,
+        itemCount: total,
+        itemBuilder: (BuildContext ctx, int i) {
+          final int at = stops[i];
+          final LlmMessage m = messages[at];
+          final int round = total - i;
+          final int cut = messages.length - at - 1;
+          final bool newest = i == 0;
+          final DateTime? when = m.at;
+          return Stack(
+            children: <Widget>[
+              if (!newest)
+                Positioned(
+                  left: 24,
+                  top: 0,
+                  bottom: 0,
+                  width: 1,
+                  child: ColoredBox(color: C.rule),
+                ),
+              InkWell(
+                onTap: () => onPick(at),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 4, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: Center(
+                          child: Container(
+                            width: newest ? 10 : 8,
+                            height: newest ? 10 : 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: newest ? C.blue : C.card,
+                              border: Border.all(color: newest ? C.blue : C.rule2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              when == null ? '第 $round 轮' : '第 $round 轮 · ${_stamp(when)}',
+                              style: C.monoSmall.copyWith(
+                                fontSize: 10.5,
+                                color: newest ? C.blue : C.grey2,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _line(m.text),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, height: 1.5, color: C.ink),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              cut <= 0 ? '最后一句，后面没有别的记录' : '后面 $cut 条记录一起删掉',
+                              style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _SummaryCard extends StatefulWidget {
   const _SummaryCard({required this.text});
 

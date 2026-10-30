@@ -55,7 +55,7 @@ class LlmToolCall {
 }
 
 class LlmMessage {
-  const LlmMessage.user(this.text, {this.images = const <String>[]})
+  const LlmMessage.user(this.text, {this.images = const <String>[], this.at})
       : role = LlmRole.user,
         calls = const <LlmToolCall>[],
         toolCallId = '',
@@ -69,6 +69,7 @@ class LlmMessage {
     this.usage = const LlmUsage(),
   })  : role = LlmRole.assistant,
         images = const <String>[],
+        at = null,
         toolCallId = '',
         toolName = '',
         failed = false;
@@ -81,6 +82,7 @@ class LlmMessage {
   })  : role = LlmRole.tool,
         calls = const <LlmToolCall>[],
         images = const <String>[],
+        at = null,
         usage = const LlmUsage();
 
   final LlmRole role;
@@ -92,6 +94,9 @@ class LlmMessage {
 
   /// Data URLs (`data:image/png;base64,…`) the model should look at.
   final List<String> images;
+
+  /// 这句提问是什么时候说的。老记录里没有，就是 null。
+  final DateTime? at;
 
   /// 这条回答花了多少 token：进去的、回来的、其中命中缓存的。
   /// 提问和工具结果是空的；系统提示词之类不会再算到这里。
