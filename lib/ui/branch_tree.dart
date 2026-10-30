@@ -102,6 +102,15 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
     return null;
   }
 
+  /// 主线最新那一轮：格子上点一个蓝点。
+  TreeNode? get _latest {
+    TreeNode? hit;
+    for (final TreeNode n in _nodes) {
+      if (n.onPath) hit = n;
+    }
+    return hit;
+  }
+
   static String _stamp(DateTime? t) {
     if (t == null) return '';
     String two(int n) => n.toString().padLeft(2, '0');
@@ -157,70 +166,128 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (n == null)
           Text('点一格：主干上是那一轮，拐到右边去的是退掉的一段。',
               style: C.monoSmall.copyWith(fontSize: 11, color: C.grey2))
-        else ...<Widget>[
-          Text(
-            '第 ${n.round} 轮${_stamp(n.at).isEmpty ? '' : ' · ${_stamp(n.at)}'}' +
-                (n.onPath ? '' : ' · 退掉的一段'),
-            style: C.monoSmall.copyWith(
-              fontSize: 10.5,
-              color: n.onPath ? C.grey2 : C.blue,
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+            decoration: BoxDecoration(
+              color: C.paper2,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '第 ${n.round} 轮${_stamp(n.at).isEmpty ? '' : ' · ${_stamp(n.at)}'}' +
+                      (n.onPath ? '' : ' · 退掉的一段'),
+                  style: C.monoSmall.copyWith(
+                    fontSize: 10,
+                    letterSpacing: 0.6,
+                    color: n.onPath ? C.grey2 : C.blue,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(_line(n.text),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, height: 1.55, color: C.ink)),
+                const SizedBox(height: 11),
+                _actButton(n),
+              ],
             ),
           ),
-          const SizedBox(height: 3),
-          Text(_line(n.text),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, height: 1.5, color: C.ink)),
-          const SizedBox(height: 8),
-          SquareButton(
-            label: n.onPath ? '从这一轮重来' : '接回这一段',
-            filled: true,
-            onPressed: () => widget.onAct(n),
-          ),
-        ],
       ],
+    );
+  }
+
+  /// 一个圆角实心按钮，比方形那颗软和些。
+  Widget _actButton(TreeNode n) {
+    return SizedBox(
+      width: double.infinity,
+      height: 42,
+      child: Material(
+        color: C.blue,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: () => widget.onAct(n),
+          child: Center(
+            child: Text(
+              n.onPath ? '从这一轮重来' : '接回这一段',
+              style: TextStyle(
+                color: C.onAccent,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget _box(TreeNode n) {
     final bool picked = n.id == _picked;
-    final bool newest = n.onPath && _nodes.where((TreeNode x) => x.onPath).last.id == n.id;
-    final Color edge = picked
-        ? C.blue
-        : (n.onPath ? (newest ? C.blue : C.rule2) : C.blue.withValues(alpha: 0.55));
+    final bool newest = _latest?.id == n.id;
+    final Color fill = picked
+        ? C.blueSoft
+        : (n.onPath ? C.card : C.blueSoft.withValues(alpha: 0.55));
     return GestureDetector(
       onTap: () => setState(() => _picked = n.id),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.fromLTRB(11, 8, 11, 8),
         decoration: BoxDecoration(
-          color: picked ? C.blueSoft : C.card,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: edge, width: picked ? 1.6 : 1),
+          color: fill,
+          borderRadius: BorderRadius.circular(12),
+          border: picked ? Border.all(color: C.blue, width: 1.3) : null,
+          boxShadow: picked ? C.softShadow : (n.onPath ? C.softShadow : null),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              '第 ${n.round} 轮${n.onPath ? '' : ' · 退掉'}',
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: C.monoSmall.copyWith(
-                fontSize: 9,
-                letterSpacing: 0.6,
-                color: n.onPath ? C.grey2 : C.blue,
-              ),
+            Row(
+              children: <Widget>[
+                if (newest && !picked)
+                  Container(
+                    width: 5,
+                    height: 5,
+                    margin: const EdgeInsets.only(right: 5),
+                    decoration: const BoxDecoration(
+                      color: C.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                Expanded(
+                  child: Text(
+                    n.onPath ? '第 ${n.round} 轮' : '退掉 · 第 ${n.round} 轮',
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style: C.monoSmall.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 0.8,
+                      color: n.onPath ? C.grey2 : C.blue,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Expanded(
               child: Text(
                 _line(n.text),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.5, height: 1.35, color: C.ink),
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: n.onPath ? C.ink : C.ink.withValues(alpha: 0.82),
+                ),
               ),
             ),
           ],
@@ -257,9 +324,10 @@ class _WirePainter extends CustomPainter {
       final Offset to = topLeft(n) + Offset(boxW / 2, 0);
       final Paint paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = n.onPath ? 1.5 : 1.3
+        ..strokeWidth = n.onPath ? 1.3 : 1.2
         ..strokeCap = StrokeCap.round
-        ..color = n.onPath ? C.ink.withValues(alpha: 0.38) : C.blue.withValues(alpha: 0.6);
+        ..color =
+            n.onPath ? C.ink.withValues(alpha: 0.22) : C.blue.withValues(alpha: 0.42);
       canvas.drawPath(_wire(from, to), paint);
     }
     for (final TreeNode n in nodes) {
@@ -270,14 +338,14 @@ class _WirePainter extends CustomPainter {
       }
       if (kids < 2) continue;
       final Offset at = topLeft(n) + Offset(boxW / 2, boxH);
-      canvas.drawCircle(at, 2.6, Paint()..color = C.ink.withValues(alpha: 0.55));
+      canvas.drawCircle(at, 2.2, Paint()..color = C.ink.withValues(alpha: 0.32));
     }
     if (picked != null) {
       for (final TreeNode n in nodes) {
         if (n.id != picked) continue;
         canvas.drawCircle(
           topLeft(n) + Offset(boxW / 2, boxH),
-          2.6,
+          2.2,
           Paint()..color = C.blue,
         );
       }
@@ -295,8 +363,8 @@ class _WirePainter extends CustomPainter {
     final double midY = (a.dy + b.dy) / 2;
     final double dir = b.dx > a.dx ? 1 : -1;
     final double r = math.min(
-      10,
-      math.min((b.dx - a.dx).abs() / 2, (midY - a.dy).abs().clamp(0, 10)),
+      14,
+      math.min((b.dx - a.dx).abs() / 2, (midY - a.dy).abs().clamp(0, 14)),
     );
     path.moveTo(a.dx, a.dy);
     path.lineTo(a.dx, midY - r);
