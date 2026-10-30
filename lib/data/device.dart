@@ -214,6 +214,87 @@ class AppUsage {
   String get line => '${app.isEmpty ? pkg : app}\t$span';
 }
 
+/// 打开一个应用的结果：找到了是哪个，或者没找到时举几个像的名字。
+class OpenAppResult {
+  const OpenAppResult({
+    this.ok = false,
+    this.app = '',
+    this.pkg = '',
+    this.near = const <String>[],
+    this.why = '',
+  });
+
+  factory OpenAppResult.fromMap(Map<Object?, Object?> m) {
+    final Object? near = m['near'];
+    return OpenAppResult(
+      ok: m['ok'] == true,
+      app: '${m['app'] ?? ''}',
+      pkg: '${m['pkg'] ?? ''}',
+      near: near is List
+          ? near.map((Object? e) => '$e').where((String s) => s.isNotEmpty).toList()
+          : const <String>[],
+      why: '${m['why'] ?? ''}',
+    );
+  }
+
+  final bool ok;
+  final String app;
+  final String pkg;
+  final List<String> near;
+  final String why;
+}
+
+/// 手机上那几档音量，都是百分比。
+class DeviceVolume {
+  const DeviceVolume({
+    this.ok = false,
+    this.music = -1,
+    this.ring = -1,
+    this.alarm = -1,
+    this.notification = -1,
+    this.mode = '',
+    this.why = '',
+  });
+
+  factory DeviceVolume.fromMap(Map<Object?, Object?> m) => DeviceVolume(
+        ok: m['ok'] != false,
+        music: (m['music'] as num?)?.toInt() ?? -1,
+        ring: (m['ring'] as num?)?.toInt() ?? -1,
+        alarm: (m['alarm'] as num?)?.toInt() ?? -1,
+        notification: (m['notification'] as num?)?.toInt() ?? -1,
+        mode: '${m['mode'] ?? ''}',
+        why: '${m['why'] ?? ''}',
+      );
+
+  final bool ok;
+  final int music;
+  final int ring;
+  final int alarm;
+  final int notification;
+
+  /// normal / vibrate / silent。
+  final String mode;
+  final String why;
+
+  String get modeName => switch (mode) {
+        'vibrate' => '振动',
+        'silent' => '静音',
+        'normal' => '正常',
+        _ => '',
+      };
+
+  /// 一行写完：音乐 60%、铃声 40%……
+  String get line {
+    final List<String> parts = <String>[];
+    if (music >= 0) parts.add('音乐 $music%');
+    if (ring >= 0) parts.add('铃声 $ring%');
+    if (alarm >= 0) parts.add('闹钟 $alarm%');
+    if (notification >= 0) parts.add('通知 $notification%');
+    if (modeName.isNotEmpty) parts.add('铃声方式 $modeName');
+    return parts.join('\n');
+  }
+}
+
 /// 一条联系人：名字加一个号码。
 class DeviceContact {  const DeviceContact({required this.name, required this.phone});
 
@@ -276,6 +357,26 @@ abstract class DeviceApi {
 
   /// 每个应用最近用了多久。没有「使用情况访问」时抛 [DeviceError]。
   Future<List<AppUsage>> usage({int hours = 24});
+
+  /// 打开一个应用。按名字或包名找，找不到就把像的那几个名字回上来。
+  Future<OpenAppResult> openApp(String query);
+
+  /// 设一个闹钟，24 小时制。
+  Future<bool> setAlarm({
+    required int hour,
+    required int minute,
+    String label = '',
+    bool skipUi = true,
+  });
+
+  /// 设一个计时器，[seconds] 秒之后响。
+  Future<bool> setTimer({required int seconds, String label = '', bool skipUi = true});
+
+  /// 现在的四档音量与铃声方式。
+  Future<DeviceVolume> volume();
+
+  /// 改一档音量或者铃声方式。改完把现在的值回上来。
+  Future<DeviceVolume> setVolume({String stream = '', int percent = -1, String mode = ''});
 
   /// 去系统里那两页。应用不能替用户打开这两项。
   Future<void> openNotificationAccess();
@@ -389,6 +490,55 @@ class PhoneDevice implements DeviceApi {
 
   @override
   Future<void> openUsageAccess() => _call('openUsageAccess', <String, Object?>{});
+
+  @override
+  Future<OpenAppResult> openApp(String query) async {
+    final Object? raw = await _call('openApp', <String, Object?>{'query': query});
+    if (raw is! Map) return const OpenAppResult(why: '系统没回话');
+    return OpenAppResult.fromMap(raw);
+  }
+
+  @override
+  Future<bool> setAlarm({
+    required int hour,
+    required int minute,
+    String label = '',
+    bool skipUi = true,
+  }) async =>
+      await _call('setAlarm', <String, Object?>{
+        'hour': hour,
+        'minute': minute,
+        'label': label,
+        'skipUi': skipUi,
+      }) ==
+      true;
+
+  @override
+  Future<bool> setTimer({required int seconds, String label = '', bool skipUi = true}) async =>
+      await _call('setTimer', <String, Object?>{
+        'seconds': seconds,
+        'label': label,
+        'skipUi': skipUi,
+      }) ==
+      true;
+
+  @override
+  Future<DeviceVolume> volume() async {
+    final Object? raw = await _call('volume');
+    if (raw is! Map) return const DeviceVolume(why: '系统没回话');
+    return DeviceVolume.fromMap(raw);
+  }
+
+  @override
+  Future<DeviceVolume> setVolume({String stream = '', int percent = -1, String mode = ''}) async {
+    final Object? raw = await _call('setVolume', <String, Object?>{
+      'stream': stream,
+      'percent': percent,
+      'mode': mode,
+    });
+    if (raw is! Map) return const DeviceVolume(why: '系统没回话');
+    return DeviceVolume.fromMap(raw);
+  }
 
   Future<Object?> _call(String method, [Map<String, Object?>? args]) async {    if (!supported) throw const DeviceError('这台机器上没有手机那一套，只有安卓上才有。');
     try {

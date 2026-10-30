@@ -2,6 +2,7 @@ import 'package:carbide_shell/core/models.dart';
 import 'package:carbide_shell/data/device.dart';
 import 'package:carbide_shell/data/settings.dart';
 import 'package:carbide_shell/data/tool_groups.dart';
+import 'package:carbide_shell/tools/app_tools.dart';
 import 'package:carbide_shell/tools/device_tools.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -138,6 +139,68 @@ class FakeDevice implements DeviceApi {
 
   @override
   Future<void> openUsageAccess() async {}
+
+  /// 打开过的应用、设过的闹钟与计时器、改过的音量。
+  final List<String> opened = <String>[];
+  final List<String> alarms = <String>[];
+  final List<String> timers = <String>[];
+
+  /// 名字 → 包名。
+  Map<String, String> apps = <String, String>{'微信': 'com.tencent.mm'};
+
+  DeviceVolume loud = const DeviceVolume(
+    ok: true,
+    music: 60,
+    ring: 40,
+    alarm: 80,
+    notification: 30,
+    mode: 'normal',
+  );
+
+  @override
+  Future<OpenAppResult> openApp(String query) async {
+    for (final MapEntry<String, String> e in apps.entries) {
+      if (query == e.key || query == e.value) {
+        opened.add(e.value);
+        return OpenAppResult(ok: true, app: e.key, pkg: e.value);
+      }
+    }
+    return const OpenAppResult(why: '这台手机上没找到这个应用', near: <String>['微信']);
+  }
+
+  @override
+  Future<bool> setAlarm({
+    required int hour,
+    required int minute,
+    String label = '',
+    bool skipUi = true,
+  }) async {
+    alarms.add('${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}'
+        '|$label|$skipUi');
+    return true;
+  }
+
+  @override
+  Future<bool> setTimer({required int seconds, String label = '', bool skipUi = true}) async {
+    timers.add('$seconds|$label|$skipUi');
+    return true;
+  }
+
+  @override
+  Future<DeviceVolume> volume() async => loud;
+
+  @override
+  Future<DeviceVolume> setVolume({String stream = '', int percent = -1, String mode = ''}) async {
+    loud = DeviceVolume(
+      ok: true,
+      music: stream == 'music' && percent >= 0 ? percent : loud.music,
+      ring: stream == 'ring' && percent >= 0 ? percent : loud.ring,
+      alarm: stream == 'alarm' && percent >= 0 ? percent : loud.alarm,
+      notification: stream == 'notification' && percent >= 0 ? percent : loud.notification,
+      mode: mode.isEmpty ? loud.mode : mode,
+    );
+    return loud;
+  }
 }
 
 void main() {
@@ -153,7 +216,7 @@ void main() {
           expect(names.add(t), isTrue, reason: '工具重了：$t');
         }
       }
-      expect(kToolGroups.length, 8);
+      expect(kToolGroups.length, 10);
       expect(toolGroupOf('notif')?.perm, DevicePerm.notification);
       expect(toolGroupOf('usage')?.perm, DevicePerm.usageAccess);
       expect(toolGroupOf('sms')?.perm, DevicePerm.sms);
@@ -398,6 +461,73 @@ void main() {
       expect(out.ok, isTrue);
       expect(out.stdout, contains('微信\t1 小时 35 分'));
       expect(out.stdout, contains('合计 1 小时 55 分'));
+    });
+  });
+
+  group('应用、闹钟、音量', () {
+    test('按名字打开应用', () async {
+      final FakeDevice phone = FakeDevice();
+      final ToolOutcome out =
+          await OpenAppTool(phone).run(<String, Object?>{'query': '微信'}, _ctx);
+      expect(out.ok, isTrue);
+      expect(out.stdout, contains('微信'));
+      expect(phone.opened, <String>['com.tencent.mm']);
+    });
+
+    test('名字对不上就举几个像的，不瞎开一个', () async {
+      final FakeDevice phone = FakeDevice();
+      final ToolOutcome out =
+          await OpenAppTool(phone).run(<String, Object?>{'query': '飞书'}, _ctx);
+      expect(out.ok, isFalse);
+      expect(out.error, contains('微信'));
+      expect(phone.opened, isEmpty);
+    });
+
+    test('闹钟按时分写给系统，默认不出系统那一页', () async {
+      final FakeDevice phone = FakeDevice();
+      final ToolOutcome out = await SetAlarmTool(phone)
+          .run(<String, Object?>{'hour': 6, 'minute': 5, 'label': '起来看看服务器'}, _ctx);
+      expect(out.ok, isTrue);
+      expect(phone.alarms, <String>['06:05|起来看看服务器|true']);
+      expect(out.stdout, contains('06:05'));
+    });
+
+    test('闹钟没给小时就不设', () async {
+      final FakeDevice phone = FakeDevice();
+      final ToolOutcome out = await SetAlarmTool(phone).run(<String, Object?>{}, _ctx);
+      expect(out.ok, isFalse);
+      expect(phone.alarms, isEmpty);
+    });
+
+    test('计时器把分钟和秒加起来', () async {
+      final FakeDevice phone = FakeDevice();
+      final ToolOutcome out = await SetTimerTool(phone)
+          .run(<String, Object?>{'minutes': 2, 'seconds': 30}, _ctx);
+      expect(out.ok, isTrue);
+      expect(phone.timers, <String>['150||true']);
+      expect(out.stdout, contains('2 分 30 秒'));
+    });
+
+    test('不给参数就只看一眼，算读', () async {
+      final FakeDevice phone = FakeDevice();
+      final VolumeTool tool = VolumeTool(phone);
+      expect(tool.classify(<String, Object?>{}), ToolRisk.read);
+      final ToolOutcome out = await tool.run(<String, Object?>{}, _ctx);
+      expect(out.ok, isTrue);
+      expect(out.stdout, contains('音乐 60%'));
+      expect(out.stdout, contains('铃声方式 正常'));
+    });
+
+    test('带参数就是改，算写', () async {
+      final FakeDevice phone = FakeDevice();
+      final VolumeTool tool = VolumeTool(phone);
+      expect(tool.classify(<String, Object?>{'stream': 'music', 'percent': 10}), ToolRisk.write);
+      final ToolOutcome out = await tool
+          .run(<String, Object?>{'stream': 'music', 'percent': 10, 'mode': 'silent'}, _ctx);
+      expect(out.ok, isTrue);
+      expect(phone.loud.music, 10);
+      expect(phone.loud.mode, 'silent');
+      expect(out.stdout, contains('改好了'));
     });
   });
 }

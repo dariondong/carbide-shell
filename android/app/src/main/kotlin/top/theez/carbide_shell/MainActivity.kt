@@ -288,6 +288,40 @@ class MainActivity : FlutterActivity() {
                         result.success(Device.usage(this, call.argument<Int>("hours") ?: 24))
                     }
 
+                    "openApp" -> result.success(
+                        Device.openApp(this, call.argument<String>("query").orEmpty()),
+                    )
+
+                    "setAlarm" -> result.success(
+                        Device.setAlarm(
+                            this,
+                            call.argument<Int>("hour") ?: 7,
+                            call.argument<Int>("minute") ?: 0,
+                            call.argument<String>("label").orEmpty(),
+                            call.argument<Boolean>("skipUi") ?: true,
+                        ),
+                    )
+
+                    "setTimer" -> result.success(
+                        Device.setTimer(
+                            this,
+                            call.argument<Int>("seconds") ?: 300,
+                            call.argument<String>("label").orEmpty(),
+                            call.argument<Boolean>("skipUi") ?: true,
+                        ),
+                    )
+
+                    "volume" -> result.success(Device.volume(this))
+
+                    "setVolume" -> result.success(
+                        Device.setVolume(
+                            this,
+                            call.argument<String>("stream").orEmpty(),
+                            call.argument<Int>("percent") ?: -1,
+                            call.argument<String>("mode").orEmpty(),
+                        ),
+                    )
+
                     "notifAccess" -> result.success(Device.notifAccess(this))
 
                     "usageAccess" -> result.success(Device.usageAccess(this))

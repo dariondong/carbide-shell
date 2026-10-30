@@ -76,6 +76,18 @@ const List<ToolGroup> kToolGroups = <ToolGroup>[
     perm: DevicePerm.notification,
   ),
   ToolGroup(
+    id: 'apps',
+    name: '应用与闹钟',
+    note: '按名字打开应用，设闹钟和计时器',
+    tools: <String>['open_app', 'set_alarm', 'set_timer'],
+  ),
+  ToolGroup(
+    id: 'sound',
+    name: '音量',
+    note: '四档音量与铃声方式，看和改',
+    tools: <String>['volume'],
+  ),
+  ToolGroup(
     id: 'usage',
     name: '使用时间',
     note: '每个应用最近用了多久',

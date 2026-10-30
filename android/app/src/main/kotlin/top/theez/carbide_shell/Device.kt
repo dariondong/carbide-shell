@@ -1,6 +1,7 @@
 package top.theez.carbide_shell
 
 import android.Manifest
+import android.app.AlarmClock
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -8,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -137,6 +139,160 @@ object Device {
     /** 系统里给「使用情况访问」的那一页。 */
     fun openUsageAccess(context: Context) {
         open(context, Settings.ACTION_USAGE_ACCESS_SETTINGS)
+    }
+
+    /** 按名字或包名找一个能启动的应用，找到就直接启动。找不到就把像的那几个名字回上去。 */
+    fun openApp(context: Context, query: String): Map<String, Any?> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return mapOf("ok" to false, "why" to "没说打开哪个应用")
+        val pm = context.packageManager
+        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val list = try {
+            pm.queryIntentActivities(main, 0)
+        } catch (error: Throwable) {
+            emptyList<android.content.pm.ResolveInfo>()
+        }
+        val exact = LinkedHashSet<String>()
+        val fuzzy = LinkedHashMap<String, String>()
+        for (info in list) {
+            val pkg = info.activityInfo?.packageName ?: continue
+            val label = appLabel(context, pkg)
+            if (pkg.lowercase() == q || label.lowercase() == q) {
+                exact.add(pkg)
+                continue
+            }
+            if (label.lowercase().contains(q) || pkg.lowercase().contains(q)) {
+                fuzzy[pkg] = label
+            }
+        }
+        var pick = exact.firstOrNull()
+        if (pick == null && fuzzy.size == 1) pick = fuzzy.keys.first()
+        if (pick == null) {
+            return mapOf(
+                "ok" to false,
+                "why" to if (fuzzy.isEmpty()) {
+                    "这台手机上没找到这个应用"
+                } else {
+                    "有名字像的，还没说是哪一个"
+                },
+                "near" to fuzzy.values.take(6).toList(),
+            )
+        }
+        val launch = pm.getLaunchIntentForPackage(pick)
+            ?: return mapOf("ok" to false, "why" to "$pick 没有可以启动的界面")
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(launch)
+            mapOf("ok" to true, "app" to appLabel(context, pick), "pkg" to pick)
+        } catch (error: Throwable) {
+            mapOf("ok" to false, "why" to "启动失败：${error.message.orEmpty()}")
+        }
+    }
+
+    /** 设一个闹钟，24 小时制。[skipUi] 为 true 时不出系统那一页。 */
+    fun setAlarm(
+        context: Context,
+        hour: Int,
+        minute: Int,
+        label: String,
+        skipUi: Boolean,
+    ): Map<String, Any?> {
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM)
+            .putExtra(AlarmClock.EXTRA_HOUR, hour.coerceIn(0, 23))
+            .putExtra(AlarmClock.EXTRA_MINUTES, minute.coerceIn(0, 59))
+            .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, skipUi)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            mapOf("ok" to true)
+        } catch (error: Throwable) {
+            mapOf("ok" to false, "why" to "这台手机没有闹钟来接：${error.message.orEmpty()}")
+        }
+    }
+
+    /** 设一个计时器，[seconds] 秒之后响。 */
+    fun setTimer(
+        context: Context,
+        seconds: Int,
+        label: String,
+        skipUi: Boolean,
+    ): Map<String, Any?> {
+        val intent = Intent(AlarmClock.ACTION_SET_TIMER)
+            .putExtra(AlarmClock.EXTRA_LENGTH, seconds.coerceIn(1, 24 * 3600))
+            .putExtra(AlarmClock.EXTRA_MESSAGE, label)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, skipUi)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            mapOf("ok" to true)
+        } catch (error: Throwable) {
+            mapOf("ok" to false, "why" to "这台手机没有计时器来接：${error.message.orEmpty()}")
+        }
+    }
+
+    /** 四档音量（百分比）还有铃声方式。 */
+    fun volume(context: Context): Map<String, Any?> {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return mapOf("ok" to false, "why" to "这台手机上读不到音量")
+        return mapOf(
+            "ok" to true,
+            "music" to percentOf(am, AudioManager.STREAM_MUSIC),
+            "ring" to percentOf(am, AudioManager.STREAM_RING),
+            "alarm" to percentOf(am, AudioManager.STREAM_ALARM),
+            "notification" to percentOf(am, AudioManager.STREAM_NOTIFICATION),
+            "mode" to modeName(am.ringerMode),
+        )
+    }
+
+    /** 改一档音量或者铃声方式，改完把现在的值回上去。 */
+    fun setVolume(
+        context: Context,
+        stream: String,
+        percent: Int,
+        mode: String,
+    ): Map<String, Any?> {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return mapOf("ok" to false, "why" to "这台手机上改不了音量")
+        if (stream.isNotEmpty() && percent >= 0) {
+            val which = when (stream) {
+                "ring" -> AudioManager.STREAM_RING
+                "alarm" -> AudioManager.STREAM_ALARM
+                "notification" -> AudioManager.STREAM_NOTIFICATION
+                else -> AudioManager.STREAM_MUSIC
+            }
+            val max = am.getStreamMaxVolume(which).coerceAtLeast(1)
+            val level = percent.coerceIn(0, 100) * max / 100
+            try {
+                am.setStreamVolume(which, level, 0)
+            } catch (error: Throwable) {
+                return mapOf("ok" to false, "why" to "这一档音量改不了：${error.message.orEmpty()}")
+            }
+        }
+        if (mode.isNotEmpty()) {
+            val wanted = when (mode) {
+                "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
+                "silent" -> AudioManager.RINGER_MODE_SILENT
+                else -> AudioManager.RINGER_MODE_NORMAL
+            }
+            try {
+                am.ringerMode = wanted
+            } catch (error: Throwable) {
+                return mapOf("ok" to false, "why" to "铃声方式改不了：${error.message.orEmpty()}")
+            }
+        }
+        return volume(context)
+    }
+
+    private fun percentOf(am: AudioManager, stream: Int): Int {
+        val max = am.getStreamMaxVolume(stream).coerceAtLeast(1)
+        return am.getStreamVolume(stream) * 100 / max
+    }
+
+    private fun modeName(mode: Int): String = when (mode) {
+        AudioManager.RINGER_MODE_SILENT -> "silent"
+        AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+        else -> "normal"
     }
 
     private fun open(context: Context, action: String) {

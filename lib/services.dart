@@ -18,6 +18,7 @@ import 'data/temp_files.dart';
 import 'data/triggers.dart';
 import 'data/usage.dart';
 import 'data/watch.dart';
+import 'tools/app_tools.dart';
 import 'tools/ask_tool.dart';
 import 'tools/clock_tool.dart';
 import 'tools/device_tools.dart';
@@ -109,6 +110,8 @@ class AppServices {
     'contacts': <Tool>[FindContactTool(device)],
     'sms': <Tool>[SmsSendTool(device)],
     'notif': <Tool>[NotifyReadTool(device)],
+    'apps': <Tool>[OpenAppTool(device), SetAlarmTool(device), SetTimerTool(device)],
+    'sound': <Tool>[VolumeTool(device)],
     'usage': <Tool>[AppUsageTool(device)],
   };
 

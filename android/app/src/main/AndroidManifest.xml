@@ -16,6 +16,8 @@
         android:maxSdkVersion="28"/>
     <!-- 使用情况访问：系统设置里单独给，这里只声明 -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
+    <!-- 按名字找应用来打开：要看得见装在机上的应用清单 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
     <application
         android:label="Carbide Shell"
         android:name="${applicationName}"
