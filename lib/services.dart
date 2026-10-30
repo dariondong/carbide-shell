@@ -42,6 +42,7 @@ import 'tools/ssh_tools.dart';
 import 'tools/status_tools.dart';
 import 'tools/temp_tools.dart';
 import 'tools/trigger_tool.dart';
+import 'tools/web_tool.dart';
 
 /// One conversation's live pieces: its loop and the memory file it writes.
 class AgentSession {
@@ -142,6 +143,11 @@ class AppServices {
       ..register(HttpTool(settings))
       ..register(HttpAllowTool(settings))
       ..register(ClockTool())
+      // 联网：走 DeepSeek 的搜索接口，只读，不用点批准。
+      ..register(WebSearchTool(
+          settings: settings, secrets: secrets, profileId: () => c.profileId))
+      ..register(
+          WebFetchTool(settings: settings, secrets: secrets, profileId: () => c.profileId))
       ..register(FileTool())
       ..register(TempFileTool(files))
       ..register(TempUploadTool(files: files, pool: pool, hosts: hosts))
