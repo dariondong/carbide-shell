@@ -6,30 +6,33 @@ import 'package:carbide_shell/core/tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  /// 两轮：看磁盘 → 92%，清一下 → 好。
+  /// 三轮：看磁盘 → 92%，清一下 → 好，再看看 → 干净了。
   List<LlmMessage> path() => <LlmMessage>[
         LlmMessage.user('看磁盘', at: DateTime(2026, 10, 30, 10)),
         const LlmMessage.assistant('92%'),
         LlmMessage.user('清一下', at: DateTime(2026, 10, 30, 10, 5)),
         const LlmMessage.assistant('好'),
+        LlmMessage.user('再看看', at: DateTime(2026, 10, 30, 10, 10)),
+        const LlmMessage.assistant('干净了'),
       ];
 
   group('对话的树', () {
     test('一轮一个点，还没有分支的时候就是一根直线', () {
       final List<TreeNode> t = buildTree(path(), const <ConvBranch>[]);
       layoutTree(t);
-      expect(t.length, 2);
+      expect(t.length, 3);
       expect(t.first.parent, isNull);
-      expect(t.last.parent, 0);
+      expect(t.last.parent, 1);
       expect(t.first.depth, 0);
-      expect(t.last.depth, 1);
+      expect(t.last.depth, 2);
       expect(t.first.round, 1);
-      expect(t.last.round, 2);
-      expect(treeDepth(t), 1);
+      expect(t.last.round, 3);
+      expect(treeDepth(t), 2);
       expect(t.last.angle, closeTo(t.first.angle, 1e-9));
       // 点上是那句提问本身，不是回答。
       expect(t.first.pathIndex, 0);
-      expect(t.last.pathIndex, 2);
+      expect(t[1].pathIndex, 2);
+      expect(t.last.pathIndex, 4);
       expect(t.first.text, '看磁盘');
     });
 
@@ -41,16 +44,20 @@ void main() {
         label: '清一下',
         messages: p.sublist(2),
       );
-      // 只留第一轮：第二轮的原文挂在分支上。
+      // 主线只留第一轮：后面两轮的原文挂在分支上。
       final List<TreeNode> t = buildTree(p.sublist(0, 2), <ConvBranch>[b]);
       layoutTree(t);
-      final TreeNode fork = t.last;
+      expect(t.length, 3);
+      final TreeNode fork = t[1];
       expect(fork.onPath, isFalse);
       expect(fork.parent, 0);
       expect(fork.branch, 0);
+      expect(fork.text, '清一下');
       expect(fork.round, 1);
       expect(fork.depth, 1);
-      expect(treeDepth(t), 1);
+      expect(t.last.text, '再看看');
+      expect(t.last.parent, fork.id);
+      expect(treeDepth(t), 2);
     });
 
     test('分支里连着几轮就串几节', () {
@@ -111,11 +118,12 @@ void main() {
       );
       final List<TreeNode> t = buildTree(const <LlmMessage>[], <ConvBranch>[b]);
       layoutTree(t);
-      expect(t.length, 2);
+      expect(t.length, 3);
       expect(t.first.parent, isNull);
       expect(t.first.depth, 0);
-      expect(t.last.parent, 0);
-      expect(t.last.depth, 1);
+      expect(t[1].parent, 0);
+      expect(t[1].depth, 1);
+      expect(t.last.depth, 2);
     });
 
     test('一条记录都没有也不会崩', () {
@@ -144,7 +152,7 @@ void main() {
       final List<TreeNode> t = buildTree(p, <ConvBranch>[a, b]);
       layoutTree(t);
       final List<TreeNode> tips = <TreeNode>[
-        t.last,
+        t.where((TreeNode n) => n.onPath).last,
         t.where((TreeNode n) => n.branch == 0).last,
         t.where((TreeNode n) => n.branch == 1).last,
       ];
