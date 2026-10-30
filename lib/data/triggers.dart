@@ -322,14 +322,56 @@ class TriggerRunner {
     await _act(t, at, reason: judge.text);
   }
 
+  /// 打开一个应用：名字写错了就把像的那几个写进记录，下次好改。
+  Future<void> _launch(Trigger t, DateTime at, {required String reason}) async {
+    final String query = t.actionText.trim();
+    if (query.isEmpty) {
+      await _skip(t, '还没写要打开哪个应用');
+      return;
+    }
+    final DeviceApi device = services.device;
+    if (!device.supported) {
+      await _skip(t, '这台机器上打不开应用');
+      return;
+    }
+    try {
+      final OpenAppResult r = await device.openApp(query);
+      if (!r.ok) {
+        final String near = r.near.isEmpty ? '' : '，像的有：${r.near.join('、')}';
+        t.addRun(TriggerRun(
+          at: at,
+          status: TriggerRunStatus.failed,
+          note: '没打开「$query」${r.why.isEmpty ? '' : '：${r.why}'}$near',
+        ));
+        await store.save();
+        onChanged?.call();
+        return;
+      }
+      t.addRun(TriggerRun(
+        at: at,
+        status: TriggerRunStatus.fired,
+        note: '打开了 ${r.app}${reason.isEmpty ? '' : '（$reason）'}',
+      ));
+      await store.save();
+      onChanged?.call();
+      await ForegroundTask.alert(t.title, '打开了 ${r.app}', slot: _slotOf(t.id));
+    } on DeviceError catch (e) {
+      await _skip(t, e.message);
+    }
+  }
+
   Future<void> _skip(Trigger t, String note) async {
     t.addRun(TriggerRun(at: DateTime.now(), status: TriggerRunStatus.skipped, note: note));
     await store.save();
     onChanged?.call();
   }
 
-  /// 真的动手：发一条通知，或者让模型跑一句。
+  /// 真的动手：发一条通知、打开一个应用，或者让模型跑一句。
   Future<void> _act(Trigger t, DateTime at, {required String reason}) async {
+    if (t.action == TriggerActionKind.openApp) {
+      await _launch(t, at, reason: reason);
+      return;
+    }
     if (t.action == TriggerActionKind.notify) {
       final String head = t.actionText.trim();
       await ForegroundTask.alert(

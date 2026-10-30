@@ -13,7 +13,7 @@ import 'phone_signals.dart';
 enum TriggerKind { phone, message, schedule }
 
 /// 满足了做什么。
-enum TriggerActionKind { notify, prompt }
+enum TriggerActionKind { notify, prompt, openApp }
 
 /// 一次运行的结果。
 enum TriggerRunStatus { fired, skipped, failed, waiting }
@@ -34,6 +34,7 @@ String triggerStatusName(TriggerRunStatus status) => switch (status) {
 String triggerActionName(TriggerActionKind kind) => switch (kind) {
       TriggerActionKind.notify => '发通知',
       TriggerActionKind.prompt => '让模型跑一句',
+      TriggerActionKind.openApp => '打开应用',
     };
 
 /// 手机状态里能让 AI 参考的那几项。名字与 [PhoneSignals] 的字段一致。
@@ -144,7 +145,8 @@ class Trigger {
   /// 最近若干次，新的在前，最多留 [maxRuns] 条。
   final List<TriggerRun> runs;
 
-  static const int maxRuns = 20;
+  /// 每一条留多少次记录。触发器比任务看得勤，留得多一点才看得出规律。
+  static const int maxRuns = 100;
 
   String get title => name.trim().isEmpty ? triggerKindName(kind) : name.trim();
 

@@ -257,6 +257,8 @@ class _TriggersPageState extends State<TriggersPage> {
             children: <Widget>[
               _link(_busy ? '跑着…' : '试一次', _busy ? null : () => _runNow(t)),
               const SizedBox(width: 16),
+              _link('记录 ${t.runs.length}', t.runs.isEmpty ? null : () => _openLog(t)),
+              const SizedBox(width: 16),
               _link('改', () => _edit(existing: t)),
               const SizedBox(width: 16),
               _link('删除', () => _remove(t), ink: false),
@@ -265,6 +267,98 @@ class _TriggersPageState extends State<TriggersPage> {
         ],
       ),
     );
+  }
+
+  /// 这条触发器的全部记录：什么时候看过、结果、那一句说了什么。
+  Future<void> _openLog(Trigger t) async {
+    final bool? clear = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (BuildContext ctx) => SheetCard(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.72,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text('${t.title} · 记录',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    style: TextButton.styleFrom(
+                      foregroundColor: C.grey,
+                      minimumSize: const Size(0, 32),
+                      textStyle: const TextStyle(fontSize: 12.5),
+                    ),
+                    child: const Text('清空'),
+                  ),
+                ],
+              ),
+              Text('最新的在前，最多留 ${Trigger.maxRuns} 条。',
+                  style: C.monoSmall),
+              const SizedBox(height: 10),
+              Expanded(
+                child: t.runs.isEmpty
+                    ? Center(
+                        child: Text('还没有记录。',
+                            style: TextStyle(fontSize: 12.5, color: C.grey)),
+                      )
+                    : ListView.separated(
+                        itemCount: t.runs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 1),
+                        itemBuilder: (BuildContext c, int i) => _logRow(t.runs[i]),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (clear == true) {
+      t.runs.clear();
+      await _save(t);
+      _toast('记录清空了，下一次跑起来重新记。');
+    }
+  }
+
+  Widget _logRow(TriggerRun run) {
+    final Color tone = switch (run.status) {
+      TriggerRunStatus.failed => C.ink,
+      TriggerRunStatus.fired => C.blue,
+      _ => C.grey,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(_stamp(run.at), style: C.monoSmall.copyWith(fontSize: 10.5)),
+              const SizedBox(width: 8),
+              Text(triggerStatusName(run.status),
+                  style: TextStyle(fontSize: 11, color: tone, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          if (run.note.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 3),
+            Text(run.note,
+                style: TextStyle(fontSize: 12, color: C.ink, height: 1.5)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 记录里的时刻：`10-30 05:12`。
+  static String _stamp(DateTime at) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(at.month)}-${two(at.day)} ${two(at.hour)}:${two(at.minute)}';
   }
 
   Widget _link(String label, VoidCallback? onTap, {bool ink = true}) {
@@ -424,14 +518,18 @@ class _TriggersPageState extends State<TriggersPage> {
                       const SizedBox(height: 14),
                       RuleField(
                         controller: actionText,
-                        label: action == TriggerActionKind.notify
-                            ? '通知写什么'
-                            : '让模型做什么',
-                        hint: action == TriggerActionKind.notify
-                            ? '留空就只写触发原因'
-                            : '例如：看一下这台机器的磁盘，超过八成就在结论里说一句',
-                        minLines: 3,
-                        maxLines: 6,
+                        label: switch (action) {
+                          TriggerActionKind.notify => '通知写什么',
+                          TriggerActionKind.openApp => '打开哪个应用',
+                          TriggerActionKind.prompt => '让模型做什么',
+                        },
+                        hint: switch (action) {
+                          TriggerActionKind.notify => '留空就只写触发原因',
+                          TriggerActionKind.openApp => '应用名或包名，例如 微信',
+                          TriggerActionKind.prompt => '例如：看一下这台机器的磁盘，超过八成就在结论里说一句',
+                        },
+                        minLines: action == TriggerActionKind.openApp ? 1 : 3,
+                        maxLines: action == TriggerActionKind.openApp ? 2 : 6,
                       ),
                       _toggleRow(
                         '自动跑时能动手',
@@ -494,6 +592,10 @@ class _TriggersPageState extends State<TriggersPage> {
         typedAt.isEmpty &&
         (typedEvery <= 0)) {
       _toast('写个时间，或者给个分钟数。');
+      return;
+    }
+    if (action == TriggerActionKind.openApp && typedAction.isEmpty) {
+      _toast('先写要打开哪个应用。');
       return;
     }
 

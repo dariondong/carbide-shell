@@ -88,12 +88,13 @@ class TriggerSaveTool extends Tool {
           },
           'action': <String, Object?>{
             'type': 'string',
-            'enum': <String>['notify', 'prompt'],
-            'description': 'notify 发一条通知，prompt 让模型跑一句话',
+            'enum': <String>['notify', 'prompt', 'openApp'],
+            'description': 'notify 发一条通知，prompt 让模型跑一句话，openApp 直接打开一个应用',
           },
           'action_text': <String, Object?>{
             'type': 'string',
-            'description': 'notify 写通知正文；prompt 写交给模型的那句话（会原样当成那一轮的指令）',
+            'description': 'notify 写通知正文；prompt 写交给模型的那句话（会原样当成那一轮的指令）；'
+                'openApp 写应用名或包名，比如 微信',
           },
           'confirm': <String, Object?>{
             'type': 'boolean',
@@ -120,11 +121,13 @@ class TriggerSaveTool extends Tool {
       'schedule' => _scheduleText(args, old),
       _ => '手机状态：${readString(args, 'intent', fallback: old?.intent ?? '')}',
     };
-    final String action =
-        readString(args, 'action', fallback: old?.action.name ?? 'notify') == 'prompt'
-            ? '让模型跑一句'
-            : '发一条通知';
-    return '$verb ${readString(args, 'name', fallback: old?.name ?? '')} · $condition → $action';
+    final String action = readString(args, 'action', fallback: old?.action.name ?? 'notify');
+    final String actionName = switch (_actionOf(action, TriggerActionKind.notify)) {
+      TriggerActionKind.notify => '发一条通知',
+      TriggerActionKind.prompt => '让模型跑一句',
+      TriggerActionKind.openApp => '打开一个应用',
+    };
+    return '$verb ${readString(args, 'name', fallback: old?.name ?? '')} · $condition → $actionName';
   }
 
   Trigger? _existing(Map<String, Object?> args) {
@@ -218,6 +221,9 @@ class TriggerSaveTool extends Tool {
     }
     if (t.action == TriggerActionKind.notify && t.actionText.isEmpty) {
       return '发通知这一类要写正文，不然通知上只有名字。';
+    }
+    if (t.action == TriggerActionKind.openApp && t.actionText.isEmpty) {
+      return '打开应用这一类要写是哪个应用，名字或包名都行。';
     }
     return '';
   }

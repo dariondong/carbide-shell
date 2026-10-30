@@ -131,6 +131,18 @@ void main() {
     });
   });
 
+  test('打开应用这个动作存得住，老文件里没写就当发通知', () {
+    final Trigger t = Trigger(id: 't1', action: TriggerActionKind.openApp, actionText: '微信');
+    expect(triggerActionName(t.action), '打开应用');
+    final Trigger back = Trigger.fromJson(t.toJson());
+    expect(back.action, TriggerActionKind.openApp);
+    expect(back.actionText, '微信');
+    expect(back.needsConfirm, isFalse, reason: '只有让模型跑的那一种才先问一句');
+
+    final Map<String, Object?> old = <String, Object?>{'id': 't2', 'kind': 'schedule'};
+    expect(Trigger.fromJson(old).action, TriggerActionKind.notify);
+  });
+
   test('触发器的写权限存得住，老文件默认能动手', () {
     final Trigger on = Trigger(id: 't1');
     expect(on.allowWrite, isTrue);
