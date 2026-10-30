@@ -16,6 +16,7 @@ import '../data/foreground.dart';
 import '../data/mail.dart';
 import '../data/providers.dart';
 import '../data/secrets.dart';
+import '../data/speech.dart';
 import '../data/settings.dart';
 import '../data/tool_groups.dart';
 import '../data/usage.dart';
@@ -1034,6 +1035,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   (double v) => _apply(() => _font = v),
                 ),
                 const RuleLine(),
+                _action(
+                  '语音输入诊断',
+                  '看这台机器用哪个识别',
+                  _showSpeechDiag,
+                ),
+                const RuleLine(),
                 _toggle(
                   '等待时读一首诗',
                   widget.settings.value.poemOn,
@@ -2046,6 +2053,41 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           ToggleKnob(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+
+  /// 长按说话在这个机器上走到哪一步：一行一条，看完就知道缺哪一环。
+  Future<void> _showSpeechDiag() async {
+    final List<String> lines = await Speech.diag();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('语音输入诊断',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (final String line in lines.isEmpty
+                  ? const <String>['这台机器上没有这一套']
+                  : lines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Text(line,
+                      style: C.monoSmall.copyWith(fontSize: 11.5, color: C.ink)),
+                ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('知道了', style: TextStyle(fontSize: 13, color: C.blue)),
+          ),
         ],
       ),
     );

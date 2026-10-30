@@ -174,6 +174,8 @@ class MainActivity : FlutterActivity() {
 
                 "grant" -> requestDevice("mic", result)
 
+                "diag" -> result.success(SpeechHelper.diag(this))
+
                 "stop" -> {
                     SpeechHelper.stop()
                     result.success(null)

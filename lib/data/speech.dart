@@ -37,6 +37,21 @@ class Speech {
     }
   }
 
+  /// 语音这一套在这台机器上走到哪一步：一行一条，诊断那一页看的就是它。
+  static Future<List<String>> diag() async {
+    if (!supported) return const <String>[];
+    try {
+      final List<Object?>? lines =
+          await _channel.invokeMethod<List<Object?>>('diag');
+      if (lines == null) return const <String>[];
+      return lines.map((Object? e) => '$e').toList();
+    } on MissingPluginException {
+      return const <String>[];
+    } on PlatformException {
+      return const <String>[];
+    }
+  }
+
   /// 开始听。没有麦克风权限时会先要一次，要到了自己接着听。
   ///
   /// 返回 false 表示这次没起来（没服务、刚被系统掐掉、权限被拒）。

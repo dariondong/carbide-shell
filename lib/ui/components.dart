@@ -741,13 +741,14 @@ class _HoldToTalkState extends State<HoldToTalk> {
   void _apply(String text, bool done) {
     if (!mounted) return;
     final String body = text.trim();
-    if (done) Speech.forget();
     if (body.isEmpty) return;
     final String joined = _join(_base, body);
     widget.controller.value = TextEditingValue(
       text: joined,
       selection: TextSelection.collapsed(offset: joined.length),
     );
+    // 一句定下来了就把它当成下一句的底：接着说的时候接在后面，不覆盖。
+    if (done) _base = joined;
   }
 
   /// 接在前一句后面。英文接在中文后面留一个空格，中文直接连着。
