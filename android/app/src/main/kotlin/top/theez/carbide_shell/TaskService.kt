@@ -13,10 +13,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
-import org.json.JSONArray
-import org.json.JSONObject
+import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 
 /**
  * 长任务期间的前台服务。
@@ -127,6 +126,25 @@ class TaskService : Service() {
         private const val ALERT_ID = 0xCB03
         private const val WAKE_LIMIT_MS = 30L * 60 * 1000
 
+        /** 不带提升：普通常驻通知（也是判不出来时的退路）。 */
+        private const val PROMO_PLAIN = -1
+
+        /** 带 requestPromotedOngoing（安卓 16 QPR1 起才有）。 */
+        private const val PROMO_REQUEST = 0
+
+        /** 带彩色标记（安卓 16 首发版只认这一条）。 */
+        private const val PROMO_COLORIZED = 1
+
+        private const val PROMO_UNKNOWN = Int.MIN_VALUE
+
+        /** 本机系统认哪种提升姿势，问过一次就记住。 */
+        @Volatile
+        private var promoCache: Int = PROMO_UNKNOWN
+
+        /** 这一轮什么时候开始的，岛上的计时器从这儿走。 */
+        @Volatile
+        private var startedAt: Long = System.currentTimeMillis()
+
         /** 通知长什么样：一行、折开、一行一条、像聊天。 */
         const val STYLE_SIMPLE = "simple"
         const val STYLE_BIG = "big"
@@ -173,6 +191,7 @@ class TaskService : Service() {
         ) {
             TaskService.style = style
             TaskService.lines = lines
+            startedAt = System.currentTimeMillis()
             val intent = Intent(context, TaskService::class.java)
                 .putExtra(EXTRA_TEXT, text)
                 .putExtra(EXTRA_STYLE, style)
@@ -301,69 +320,152 @@ class TaskService : Service() {
             return PendingIntent.getActivity(context, 0, open, flags)
         }
 
+        /**
+         * 跑任务的那条常驻通知。
+         *
+         * 用 androidx 的 NotificationCompat 而不是系统那个 Builder：安卓 16 的「实时更新」
+         * 跟进的那两下（setRequestPromotedOngoing / setShortCriticalText）只有它才有，
+         * 而 HyperOS 的岛画的正是被提升的那条通知。
+         */
         private fun ongoing(context: Context, text: String): Notification {
             ensureChannel(
                 context, CHANNEL_ID,
                 R.string.task_channel_name, R.string.task_channel_desc,
                 NotificationManager.IMPORTANCE_LOW,
             )
-            val builder = Notification.Builder(context, CHANNEL_ID)
+            val body = tails(text, lines)
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_carbide_stat)
                 .setContentTitle(context.getString(R.string.task_notification_title))
                 .setContentText(text)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setShowWhen(false)
+                .setSilent(true)
                 .setContentIntent(tap(context))
-            styleOf(context, text)?.let { builder.setStyle(it) }
-            tryAddReply(context, builder)
-            island(builder, context.getString(R.string.task_notification_title), text)
+            // 提升要求通知用可展开的样式之一：认不出来的就铺成大文本。
+            builder.setStyle(
+                compatStyle(context, body)
+                    ?: NotificationCompat.BigTextStyle().bigText(body.joinToString("\n"))
+            )
+            tryAddReplyCompat(context, builder)
+            promo(context, builder, shortOf(text))
             return builder.build()
         }
 
-        /**
-         * 小米的焦点通知：把这条进度也挂到 HyperOS 的岛上去。
-         *
-         * 只是往通知上多塞一段 extras：认它的机型会把这句挂到状态栏那个岛上，
-         * 不认的机型读到也不认识，通知本身还是原来那一条。
-         *
-         * 字段名是焦点通知那一套：`miui.focus.param` 里是一串 JSON，`param_v2` 是模板本身，
-         * `miui.focus.actions` 是岛上那几个按钮（这里不给按钮，就空着）。
-         * 塞不进去就算了：岛再好看也不能把任务弄挂。
-         */
-        private fun island(builder: Notification.Builder, title: String, text: String) {
-            if (!onIsland()) return
+        /** 提示条上那几个字：说得出第几步就说步数，说不上就是「运行中」。 */
+        private fun shortOf(text: String): String {
+            val hit = Regex("第\\s*(\\d+)\\s*步").find(text)
+            return if (hit != null) "${hit.groupValues[1]} 步" else "运行中"
+        }
+
+        /** 系统认不认提升：两种姿势各造一条真通知问它，认下就缓存。 */
+        private fun promoMode(context: Context): Int {
+            val cached = promoCache
+            if (cached != PROMO_UNKNOWN) return cached
+            var decided = PROMO_PLAIN
+            for (mode in intArrayOf(PROMO_REQUEST, PROMO_COLORIZED)) {
+                val probe = try {
+                    NotificationCompat.Builder(context, CHANNEL_ID)
+                        .setSmallIcon(R.drawable.ic_carbide_stat)
+                        .setContentTitle("诊断")
+                        .setContentText("诊断")
+                        .setStyle(NotificationCompat.BigTextStyle().bigText("诊断"))
+                        .setOngoing(true)
+                        .also { hook(it, mode, "9s") }
+                        .build()
+                } catch (error: Throwable) {
+                    null
+                }
+                if (probe != null && promotable(probe)) {
+                    decided = mode
+                    break
+                }
+            }
+            promoCache = decided
+            return decided
+        }
+
+        private fun promo(context: Context, builder: NotificationCompat.Builder, short: String) {
+            val mode = promoMode(context)
+            if (mode == PROMO_PLAIN) return
             try {
-                val base = JSONObject()
-                    .put("title", title)
-                    .put("content", text)
-                    .put("type", 1)
-                val template = JSONObject()
-                    .put("actions", JSONArray())
-                    .put("baseInfo", base)
-                    .put("enableFloat", true)
-                    .put("ticker", title)
-                    .put("protocol", 1)
-                    .put("timeout", 280)
-                    .put("updatable", true)
-                val param = JSONObject()
-                    .put("miui.focus.actions", "[]")
-                    .put("param_v2", template.toString())
-                val extras = Bundle()
-                extras.putString("miui.focus.param", param.toString())
-                builder.addExtras(extras)
+                hook(builder, mode, short)
             } catch (error: Throwable) {
-                // 岛的参数没拼成，通知照发。
+                // 请系统考虑提升只是额外一句，挂不上也不能把通知弄丢。
             }
         }
 
-        /** 是不是小米家的机器：只有它们认那套岛参数。 */
-        private fun onIsland(): Boolean {
+        /** 两套门槛：安卓 16 QPR1 要请求标记且不能是彩色，首发版反过来只认彩色。 */
+        private fun hook(builder: NotificationCompat.Builder, mode: Int, short: String) {
+            when (mode) {
+                PROMO_REQUEST -> {
+                    builder.setRequestPromotedOngoing(true)
+                    if (short.isNotEmpty()) builder.setShortCriticalText(short)
+                }
+                PROMO_COLORIZED -> {
+                    builder.setColorized(true)
+                    if (short.isNotEmpty()) builder.setShortCriticalText(short)
+                }
+                else -> return
+            }
+            // 岛上一秒一跳的那串数字交给系统自己走，不用为了它反复重发通知。
+            builder.setWhen(startedAt)
+                .setUsesChronometer(true)
+                .setShowWhen(true)
+        }
+
+        private fun promotable(note: Notification): Boolean = try {
+            Notification::class.java.getMethod("hasPromotableCharacteristics").invoke(note) == true
+        } catch (error: Throwable) {
+            false
+        }
+
+        /** 兼容版的样式：大文本 / 一行条 / 像聊天。 */
+        private fun compatStyle(context: Context, body: List<String>): NotificationCompat.Style? {
             return try {
-                val who = (Build.MANUFACTURER + " " + Build.BRAND).lowercase()
-                who.contains("xiaomi") || who.contains("redmi") || who.contains("poco")
+                when (style) {
+                    STYLE_BIG -> NotificationCompat.BigTextStyle().bigText(body.joinToString("\n"))
+                    STYLE_LIST -> {
+                        val inbox = NotificationCompat.InboxStyle()
+                        for (line in body) inbox.addLine(line)
+                        inbox
+                    }
+                    STYLE_CHAT -> {
+                        val me = Person.Builder()
+                            .setName(context.getString(R.string.task_chat_me))
+                            .build()
+                        val sender = Person.Builder()
+                            .setName(context.getString(R.string.task_chat_sender))
+                            .build()
+                        val chat = NotificationCompat.MessagingStyle(me)
+                        val now = System.currentTimeMillis()
+                        val ordered = body.reversed()
+                        ordered.forEachIndexed { index, line ->
+                            chat.addMessage(line, now - (ordered.size - index) * 1000L, sender)
+                        }
+                        chat
+                    }
+                    else -> null
+                }
             } catch (error: Throwable) {
-                false
+                null
+            }
+        }
+
+        /** 通知上那颗「回复」，兼容版。加不上就只发通知，不影响任务。 */
+        private fun tryAddReplyCompat(context: Context, builder: NotificationCompat.Builder) {
+            try {
+                val remote = RemoteInput.Builder(REPLY_KEY)
+                    .setLabel(context.getString(R.string.task_reply_hint))
+                    .build()
+                val action = NotificationCompat.Action.Builder(
+                    Icon.createWithResource(context, R.drawable.ic_carbide_stat),
+                    context.getString(R.string.task_reply_action),
+                    replyIntent(context),
+                ).addRemoteInput(remote).build()
+                builder.addAction(action)
+            } catch (error: Throwable) {
+                // 系统太老或者厂商改过：这颗键就不出了。
             }
         }
 

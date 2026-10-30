@@ -70,3 +70,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 实时更新（Live Updates）的两个方法在 androidx.core 1.17.0 才加进来：
+    // setRequestPromotedOngoing / setShortCriticalText。系统那套 Builder 里没有。
+    implementation("androidx.core:core-ktx:1.17.0")
+}
