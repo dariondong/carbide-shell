@@ -362,6 +362,8 @@ class SessionHub extends ChangeNotifier {
     c.dropped += cut;
     // 收掉的那一段连同它们占的位置一起去掉，做完的那张计划仍停在它自己那一行。
     c.planAnchor = (c.planAnchor - cut + 1).clamp(0, c.messages.length).toInt();
+    // 挂在树上的分支跟着往前挪；落进被收掉那段的就留不住了。
+    c.shiftBranches(cut, insert: 1);
     live.loop.onHistoryChanged();
     await services.persist(c);
     return text;

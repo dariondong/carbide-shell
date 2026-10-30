@@ -54,6 +54,67 @@ int trimTranscript(
   return cut;
 }
 
+/// 一段退掉的记录叫什么：第一句的开头。
+String branchLabel(String text) {
+  final String one = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (one.isEmpty) return '（只带了文件）';
+  return one.length > 40 ? '${one.substring(0, 40)}…' : one;
+}
+
+/// 退掉的一段记录。回退不删东西：那一段连同问它的那句话一起挂在这里，随时接回去。
+///
+/// 每个分支记着从主线第几条分出去的，所以一场对话就是一棵树：
+/// 主线是树干，退掉的每一段是挂在树上的一个叉。
+class ConvBranch {
+  ConvBranch({
+    required this.anchor,
+    required this.at,
+    required this.label,
+    required this.messages,
+  });
+
+  /// 从主线第几条开始分出去。退回去的时候主线只留到这一条之前。
+  /// 记录从头上被收掉一段（太长、压缩）的时候跟着挪。
+  int anchor;
+
+  /// 什么时候退的。
+  final DateTime at;
+
+  /// 那一轮的问话开头，列表上认人用。
+  final String label;
+
+  /// 退掉的那几条，第一条是当时那句提问。
+  final List<LlmMessage> messages;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'anchor': anchor,
+        'at': at.toIso8601String(),
+        'label': label,
+        'messages': messages.map(messageToJson).toList(),
+      };
+
+  static ConvBranch? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final List<LlmMessage> list = <LlmMessage>[];
+    final Object? msgs = raw['messages'];
+    if (msgs is List) {
+      for (final Object? one in msgs) {
+        if (one is Map) {
+          final LlmMessage? m = messageFromJson(Map<String, Object?>.from(one));
+          if (m != null) list.add(m);
+        }
+      }
+    }
+    if (list.isEmpty) return null;
+    return ConvBranch(
+      anchor: (raw['anchor'] as num?)?.toInt() ?? 0,
+      at: DateTime.tryParse('${raw['at'] ?? ''}') ?? DateTime.now(),
+      label: '${raw['label'] ?? ''}',
+      messages: list,
+    );
+  }
+}
+
 /// One conversation: its scope, its transcript, its own journal file.
 class Conversation {
   Conversation({
@@ -72,9 +133,11 @@ class Conversation {
     this.planAnchor = 0,
     this.profileId = '',
     List<String>? kindApprovals,
+    List<ConvBranch>? branches,
   })  : messages = messages ?? <LlmMessage>[],
         updatedAt = updatedAt ?? DateTime.now(),
-        kindApprovals = kindApprovals ?? <String>[];
+        kindApprovals = kindApprovals ?? <String>[],
+        branches = branches ?? <ConvBranch>[];
 
   final String id;
   String title;
@@ -84,6 +147,70 @@ class Conversation {
 
   final List<LlmMessage> messages;
   DateTime updatedAt;
+
+  /// 退掉的那些段。回退不删东西，就存在这里，随时能接回去。
+  final List<ConvBranch> branches;
+
+  /// 最多留这么多条分支，再早的就真没了。
+  static const int maxBranches = 20;
+
+  /// 把一段退掉的记录挂到树上。
+  void shelve(ConvBranch b) {
+    if (b.messages.isEmpty) return;
+    branches.add(b);
+    while (branches.length > maxBranches) {
+      branches.removeAt(0);
+    }
+  }
+
+  /// 从 [at] 起把这一段从主线上拿下来，挂到树上。返回挂上去的那一段。
+  ///
+  /// 一句不删：接回去随时可以。
+  ConvBranch? lift(int at) {
+    if (at < 0 || at >= messages.length) return null;
+    final ConvBranch b = ConvBranch(
+      anchor: at,
+      at: DateTime.now(),
+      label: branchLabel(messages[at].text),
+      messages: messages.sublist(at),
+    );
+    messages.removeRange(at, messages.length);
+    shelve(b);
+    return b;
+  }
+
+  /// 把树上的一段接回主线。
+  ///
+  /// 接之前，手边这一段也先挂到树上，所以「接回来」这一步本身也能反悔。
+  /// 返回这次顺手挂上去的那一段（没有就返回 null）。
+  ConvBranch? restore(ConvBranch b) {
+    final int anchor = b.anchor.clamp(0, messages.length).toInt();
+    ConvBranch? shelved;
+    if (messages.length > anchor) {
+      shelved = ConvBranch(
+        anchor: anchor,
+        at: DateTime.now(),
+        label: branchLabel(messages[anchor].text),
+        messages: messages.sublist(anchor),
+      );
+      messages.removeRange(anchor, messages.length);
+    }
+    branches.remove(b);
+    messages.addAll(b.messages);
+    if (shelved != null) shelve(shelved);
+    return shelved;
+  }
+
+  /// 记录从头上被收掉 [cut] 条之后，挂在它上面的分支跟着挪；
+  /// 锚点落进被收掉那段的就留不住了。压缩还会在最前面插一条摘要（[insert]）。
+  void shiftBranches(int cut, {int insert = 0}) {
+    if (cut <= 0) return;
+    branches.removeWhere((ConvBranch b) => b.anchor < cut);
+    for (final ConvBranch b in branches) {
+      b.anchor = b.anchor - cut + insert;
+      if (b.anchor < 0) b.anchor = 0;
+    }
+  }
 
   /// This conversation asked for no more confirmations.
   bool autoApproveAll;
@@ -139,6 +266,8 @@ class Conversation {
         if (plan != null) 'plan': plan!.toJson(),
         if (planAnchor > 0) 'planAnchor': planAnchor,
         'kindApprovals': kindApprovals,
+        if (branches.isNotEmpty)
+          'branches': branches.map((ConvBranch b) => b.toJson()).toList(),
         'messages': messages.map(messageToJson).toList(),
       };
 
@@ -170,7 +299,19 @@ class Conversation {
       kindApprovals: (json['kindApprovals'] is List)
           ? (json['kindApprovals']! as List).map((Object? e) => '$e').toList()
           : <String>[],
+      branches: _branchesOf(json['branches']),
     );
+  }
+
+  static List<ConvBranch> _branchesOf(Object? raw) {
+    final List<ConvBranch> out = <ConvBranch>[];
+    if (raw is List) {
+      for (final Object? one in raw) {
+        final ConvBranch? b = ConvBranch.fromJson(one);
+        if (b != null) out.add(b);
+      }
+    }
+    return out;
   }
 }
 
@@ -351,7 +492,11 @@ class ConversationStore {
           final Conversation c = Conversation.fromJson(Map<String, Object?>.from(decoded));
           if (c.id.isNotEmpty) {
             // 老版本留下的长记录，先收一次再放进来。
-            c.dropped += trimTranscript(c.messages);
+            final int cut = trimTranscript(c.messages);
+            if (cut > 0) {
+              c.dropped += cut;
+              c.shiftBranches(cut);
+            }
             // 上个版本留下过半截的工具调用：读回来的时候修一次。
             repairToolPairs(c.messages);
             _items.add(c);
@@ -404,7 +549,11 @@ class ConversationStore {
   Future<void> _write(Conversation c) async {
     c.updatedAt = DateTime.now();
     dir.createSync(recursive: true);
-    c.dropped += trimTranscript(c.messages);
+    final int cut = trimTranscript(c.messages);
+    if (cut > 0) {
+      c.dropped += cut;
+      c.shiftBranches(cut);
+    }
     final Map<String, Object?> json = c.toJson();
     // 编码放在另一个 isolate 里，也不带缩进：缩进只是好看，长记录上要多占一半内存。
     final String text = await Isolate.run(() => jsonEncode(json));

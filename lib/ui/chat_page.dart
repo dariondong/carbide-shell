@@ -452,26 +452,57 @@ class _ChatPageState extends State<ChatPage> {
     return _rollbackTo(at);
   }
 
-  /// 退到 [at] 那一句：它和它后面的记录一起删掉，那句话放回输入框。
+  /// 退到 [at] 那一句：它和它后面的一段从主线上拿下来，挂到树上，那句话放回输入框。
+  ///
+  /// 一段都不删：接回去随时可以（提示条上有「撤销」）。
   Future<bool> _rollbackTo(int at) async {
     if (_running) {
       _toast('这一轮还在跑，先停下再退。');
       return false;
     }
+    final Conversation c = widget.conversation;
     final List<LlmMessage> msgs = _messages;
     if (at < 0 || at >= msgs.length || msgs[at].role != LlmRole.user) return false;
     final String text = msgs[at].text;
-    final int dropped = msgs.length - at - 1;
-    msgs.removeRange(at, msgs.length);
+    // 不删：这一整段挂到树上，随时能接回来。
+    final ConvBranch? branch = c.lift(at);
     _live?.loop.onHistoryChanged();
     _input.text = text;
     _input.selection = TextSelection.collapsed(offset: text.length);
-    await widget.services.persist(widget.conversation);
+    await widget.services.persist(c);
     if (!mounted) return true;
     setState(() {});
     _focus.requestFocus();
-    _toast(dropped <= 0 ? '退回来了，那句话在输入框里。' : '退回来了，删掉了 $dropped 条记录。');
+    _toast(
+      '退回来了，这一轮挂在时间线上。',
+      action: branch == null
+          ? null
+          : SnackBarAction(
+              label: '撤销',
+              onPressed: () {
+                unawaited(_restoreBranch(branch));
+              },
+            ),
+    );
     return true;
+  }
+
+  /// 把树上的一段接回主线。接之前，手边这一段也挂到树上，树上一句都不会丢。
+  Future<void> _restoreBranch(ConvBranch b) async {
+    if (_running) {
+      _toast('这一轮还在跑，先停下再接。');
+      return;
+    }
+    final Conversation c = widget.conversation;
+    c.restore(b);
+    // 接回来的那句话如果还躺在输入框里，就别让它再发一遍。
+    final String first = b.messages.first.text.trim();
+    if (first.isNotEmpty && _input.text.trim() == first) _input.clear();
+    _live?.loop.onHistoryChanged();
+    await widget.services.persist(c);
+    if (!mounted) return;
+    setState(() {});
+    _toast('接回来了，那一段 ${b.messages.length} 条记录都在。');
   }
 
   /// 回退做成一页时间线：哪一句都能退，不只退最后一句。
@@ -487,11 +518,11 @@ class _ChatPageState extends State<ChatPage> {
     for (int i = msgs.length - 1; i >= 0; i -= 1) {
       if (msgs[i].role == LlmRole.user) stops.add(i);
     }
-    if (stops.isEmpty) {
+    if (stops.isEmpty && widget.conversation.branches.isEmpty) {
       _toast('这场对话里还没有可退的那一句。');
       return;
     }
-    final int? at = await showModalBottomSheet<int>(
+    final _TlPick? pick = await showModalBottomSheet<_TlPick>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -501,22 +532,28 @@ class _ChatPageState extends State<ChatPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('回退到哪一句',
+            Text('这场对话的时间线',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.ink)),
             const SizedBox(height: 3),
-            Text('退到哪一句，那一句和它后面的记录就一起删掉，那句话放回输入框。', style: C.monoSmall),
+            Text('点主线上的哪一句，就从那一句重新开始。挂在旁边的是退掉的那几段，点一下接回来。',
+                style: C.monoSmall),
             const SizedBox(height: 10),
             _RollbackTimeline(
               stops: stops,
               messages: msgs,
-              onPick: (int index) => Navigator.of(ctx).pop(index),
+              branches: widget.conversation.branches,
+              onPick: (_TlPick p) => Navigator.of(ctx).pop(p),
             ),
           ],
         ),
       ),
     );
-    if (!mounted || at == null) return;
-    await _rollbackTo(at);
+    if (!mounted || pick == null) return;
+    if (pick.branch != null) {
+      await _restoreBranch(pick.branch!);
+      return;
+    }
+    if (pick.at != null) await _rollbackTo(pick.at!);
   }
 
   Future<void> _moreSheet() async {
@@ -547,7 +584,7 @@ class _ChatPageState extends State<ChatPage> {
             _sheetRow(
               Icons.undo_rounded,
               '回退到某一句',
-              _canRollback ? '按时间线挑一句，它和它后面的一起删掉' : '没有可退的那一句',
+              _canRollback ? '按时间线挑一句，退掉的段还挂在树上，能接回来' : '没有可退的那一句',
               _canRollback,
               () => Navigator.of(ctx).pop('timeline'),
             ),
@@ -791,9 +828,10 @@ class _ChatPageState extends State<ChatPage> {
     _attachPhotos.add('');
   }
 
-  void _toast(String text) {
+  void _toast(String text, {SnackBarAction? action}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(text), action: action));
   }
 
   Map<String, String> _outputs() {
@@ -1912,19 +1950,35 @@ class _Row {
   final String text;
 }
 
-/// 压缩出来的那一段：默认收三行，想看全文再展开。
-/// 回退那一页的名单：一句一句排下来，最新的在最下面，点谁退到谁。
+/// 时间线上点的是哪一种：主线上的某一句，还是挂在树上的某一段。
+class _TlPick {
+  const _TlPick.stop(int at)
+      : at = at,
+        branch = null;
+
+  const _TlPick.branch(ConvBranch this.branch) : at = null;
+
+  final int? at;
+  final ConvBranch? branch;
+}
+
+/// 回退那一页：一场对话是一棵树。
+///
+/// 主线一列从下往上排（最新的在最下面），退掉的每一段挂在它分出去的那个节点旁边。
+/// 点主线上的节点就从那一句重新开始；点挂着的那一段就把它接回来。
 class _RollbackTimeline extends StatelessWidget {
   const _RollbackTimeline({
     required this.stops,
     required this.messages,
+    required this.branches,
     required this.onPick,
   });
 
   /// 每一句提问在记录里的位置，从新到旧。
   final List<int> stops;
   final List<LlmMessage> messages;
-  final void Function(int index) onPick;
+  final List<ConvBranch> branches;
+  final void Function(_TlPick pick) onPick;
 
   /// 一句话剪成一行，太长就留头。
   static String _line(String text) {
@@ -1945,92 +1999,169 @@ class _RollbackTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double h = MediaQuery.sizeOf(context).height * 0.5;
-    final int total = stops.length;
+    final List<Widget> items = _items();
     return SizedBox(
-      height: h < 180 ? 180 : (h > 440 ? 440 : h),
+      height: h < 180 ? 180 : (h > 480 ? 480 : h),
       child: ListView.builder(
         // 倒过来建：最新的落在最下面，跟上面那份记录一个方向，一打开就在眼前。
         reverse: true,
         padding: EdgeInsets.zero,
-        itemCount: total,
-        itemBuilder: (BuildContext ctx, int i) {
-          final int at = stops[i];
-          final LlmMessage m = messages[at];
-          final int round = total - i;
-          final int cut = messages.length - at - 1;
-          final bool newest = i == 0;
-          final DateTime? when = m.at;
-          return Stack(
-            children: <Widget>[
-              if (!newest)
-                Positioned(
-                  left: 24,
-                  top: 0,
-                  bottom: 0,
-                  width: 1,
-                  child: ColoredBox(color: C.rule),
+        itemCount: items.length,
+        itemBuilder: (BuildContext ctx, int i) => items[i],
+      ),
+    );
+  }
+
+  /// 从新到旧：节点，然后是挂在这个节点上的分支，最后是挂不上任何节点的那些。
+  List<Widget> _items() {
+    final Map<int, List<ConvBranch>> byAnchor = <int, List<ConvBranch>>{};
+    for (final ConvBranch b in branches) {
+      byAnchor.putIfAbsent(b.anchor, () => <ConvBranch>[]).add(b);
+    }
+    final Set<int> stopSet = stops.toSet();
+    final List<Widget> out = <Widget>[];
+    final int total = stops.length;
+    for (int i = 0; i < total; i += 1) {
+      final int at = stops[i];
+      out.add(_node(at, round: total - i, newest: i == 0));
+      for (final ConvBranch b in byAnchor[at] ?? const <ConvBranch>[]) {
+        out.add(_fork(b, orphan: false));
+      }
+    }
+    for (final ConvBranch b in branches) {
+      if (!stopSet.contains(b.anchor)) out.add(_fork(b, orphan: true));
+    }
+    return out;
+  }
+
+  Widget _node(int at, {required int round, required bool newest}) {
+    final LlmMessage m = messages[at];
+    final int cut = messages.length - at - 1;
+    final DateTime? when = m.at;
+    return Stack(
+      children: <Widget>[
+        Positioned(
+          left: 24,
+          top: 0,
+          bottom: 0,
+          width: 1,
+          child: ColoredBox(color: C.rule),
+        ),
+        InkWell(
+          onTap: () => onPick(_TlPick.stop(at)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 4, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: Center(
+                    child: Container(
+                      width: newest ? 10 : 8,
+                      height: newest ? 10 : 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: newest ? C.blue : C.card,
+                        border: Border.all(color: newest ? C.blue : C.rule2),
+                      ),
+                    ),
+                  ),
                 ),
-              InkWell(
-                onTap: () => onPick(at),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 4, 10),
-                  child: Row(
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: Center(
-                          child: Container(
-                            width: newest ? 10 : 8,
-                            height: newest ? 10 : 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: newest ? C.blue : C.card,
-                              border: Border.all(color: newest ? C.blue : C.rule2),
-                            ),
-                          ),
+                      Text(
+                        when == null ? '第 $round 轮' : '第 $round 轮 · ${_stamp(when)}',
+                        style: C.monoSmall.copyWith(
+                          fontSize: 10.5,
+                          color: newest ? C.blue : C.grey2,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              when == null ? '第 $round 轮' : '第 $round 轮 · ${_stamp(when)}',
-                              style: C.monoSmall.copyWith(
-                                fontSize: 10.5,
-                                color: newest ? C.blue : C.grey2,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              _line(m.text),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 13, height: 1.5, color: C.ink),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              cut <= 0 ? '最后一句，后面没有别的记录' : '后面 $cut 条记录一起删掉',
-                              style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
-                            ),
-                          ],
-                        ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _line(m.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, height: 1.5, color: C.ink),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        cut <= 0 ? '最后一句，后面没有别的记录' : '从这一句重来，后面 $cut 条挂到树上',
+                        style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 挂在节点旁边的那一段：一条拐进去的细线，读一下就能接回来。
+  Widget _fork(ConvBranch b, {required bool orphan}) {
+    return Stack(
+      children: <Widget>[
+        Positioned(
+          left: 24,
+          top: 0,
+          bottom: 0,
+          width: 1,
+          child: ColoredBox(color: C.rule),
+        ),
+        Positioned(
+          left: 24,
+          top: 0,
+          width: 18,
+          height: 16,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: C.rule2),
+                bottom: BorderSide(color: C.rule2),
               ),
-            ],
-          );
-        },
-      ),
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: () => onPick(_TlPick.branch(b)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(48, 6, 4, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  orphan ? '更早退掉的一段' : '退掉的一段 · ${_stamp(b.at)}',
+                  style: C.monoSmall.copyWith(fontSize: 10.5, color: C.blue),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _line(b.label),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, height: 1.5, color: C.grey),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${b.messages.length} 条 · 点一下接回来',
+                  style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
+/// 压缩出来的那一段：默认收三行，想看全文再展开。
 class _SummaryCard extends StatefulWidget {
   const _SummaryCard({required this.text});
 

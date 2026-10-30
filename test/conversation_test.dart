@@ -93,6 +93,89 @@ void main() {
     });
   });
 
+  group('回退是一棵树', () {
+    Conversation fresh(List<LlmMessage> msgs) =>
+        Conversation(id: 'c1', title: 't', hostId: 'h', messages: msgs);
+
+    List<LlmMessage> three() => <LlmMessage>[
+          LlmMessage.user('看磁盘', at: DateTime(2026, 10, 30, 10)),
+          const LlmMessage.assistant('92%'),
+          LlmMessage.user('清一下', at: DateTime(2026, 10, 30, 10, 5)),
+          const LlmMessage.assistant('好'),
+        ];
+
+    test('退掉的那一段挂到树上，一句都不丢', () {
+      final Conversation c = fresh(three());
+      final ConvBranch? b = c.lift(2);
+      expect(b, isNotNull);
+      expect(c.messages.length, 2);
+      expect(b!.messages.length, 2);
+      expect(b.messages.first.text, '清一下');
+      expect(b.anchor, 2);
+      expect(c.branches.length, 1);
+    });
+
+    test('接回来原样回来，树上那一叉就没了', () {
+      final Conversation c = fresh(three());
+      final ConvBranch b = c.lift(2)!;
+      expect(c.restore(b), isNull);
+      expect(c.messages.length, 4);
+      expect(c.messages.last.text, '好');
+      expect(c.branches, isEmpty);
+    });
+
+    test('接回来之前手边这一段先挂树上，所以接这一步也能反悔', () {
+      final Conversation c = fresh(three());
+      final ConvBranch b = c.lift(2)!;
+      // 退回去之后又接着聊了两条，再想把原来那段接回来。
+      c.messages.add(const LlmMessage.user('换一个问法'));
+      c.messages.add(const LlmMessage.assistant('行'));
+      final ConvBranch? shelved = c.restore(b);
+      expect(shelved, isNotNull);
+      expect(shelved!.messages.first.text, '换一个问法');
+      expect(c.messages.length, 4);
+      expect(c.messages.last.text, '好');
+      // 两个叉都在树上：接回来的那段走了，刚接走的这段挂着。
+      expect(c.branches.length, 1);
+      expect(c.branches.single.messages.length, 2);
+    });
+
+    test('记录从头上被收掉几条，锚点跟着挪', () {
+      final Conversation c = fresh(three());
+      c.lift(2);
+      c.messages.add(const LlmMessage.user('又一句'));
+      // 前面两条被收掉（太长或者压缩）。
+      c.messages.removeRange(0, 2);
+      c.shiftBranches(2);
+      expect(c.branches.single.anchor, 0);
+    });
+
+    test('锚点落在被收掉那一段里的分支就留不住了', () {
+      final Conversation c = fresh(three());
+      c.lift(1);
+      expect(c.branches.length, 1);
+      c.shiftBranches(2);
+      expect(c.branches, isEmpty);
+    });
+
+    test('树存盘读回来还在', () async {
+      final ConversationStore store = ConversationStore(dir);
+      await store.load();
+      final Conversation c = await store.create(title: 'a');
+      c.messages.addAll(three());
+      c.lift(2);
+      await store.save(c);
+
+      final ConversationStore again = ConversationStore(dir);
+      await again.load();
+      final Conversation back = again.all.first;
+      expect(back.messages.length, 2);
+      expect(back.branches.length, 1);
+      expect(back.branches.single.messages.first.text, '清一下');
+      expect(back.branches.single.anchor, 2);
+    });
+  });
+
   test('对话能存能读，工具调用和结果都留着', () async {
     final ConversationStore store = ConversationStore(dir);
     await store.load();
