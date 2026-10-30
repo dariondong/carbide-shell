@@ -124,7 +124,9 @@ class RememberTool extends Tool {
   String get name => 'remember';
 
   @override
-  String get description => '把一件事记进长期记忆，下次开软件还在，也会出现在你的系统提示里。';
+  String get description =>
+      '把一件事记进长期记忆，下次开软件还在，也会出现在你的系统提示里。'
+      '只是加一条；要改旧的或删掉，用 memory。';
 
   @override
   Map<String, Object?> get schema => <String, Object?>{
@@ -152,7 +154,7 @@ class RememberTool extends Tool {
     await memory.add(note, tag: readString(args, 'tag'));
     final StringBuffer b = StringBuffer('记下了。现在一共有 ${memory.length} 条：\n');
     for (final MemoryEntry e in memory.entries.take(5)) {
-      b.writeln('- ${e.tag.isEmpty ? '' : '[${e.tag}] '}${e.text}');
+      b.writeln('- ${e.id}  ${e.tag.isEmpty ? '' : '[${e.tag}] '}${e.text}');
     }
     return ToolOutcome.success(stdout: b.toString());
   }

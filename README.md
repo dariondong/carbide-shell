@@ -3,7 +3,8 @@
 一个能连服务器干活的 agent，跑在手机和电脑上。
 
 - 纯 Dart 内核：一轮 = 问模型 → 调工具 → 回填结果 → 再问，直到给出结论
-- 工具：`ssh_exec`（可带 timeout_seconds）/ `ssh_sftp` / `http_request` / `local_exec`（仅桌面）/ `file_io` / `remember`
+- 工具：`ssh_exec`（可带 timeout_seconds）/ `ssh_sftp` / `http_request` / `local_exec`（仅桌面）/ `file_io` / `remember` / `memory`
+- 网络：`http_request` 只发允许列表里的域名，`http_allow` 看和改这份清单（加进去的连带子域）
 - 临时文件区：模型用 `temp_file` 列、读、写、删，用 `temp_upload` 传到主机；界面上能预览、加文件、传服务器
 - 任务与监听：`task_add` / `task_list` / `task_control`、`watch_add` / `watch_list` / `watch_control`
 - 主机：`host_list`，Advance Master 另有 `host_add` / `host_remove`

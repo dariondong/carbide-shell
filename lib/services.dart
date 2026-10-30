@@ -31,6 +31,7 @@ import 'tools/local_tools.dart';
 import 'tools/net_tool.dart';
 import 'tools/mail_read_tool.dart';
 import 'tools/mail_tool.dart';
+import 'tools/memory_tool.dart';
 import 'tools/notify_tool.dart';
 import 'tools/param_tool.dart';
 import 'tools/plan_tool.dart';
@@ -146,6 +147,7 @@ class AppServices {
       ..register(TempUploadTool(files: files, pool: pool, hosts: hosts))
       ..register(TempDownloadTool(files: files, pool: pool, hosts: hosts))
       ..register(RememberTool(store))
+      ..register(MemoryTool(store))
       ..register(AskTool())
       // 计划写在这张对话上，界面照着它画顶上那张卡。
       ..register(PlanTool(
