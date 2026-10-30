@@ -13,7 +13,10 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 长任务期间的前台服务。
@@ -314,7 +317,54 @@ class TaskService : Service() {
                 .setContentIntent(tap(context))
             styleOf(context, text)?.let { builder.setStyle(it) }
             tryAddReply(context, builder)
+            island(builder, context.getString(R.string.task_notification_title), text)
             return builder.build()
+        }
+
+        /**
+         * 小米的焦点通知：把这条进度也挂到 HyperOS 的岛上去。
+         *
+         * 只是往通知上多塞一段 extras：认它的机型会把这句挂到状态栏那个岛上，
+         * 不认的机型读到也不认识，通知本身还是原来那一条。
+         *
+         * 字段名是焦点通知那一套：`miui.focus.param` 里是一串 JSON，`param_v2` 是模板本身，
+         * `miui.focus.actions` 是岛上那几个按钮（这里不给按钮，就空着）。
+         * 塞不进去就算了：岛再好看也不能把任务弄挂。
+         */
+        private fun island(builder: Notification.Builder, title: String, text: String) {
+            if (!onIsland()) return
+            try {
+                val base = JSONObject()
+                    .put("title", title)
+                    .put("content", text)
+                    .put("type", 1)
+                val template = JSONObject()
+                    .put("actions", JSONArray())
+                    .put("baseInfo", base)
+                    .put("enableFloat", true)
+                    .put("ticker", title)
+                    .put("protocol", 1)
+                    .put("timeout", 280)
+                    .put("updatable", true)
+                val param = JSONObject()
+                    .put("miui.focus.actions", "[]")
+                    .put("param_v2", template.toString())
+                val extras = Bundle()
+                extras.putString("miui.focus.param", param.toString())
+                builder.addExtras(extras)
+            } catch (error: Throwable) {
+                // 岛的参数没拼成，通知照发。
+            }
+        }
+
+        /** 是不是小米家的机器：只有它们认那套岛参数。 */
+        private fun onIsland(): Boolean {
+            return try {
+                val who = (Build.MANUFACTURER + " " + Build.BRAND).lowercase()
+                who.contains("xiaomi") || who.contains("redmi") || who.contains("poco")
+            } catch (error: Throwable) {
+                false
+            }
         }
 
         private fun done(context: Context, text: String): Notification {
