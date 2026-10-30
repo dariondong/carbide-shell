@@ -117,6 +117,15 @@ class _ChatPageState extends State<ChatPage> {
 
   AgentLoop? get _loop => _live?.loop;
 
+  /// 贴在输入框上面那两张卡（待批准 / 在问你）最高多少：按看得见的高度算，
+  /// 扣掉键盘。内容一长卡片自己滚，按钮不跟着跑。
+  double get _pinnedMax {
+    final MediaQueryData mq = MediaQuery.of(context);
+    final double visible = mq.size.height - mq.viewInsets.bottom - mq.padding.top;
+    final double h = visible * 0.46;
+    return h < 200 ? 200 : h;
+  }
+
   ApprovalRequest? get _pending => _live?.pending;
 
   String get _kind => _live?.pendingKind ?? '';
@@ -1457,12 +1466,16 @@ class _ChatPageState extends State<ChatPage> {
             child: FadeSlideIn(
               lift: 6,
               duration: const Duration(milliseconds: 220),
-              child: ApprovalCard(
-                request: _pending!,
-                onDecide: _decide,
-                onAllowKind: _allowKind,
-                onAllowAll: _allowAll,
-                kindLabel: _kind,
+              child: ConstrainedBox(
+                // 卡在看得到的区域里长，内容再长也不把「批准」顶出去。
+                constraints: BoxConstraints(maxHeight: _pinnedMax),
+                child: ApprovalCard(
+                  request: _pending!,
+                  onDecide: _decide,
+                  onAllowKind: _allowKind,
+                  onAllowAll: _allowAll,
+                  kindLabel: _kind,
+                ),
               ),
             ),
           ),
@@ -1472,9 +1485,12 @@ class _ChatPageState extends State<ChatPage> {
             child: FadeSlideIn(
               lift: 6,
               duration: const Duration(milliseconds: 220),
-              child: _AskCard(
-                request: _live!.pendingAsk!,
-                onAnswer: (String text) => _live?.answerAsk(text),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: _pinnedMax),
+                child: _AskCard(
+                  request: _live!.pendingAsk!,
+                  onAnswer: (String text) => _live?.answerAsk(text),
+                ),
               ),
             ),
           ),
@@ -1925,6 +1941,7 @@ class _AskCardState extends State<_AskCard> {
       border: C.approveBorder,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
@@ -1941,30 +1958,41 @@ class _AskCardState extends State<_AskCard> {
             ],
           ),
           const SizedBox(height: 10),
-          Text(widget.request.question, style: C.answer),
-          if (widget.request.options.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 11),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                for (final String option in widget.request.options)
-                  GestureDetector(
-                    onTap: () => widget.onAnswer(option),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: C.card,
-                        borderRadius: BorderRadius.circular(C.radiusSmall),
-                        border: Border.all(color: C.blue),
-                      ),
-                      child: Text(option,
-                          style: TextStyle(fontSize: 12, color: C.blue)),
+          // 问题再长也只在这块里滚，输入框和按钮留着。
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(widget.request.question, style: C.answer),
+                  if (widget.request.options.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 11),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final String option in widget.request.options)
+                          GestureDetector(
+                            onTap: () => widget.onAnswer(option),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: C.card,
+                                borderRadius: BorderRadius.circular(C.radiusSmall),
+                                border: Border.all(color: C.blue),
+                              ),
+                              child: Text(option,
+                                  style: TextStyle(fontSize: 12, color: C.blue)),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-              ],
+                  ],
+                ],
+              ),
             ),
-          ],
+          ),
           const SizedBox(height: 11),
           Row(
             children: <Widget>[

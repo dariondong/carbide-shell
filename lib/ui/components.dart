@@ -373,12 +373,27 @@ class ApprovalCard extends StatelessWidget {
   /// 会删东西的那一步，在卡上单独说一句。
   String get _warning => request.dangerous ? '这一步会删掉东西，看清楚再点。' : '';
 
+  /// 卡上最多铺这么多字。再长的整段塞给一个 Text，排一次版就能把界面卡住。
+  static const int _maxShown = 2400;
+
+  /// 劈开字符串时别把一对代理劈成两半。
+  static int _cutAt(String s, int n) {
+    if (s.length <= n) return n;
+    final int c = s.codeUnitAt(n - 1);
+    return c >= 0xD800 && c <= 0xDBFF ? n - 1 : n;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String all = _command;
+    final int cut = _cutAt(all, _maxShown);
+    final String shown = cut >= all.length ? all : all.substring(0, cut);
+    final int hidden = all.length - shown.length;
     return CardBox(
       border: C.approveBorder,
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
@@ -404,27 +419,42 @@ class ApprovalCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 11),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
-            decoration: BoxDecoration(
-              color: C.paper2,
-              borderRadius: BorderRadius.circular(C.radiusSmall),
+          // 内容长了这一段自己滚，卡片的高度由外面封顶：按钮永远留在屏幕上。
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: C.paper2,
+                      borderRadius: BorderRadius.circular(C.radiusSmall),
+                    ),
+                    child: Text(shown, style: C.mono.copyWith(fontSize: 12.5, color: C.ink)),
+                  ),
+                  if (hidden > 0) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Text('后面还有 $hidden 字没有铺开。',
+                        style: C.monoSmall.copyWith(fontSize: 10.5, color: C.grey2)),
+                  ],
+                  const SizedBox(height: 11),
+                  Text(
+                    _note,
+                    style: TextStyle(fontSize: 12, height: 1.6, color: C.grey),
+                  ),
+                  if (_warning.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Text(
+                      _warning,
+                      style: TextStyle(fontSize: 12, height: 1.6, color: C.danger),
+                    ),
+                  ],
+                ],
+              ),
             ),
-            child: Text(_command, style: C.mono.copyWith(fontSize: 12.5, color: C.ink)),
           ),
-          const SizedBox(height: 11),
-          Text(
-            _note,
-            style: TextStyle(fontSize: 12, height: 1.6, color: C.grey),
-          ),
-          if (_warning.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 6),
-            Text(
-              _warning,
-              style: TextStyle(fontSize: 12, height: 1.6, color: C.danger),
-            ),
-          ],
           const SizedBox(height: 13),
           Row(
             children: <Widget>[
