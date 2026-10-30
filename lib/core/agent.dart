@@ -135,6 +135,12 @@ class AgentLoop {
   }) async {
     final String text = input.trim();
     if (text.isEmpty && images.isEmpty) return '';
+    // 上一次跑到一半就退出的话，记录里会剩一条只有调用、没有结果的消息。
+    // 先补齐再发，否则服务端一句话就拒了：tool call result does not follow tool call。
+    if (repairToolPairs(history) > 0) {
+      journal.add(<String, Object?>{'event': 'repair', 'at': history.length});
+      _checkpoint();
+    }
     history.add(LlmMessage.user(text, images: images));
     journal.add(<String, Object?>{'event': 'user', 'text': text});
     // 用户这句先落到盘上：接下来一场跑多久都不再冒丢字的险。

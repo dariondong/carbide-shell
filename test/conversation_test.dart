@@ -15,6 +15,85 @@ void main() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
+void main() {
+  group('工具调用和结果对齐', () {
+    test('好的记录一条不动', () {
+      final List<LlmMessage> m = <LlmMessage>[
+        const LlmMessage.user('看磁盘'),
+        const LlmMessage.assistant('跑一下', calls: <LlmToolCall>[
+          LlmToolCall(id: 'c1', name: 'ssh_exec', args: <String, Object?>{}),
+        ]),
+        const LlmMessage.toolResult(text: 'ok', toolCallId: 'c1', toolName: 'ssh_exec'),
+      ];
+      expect(repairToolPairs(m), 0);
+      expect(m.length, 3);
+    });
+
+    test('命令跑到一半退出：缺的结果补成没跑完', () {
+      final List<LlmMessage> m = <LlmMessage>[
+        const LlmMessage.user('重装一下 nginx'),
+        const LlmMessage.assistant('两条命令', calls: <LlmToolCall>[
+          LlmToolCall(id: 'c1', name: 'ssh_exec', args: <String, Object?>{}),
+          LlmToolCall(id: 'c2', name: 'ssh_exec', args: <String, Object?>{}),
+        ]),
+        const LlmMessage.toolResult(text: '第一条好了', toolCallId: 'c1', toolName: 'ssh_exec'),
+        const LlmMessage.user('好了吗'),
+      ];
+      expect(repairToolPairs(m), 1);
+      expect(m.length, 5);
+      expect(m[2].toolCallId, 'c2');
+      expect(m[2].failed, isTrue);
+      expect(m[2].text, contains('没跑完'));
+      expect(m[3].role, LlmRole.tool);
+      expect(m[4].text, '好了吗', reason: '后面那句提问不该被挪走');
+    });
+
+    test('孤立的工具结果丢掉', () {
+      final List<LlmMessage> m = <LlmMessage>[
+        const LlmMessage.user('看磁盘'),
+        const LlmMessage.toolResult(text: '孤立', toolCallId: 'x9', toolName: 'ssh_exec'),
+        const LlmMessage.assistant('看完了'),
+      ];
+      expect(repairToolPairs(m), 1);
+      expect(m.length, 2);
+      expect(m.first.role, LlmRole.user);
+    });
+
+    test('同一个调用重复的结果只留一条', () {
+      final List<LlmMessage> m = <LlmMessage>[
+        const LlmMessage.assistant('跑', calls: <LlmToolCall>[
+          LlmToolCall(id: 'c1', name: 'ssh_exec', args: <String, Object?>{}),
+        ]),
+        const LlmMessage.toolResult(text: '一', toolCallId: 'c1', toolName: 'ssh_exec'),
+        const LlmMessage.toolResult(text: '二', toolCallId: 'c1', toolName: 'ssh_exec'),
+      ];
+      expect(repairToolPairs(m), 1);
+      expect(m.length, 2);
+      expect(m.last.text, '一');
+    });
+
+    test('读回来的时候自己修一次', () async {
+      final ConversationStore store = ConversationStore(dir);
+      await store.load();
+      final Conversation c = await store.create(title: '半截', hostId: '');
+      c.messages.add(const LlmMessage.user('跑一下'));
+      c.messages.add(const LlmMessage.assistant('两条', calls: <LlmToolCall>[
+        LlmToolCall(id: 'c1', name: 'ssh_exec', args: <String, Object?>{}),
+        LlmToolCall(id: 'c2', name: 'ssh_exec', args: <String, Object?>{}),
+      ]));
+      c.messages.add(const LlmMessage.toolResult(
+          text: 'ok', toolCallId: 'c1', toolName: 'ssh_exec'));
+      await store.save(c);
+
+      final ConversationStore again = ConversationStore(dir);
+      await again.load();
+      final List<LlmMessage> back = again.all.first.messages;
+      expect(back.length, 4);
+      expect(back.last.role, LlmRole.tool);
+      expect(back.last.toolCallId, 'c2');
+    });
+  });
+
   test('对话能存能读，工具调用和结果都留着', () async {
     final ConversationStore store = ConversationStore(dir);
     await store.load();

@@ -174,6 +174,60 @@ class Conversation {
   }
 }
 
+/// 工具结果要和发起它的那条 assistant 对齐，否则服务端直接 400
+/// （tool call result does not follow tool call）。
+///
+/// 一条命令跑到一半退出、应用被杀、记录被外面改过，都会留下半截的调用：
+/// assistant 里写了 tool_calls，底下没跟全结果。缺的补成一条「没跑完」的结果，
+/// 找不到出处的孤立结果丢掉。返回动了几条。
+int repairToolPairs(List<LlmMessage> messages) {
+  int fixed = 0;
+  int i = 0;
+  while (i < messages.length) {
+    final LlmMessage m = messages[i];
+    if (m.role == LlmRole.tool) {
+      // 前面不是它的调用：这一条没有出处，留着服务端会拒。
+      messages.removeAt(i);
+      fixed += 1;
+      continue;
+    }
+    if (m.role != LlmRole.assistant || m.calls.isEmpty) {
+      i += 1;
+      continue;
+    }
+    final Set<String> ids = m.calls.map((LlmToolCall c) => c.id).toSet();
+    final Set<String> seen = <String>{};
+    int j = i + 1;
+    while (j < messages.length && messages[j].role == LlmRole.tool) {
+      final String id = messages[j].toolCallId;
+      if (ids.contains(id) && seen.add(id)) {
+        j += 1;
+        continue;
+      }
+      // 重复的、或者不属于这次调用的结果。
+      messages.removeAt(j);
+      fixed += 1;
+    }
+    final List<LlmMessage> patch = <LlmMessage>[];
+    for (final LlmToolCall c in m.calls) {
+      if (seen.contains(c.id)) continue;
+      patch.add(LlmMessage.toolResult(
+        text: '（这一步没跑完就中断了，没有结果）',
+        toolCallId: c.id,
+        toolName: c.name,
+        failed: true,
+      ));
+    }
+    if (patch.isNotEmpty) {
+      messages.insertAll(j, patch);
+      fixed += patch.length;
+      j += patch.length;
+    }
+    i = j;
+  }
+  return fixed;
+}
+
 Map<String, Object?> messageToJson(LlmMessage m) => <String, Object?>{
       'role': m.role.name,
       'text': m.text,
@@ -291,6 +345,8 @@ class ConversationStore {
           if (c.id.isNotEmpty) {
             // 老版本留下的长记录，先收一次再放进来。
             c.dropped += trimTranscript(c.messages);
+            // 上个版本留下过半截的工具调用：读回来的时候修一次。
+            repairToolPairs(c.messages);
             _items.add(c);
           }
         }
