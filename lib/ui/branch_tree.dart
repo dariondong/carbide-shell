@@ -258,7 +258,7 @@ class _ConvTreePanelState extends State<ConvTreePanel> {
                     width: 5,
                     height: 5,
                     margin: const EdgeInsets.only(right: 5),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: C.blue,
                       shape: BoxShape.circle,
                     ),
