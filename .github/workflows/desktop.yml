@@ -17,6 +17,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 env:
   PROJECT: carbide_shell
   ORG: top.theez
@@ -51,13 +54,22 @@ jobs:
             Where-Object { Test-Path (Join-Path $_.FullName "$env:PROJECT.exe") } | Select-Object -First 1
           if (-not $rel) { throw "找不到 Release 输出目录" }
           Write-Host "from $($rel.FullName)"
-          Compress-Archive -Path (Join-Path $rel.FullName '*') -DestinationPath "CarbideShell_${v}_windows_x64.zip"
+          Compress-Archive -Path (Join-Path $rel.FullName '*') -DestinationPath "CarbideShell_v${v}_windows_x64.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: carbide-shell-windows-x64
-          path: CarbideShell_*_windows_x64.zip
+          path: CarbideShell_v*_windows_x64.zip
           if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 40); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 10; done
+          gh release upload "$GITHUB_REF_NAME" CarbideShell_v*_windows_x64.zip --clobber
 
   linux:
     runs-on: ubuntu-latest
@@ -92,13 +104,21 @@ jobs:
         run: |
           v=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version: *//; s/+.*//')
           echo "version $v"
-          tar -C build/linux/x64/release/bundle -czf "CarbideShell_${v}_linux_x64.tar.gz" .
+          tar -C build/linux/x64/release/bundle -czf "CarbideShell_v${v}_linux_x64.tar.gz" .
 
       - uses: actions/upload-artifact@v4
         with:
           name: carbide-shell-linux-x64
-          path: CarbideShell_*_linux_x64.tar.gz
+          path: CarbideShell_v*_linux_x64.tar.gz
           if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 40); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 10; done
+          gh release upload "$GITHUB_REF_NAME" CarbideShell_v*_linux_x64.tar.gz --clobber
 
   macos:
     runs-on: macos-latest
@@ -124,10 +144,18 @@ jobs:
           v=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version: *//; s/+.*//')
           app=$(ls -d build/macos/Build/Products/Release/*.app | head -1)
           echo "version $v, app $app"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "CarbideShell_${v}_macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "CarbideShell_v${v}_macos.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: carbide-shell-macos
-          path: CarbideShell_*_macos.zip
+          path: CarbideShell_v*_macos.zip
           if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 40); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 10; done
+          gh release upload "$GITHUB_REF_NAME" CarbideShell_v*_macos.zip --clobber
