@@ -1,0 +1,128 @@
+name: Desktop
+
+# 电脑版（Windows / Linux / macOS）的编译包。
+# 手机上一直是 APK，这三份是给桌面用的：Windows 解压就双击 carbide_shell.exe，
+# Linux 解压跑 carbide_shell，macOS 解压拖进「应用程序」。
+#
+# 平台脚手架是 scaffold.yml 生成的，生成时项目里还没有这些插件，所以
+# windows|linux/flutter/generated_plugin_registrant.cc、generated_plugins.cmake 和
+# macos/Flutter/GeneratedPluginRegistrant.swift 都是空表，只有 `flutter create` 会重写它们
+# （pub get 和 build 都不碰）。这里先跑一次 create 把插件登记进去，再编译，
+# 否则包能编译出来，但 url_launcher / path_provider / flutter_secure_storage 一用就
+# MissingPluginException。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  PROJECT: carbide_shell
+  ORG: top.theez
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Inject desktop plugins
+        shell: pwsh
+        run: flutter create --project-name $env:PROJECT --org $env:ORG --platforms=windows .
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          Write-Host "version $v"
+          $rel = Get-ChildItem -Path build/windows -Recurse -Directory -Filter Release |
+            Where-Object { Test-Path (Join-Path $_.FullName "$env:PROJECT.exe") } | Select-Object -First 1
+          if (-not $rel) { throw "找不到 Release 输出目录" }
+          Write-Host "from $($rel.FullName)"
+          Compress-Archive -Path (Join-Path $rel.FullName '*') -DestinationPath "CarbideShell_${v}_windows_x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carbide-shell-windows-x64
+          path: CarbideShell_*_windows_x64.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Inject desktop plugins
+        run: flutter create --project-name "$PROJECT" --org "$ORG" --platforms=linux .
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package
+        run: |
+          v=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version: *//; s/+.*//')
+          echo "version $v"
+          tar -C build/linux/x64/release/bundle -czf "CarbideShell_${v}_linux_x64.tar.gz" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carbide-shell-linux-x64
+          path: CarbideShell_*_linux_x64.tar.gz
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Inject desktop plugins
+        run: flutter create --project-name "$PROJECT" --org "$ORG" --platforms=macos .
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Package
+        run: |
+          v=$(grep -m1 '^version:' pubspec.yaml | sed 's/^version: *//; s/+.*//')
+          app=$(ls -d build/macos/Build/Products/Release/*.app | head -1)
+          echo "version $v, app $app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "CarbideShell_${v}_macos.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carbide-shell-macos
+          path: CarbideShell_*_macos.zip
+          if-no-files-found: error
