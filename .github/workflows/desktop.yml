@@ -81,6 +81,11 @@ jobs:
         run: flutter pub get
 
       - name: Build Linux
+        # flutter_secure_storage_linux 自带的 include/json.hpp 里写着 `operator"" _json`，
+        # 新一点的 clang 会为这种写法报 -Wdeprecated-literal-operator；Flutter 给每个插件目标
+        # 都加了 -Wall -Werror，于是整条 Linux 编译红在这一个第三方头文件上。
+        env:
+          CXXFLAGS: -Wno-deprecated-literal-operator
         run: flutter build linux --release
 
       - name: Package
