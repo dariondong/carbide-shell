@@ -259,7 +259,8 @@ exit 0
   String _engineCommandWith(String rest, String config) {
     final String own = config.trim();
     if (own.isEmpty) return _engineCommand(rest);
-    return _engineCommand('$rest --config "$(printf %s ${_b64(own)} | base64 -d)"');
+    // \$ 要转义：Dart 里 \$( 不是插值，直接写会报 missing_identifier。
+    return _engineCommand('$rest --config "\$(printf %s ${_b64(own)} | base64 -d)"');
   }
 
   /// 把一份文本写到远端某个文件：`printf <base64> | base64 -d > 路径`。

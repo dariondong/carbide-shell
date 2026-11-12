@@ -23,6 +23,7 @@ class PluginTool extends Tool {
 
   /// 插件作者写给模型的引导语。dsh 里它走 systemPrompt，这边没有独立通道，
   /// 并进工具描述——总比丢掉强，模型至少知道该怎么用它。
+  final String guidance;
 
   @override
   String get name => spec.name;
