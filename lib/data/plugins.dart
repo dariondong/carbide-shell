@@ -137,7 +137,7 @@ class PluginStore extends ChangeNotifier {
     final String own = proxyRoot.trim();
     if (own.isEmpty) return r'"$HOME/.carbide/plugins"';
     if (own == '~') return r'"$HOME"';
-    if (own.startsWith('~/')) return '"$HOME/${own.substring(2)}"';
+    if (own.startsWith('~/')) return '"\$HOME/${own.substring(2)}"';
     return _q(own);
   }
 
