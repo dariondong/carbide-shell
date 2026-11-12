@@ -1,5 +1,21 @@
 # 更新日志
 
+## [0.0.45] - 2026-11-12
+
+- 远程插件：把 DSH 工具插件装到一台代理机上，手机这边只留清单和开关，模型直接就能调。
+  设置 → 插件里挑机器、挑目录，装完自动收割清单；带进来的工具跟内置工具一样有风险分级和批准
+- 插件桥（代理机上那份内嵌 JS 引擎）真按 cordis 的语义跑：tools.register、systemPrompt.section、
+  effect、inject（依赖就绪才调回调，缺着就记下来不调）、sessionProjections、session.append / flush
+- 会话日志落盘：$CARBIDE_ROOT/sessions/<hash>.jsonl，一行一条。装配时重放历史，投影状态能活过两次调用；
+  读-重放-跑-写整段加异步锁，并发调用不会读到空历史也不会撞号
+- 技能库：.dsh/skills、skills、$CARBIDE_ROOT/skills 三处都扫，解析 SKILL.md 的 frontmatter，
+  近的作用域盖远的。有技能时把目录写进系统提示，模型才知道有哪些技能可以按名字取
+- agents 只做查询，真没有就返回空；ctx.get 按 cordis 语义探测式取服务，缺了返 undefined
+- 插件可以 fetch / search 网页，走代理机的网
+- 配置是 JSON 也不怕：base64 走管道喂给 --config，存之前先收割一遍验证能起来
+- 插件页：装的什么、带几个工具、开没开、配置、日志，一页看全
+- AGP 9.1.0 → 9.1.1（Flutter 3.50 的最低要求）
+
 ## [0.0.44] - 2026-10-30
 
 - 长按说话多了两种走法：设置 → 对话 →「长按说话」里选系统识别 / 系统认字界面 / 在线识别
