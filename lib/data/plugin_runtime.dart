@@ -499,8 +499,37 @@ function makeCtx(opts) {
       }
       return () => {}
     },
+    /**
+     * cordis 的原文是「Run a callback once the requested services are available」，
+     * 而且服务变了会卸载重跑。以前这里是无条件 fn(ctx)，等于告诉插件
+     * 「你要的都齐了」——插件于是放心地用，一碰就抛，整个 apply 连带崩掉，
+     * 连不依赖那项服务的工具都注册不上。
+     *
+     * 现在的规矩：没就绪就永不调用，并把这几个名字记进缺项。
+     * 插件缺一段功能，而不是整个废掉——这才是作者写 inject 时的预期。
+     *
+     * 「服务变了重跑」在这个一次性进程模型里没有对应物：服务表在装配期是静态的。
+     */
     inject(names, fn) {
-      if (typeof fn === 'function') fn(ctx)
+      const list = Array.isArray(names)
+        ? names
+        : names && typeof names === 'object'
+          ? Object.keys(names)
+          : [names]
+      const ready = list.every((n) => typeof n === 'string' && n && n in services && services[n] != null)
+      if (!ready) {
+        for (const n of list) {
+          if (typeof n !== 'string' || !n) continue
+          if (!(n in services) || services[n] == null) misses.add(n)
+        }
+        return () => {}
+      }
+      if (typeof fn !== 'function') return () => {}
+      try {
+        fn(ctx)
+      } catch (e) {
+        warnings.push('inject:' + ((e && e.message) || String(e)))
+      }
       return () => {}
     },
     plugin() {
