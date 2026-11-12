@@ -24,6 +24,7 @@ import 'ui/hosts_page.dart';
 import 'ui/memory_page.dart';
 import 'ui/motion.dart';
 import 'ui/pet.dart';
+import 'ui/plugins_page.dart';
 import 'ui/settings_page.dart';
 import 'ui/tasks_page.dart';
 import 'ui/temp_files_page.dart';
@@ -257,6 +258,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     );
   }
 
+  void _openPlugins() {
+    final AppServices s = widget.services;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PluginsPage(plugins: s.plugins, hosts: s.hosts),
+      ),
+    );
+  }
+
+  /// 设置页那一行右边写装了几个包、带进来几个工具。
+  String _pluginsSummary() {
+    final p = widget.services.plugins;
+    if (!p.ready) return '没配代理机';
+    if (p.plugins.isEmpty) return '还没装';
+    return '${p.plugins.length} 个 · ${p.toolCount} 个工具';
+  }
+
   /// 设置页那一行右边写文件区的轻重，读一眼目录就够。
   String _filesSummary() {
     try {
@@ -359,6 +377,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                       onOpenUsage: _openUsage,
                       onOpenFiles: _openFiles,
                       onOpenEnv: _openEnv,
+                      onOpenPlugins: _openPlugins,
+                      pluginsSummary: _pluginsSummary(),
                       filesSummary: _filesSummary(),
                       envSummary: widget.services.env.all.isEmpty
                           ? '还没存'

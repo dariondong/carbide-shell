@@ -11,6 +11,7 @@ import 'data/env_keys.dart';
 import 'data/hosts.dart';
 import 'data/llm_settings.dart';
 import 'data/mail.dart';
+import 'data/plugins.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
 import 'data/tasks.dart';
@@ -35,6 +36,7 @@ import 'tools/memory_tool.dart';
 import 'tools/notify_tool.dart';
 import 'tools/param_tool.dart';
 import 'tools/plan_tool.dart';
+import 'tools/plugin_tool.dart';
 import 'tools/probe_tool.dart';
 import 'tools/render_tool.dart';
 import 'tools/report_tool.dart';
@@ -68,6 +70,7 @@ class AppServices {
     required this.mail,
     required this.env,
     required this.triggers,
+    required this.plugins,
     required this.workspace,
     required this.files,
     DeviceApi? device,
@@ -96,6 +99,9 @@ class AppServices {
 
   /// 触发器清单：手机状态、消息通知、定时。
   final TriggerStore triggers;
+
+  /// 远程插件：装在一台代理机上，手机只留清单和开关。
+  final PluginStore plugins;
   final String workspace;
 
   /// 临时文件区：模型写文件、用户往里放文件、两个都把文件传到主机。
@@ -131,6 +137,8 @@ class AppServices {
         }
       }
     }
+    // 远程插件装在哪台机器上由用户选，这里只按「开着没」对齐一遍。
+    PluginToolSet(plugins: plugins, registry: session.loop.registry).sync();
   }
 
   /// Tools are per session: `remember` must write into this conversation's

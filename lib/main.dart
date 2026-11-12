@@ -17,6 +17,7 @@ import 'data/hosts.dart';
 import 'data/hub.dart';
 import 'data/llm_settings.dart';
 import 'data/mail.dart';
+import 'data/plugins.dart';
 import 'data/notice_reply.dart';
 import 'data/secrets.dart';
 import 'data/settings.dart';
@@ -74,6 +75,14 @@ Future<void> main() async {
   final TriggerStore triggers = TriggerStore(File('${dir.path}/triggers.json'));
   await triggers.load();
 
+  // 远程插件：清单和开关在本地，包和 node 在代理机上。
+  final PluginStore plugins = PluginStore(
+    file: File('${dir.path}/plugins.json'),
+    hosts: hosts,
+    pool: pool,
+  );
+  await plugins.load();
+
   // 一条通知、一个托管处：几个对话和定时任务同时跑也只有一个地方在写。
   final ActivityBoard board = ActivityBoard(styleOf: () => settings.value.notifStyle);
 
@@ -91,6 +100,7 @@ Future<void> main() async {
     mail: mail,
     env: env,
     triggers: triggers,
+    plugins: plugins,
     workspace: workspace.path,
     files: TempFiles(workspace),
   );

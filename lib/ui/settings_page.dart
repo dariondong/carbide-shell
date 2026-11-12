@@ -44,6 +44,8 @@ class SettingsPage extends StatefulWidget {
     required this.onOpenUsage,
     required this.onOpenFiles,
     required this.onOpenEnv,
+    required this.pluginsSummary,
+    required this.onOpenPlugins,
     required this.envSummary,
     required this.filesSummary,
     required this.usage,
@@ -65,6 +67,12 @@ class SettingsPage extends StatefulWidget {
 
   /// 环境密钥也是一页，名字和日志在本地，值在安全存储里。
   final VoidCallback onOpenEnv;
+
+  /// 插件也是一页：装在一台代理机上，手机只留清单。
+  final VoidCallback onOpenPlugins;
+
+  /// 那一行右边写装了几个、带进来几个工具。
+  final String pluginsSummary;
 
   /// 那一行右边写存了几把。
   final String envSummary;
@@ -579,6 +587,25 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               const SizedBox(width: 10),
                               Text(widget.envSummary, style: C.monoSmall),
+                              const SizedBox(width: 6),
+                              Icon(Icons.chevron_right, size: 16, color: C.grey2),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const RuleLine(),
+                      InkWell(
+                        onTap: widget.onOpenPlugins,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text('插件',
+                                    style: TextStyle(fontSize: 13.5, color: C.ink)),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(widget.pluginsSummary, style: C.monoSmall),
                               const SizedBox(width: 6),
                               Icon(Icons.chevron_right, size: 16, color: C.grey2),
                             ],
