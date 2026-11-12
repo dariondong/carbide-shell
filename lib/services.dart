@@ -227,12 +227,16 @@ class AppServices {
       maxSteps: settings.value.maxSteps,
       maxContextChars: settings.value.contextChars,
       messages: c.messages,
-      environment: () => environmentText(hosts, workspace, memory, c),
+      environment: () =>
+          environmentText(hosts, workspace, memory, c, pluginSkills: plugins.skillsNote),
     );
     loop.extraSystem = settings.value.extraPrompt;
     loop.systemPrompt = promptFor(settings, c);
     final AgentSession session = AgentSession(loop: loop, memory: store);
     syncTools(session);
+    // 技能库每次开新对话都刷一次：用户刚塞进去的技能，下一句就能用。
+    // 失败只是少一段提示，不影响这次对话。
+    await plugins.refreshSkills();
     return session;
   }
 
@@ -257,8 +261,9 @@ String environmentText(
   HostStore hosts,
   String workspace,
   MemoryBook memory,
-  Conversation c,
-) {
+  Conversation c, {
+  String pluginSkills = '',
+}) {
   final StringBuffer b = StringBuffer('\n当前环境\n');
   b.writeln(
       '- 平台：${describePlatform()}。${isDesktopPlatform ? '可以执行本地命令。' : '不能执行本地命令，local_exec 不可用。'}');
@@ -276,6 +281,11 @@ String environmentText(
   // 整段前缀的缓存每轮都作废。要准确时刻用 clock 工具。
   b.writeln('- 今天是：${now.year}-${two(now.month)}-${two(now.day)}，'
       '星期${week[now.weekday - 1]}（设备本地时间）。排日期按这个算，要几点几分用 clock 工具。');
+
+  final String skillsPart = pluginSkills.trim();
+  if (skillsPart.isNotEmpty) {
+    b.writeln(skillsPart);
+  }
 
   final List<HostEntry> visible = c.multiHost
       ? hosts.hosts

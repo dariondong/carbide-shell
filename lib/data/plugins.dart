@@ -113,6 +113,7 @@ class PluginStore extends ChangeNotifier {
     _byId[id] = m.copyWith(on: on);
     await save();
     notifyListeners();
+    if (on) await refreshSkills(fresh: true);
   }
 
   /// 改一个工具的风险档。插件本身没有这个概念，默认按名字猜，猜错了能改。
@@ -312,6 +313,8 @@ exit 0
       final PluginManifest manifest = _manifestOf(json, pkg);
       _byId[pkg] = manifest;
       await save();
+      // 新装的包可能带技能，顺手刷一下摘要
+      await refreshSkills(fresh: true);
       return manifest;
     } finally {
       busy = '';
@@ -354,6 +357,74 @@ exit 0
     } finally {
       busy = '';
       notifyListeners();
+      await refreshSkills(fresh: true);
+    }
+  }
+
+  /// 技能库的一句话摘要，写进系统提示用。
+  ///
+  /// 为什么要缓存：系统提示是同步拼的，而技能在代理机上，
+  /// 每轮都去问一遍太贵。装、卸、开关的时候刷一次就够。
+  String skillsNote = '';
+
+  DateTime _skillsAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 刷新技能摘要。代理机没准备好、或者命令失败，就留空——
+  /// 技能库不存在不该让整个对话开不了。
+  ///
+  /// [fresh] 为 false 时一分钟内的旧结果直接用：切个对话就 SSH 一趟太浪费，
+  /// 而技能列表又不会自己变。装、卸、开关是明确的变更点，那时候要 [fresh]。
+  Future<void> refreshSkills({bool fresh = false}) async {
+    final HostEntry? host = proxyHost;
+    if (host == null) {
+      skillsNote = '';
+      return;
+    }
+    final DateTime now = DateTime.now();
+    if (!fresh && now.difference(_skillsAt).inSeconds < 60) return;
+    try {
+      final _Run r = await _run(
+        host,
+        _engineCommand('skills --cwd $_workExpr'),
+        timeout: const Duration(seconds: 30),
+      );
+      final Map<String, Object?> json = _lastJson(r.out);
+      final Object? raw = json['skills'];
+      if (raw is! List) {
+        skillsNote = '';
+        return;
+      }
+      final List<String> lines = <String>[];
+      int hidden = 0;
+      for (final Object? e in raw) {
+        if (e is! Map) continue;
+        final Map<String, Object?> m = Map<String, Object?>.from(e);
+        if (m['modelInvocable'] != true) {
+          hidden++;
+          continue;
+        }
+        final String name = '${m['name'] ?? ''}'.trim();
+        if (name.isEmpty) continue;
+        final String desc = '${m['description'] ?? ''}'.trim();
+        lines.add(desc.isEmpty ? '  $name' : '  $name = $desc');
+      }
+      if (lines.isEmpty) {
+        skillsNote = '';
+        return;
+      }
+      final StringBuffer b = StringBuffer();
+      b.writeln('- 插件技能库（有对应的任务就先调 skill 工具按名字取全文，别猜）：');
+      for (final String line in lines) {
+        b.writeln(line);
+      }
+      if (hidden > 0) {
+        b.writeln('  另有 $hidden 个技能不允许模型自己调用，不要尝试。');
+      }
+      skillsNote = b.toString();
+    } catch (_) {
+      skillsNote = '';
+    } finally {
+      _skillsAt = now;
     }
   }
 

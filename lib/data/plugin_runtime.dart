@@ -58,6 +58,212 @@ function versionOf(s) {
 }
 
 /** 按 dsh-fs 的契约实现一份本地文件系统。插件里 ctx.fs.* 就是这里。 */
+// ---------------------------------------------------------------- 技能库
+//
+// dsh 里 ctx.skills 是个分层的 provider 注册表：每个 provider 自己去某个
+// 地方找技能（磁盘、远端、包内），注册表负责合并同名、排序、按需加载正文。
+// 真实的 SkillService 继承 cordis 的 Service，模拟 ctx 用不了，所以这里按
+// 它对外暴露的形状自己实现一份，只做「本地目录」这一种 provider。
+//
+// 技能的约定跟 dsh / Claude Code 一致：一个目录一个技能，里面是 SKILL.md，
+// 开头一段 YAML frontmatter（name、description、when-to-use 之类），
+// 剩下的正文就是指令。
+
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** frontmatter 里只认这几种标量写法：`k: v`、`k: "v"`、`k: true`。 */
+function parseFrontmatter(text) {
+  const src = String(text).replace(/^\uFEFF/, '')
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(src)
+  if (!m) return { meta: {}, body: src }
+  const meta = {}
+  for (const line of m[1].split(/\r?\n/)) {
+    const own = line.trim()
+    if (!own || own.startsWith('#')) continue
+    const at = own.indexOf(':')
+    if (at <= 0) continue
+    const key = own.slice(0, at).trim()
+    let val = own.slice(at + 1).trim()
+    if (!val) continue
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1)
+    } else if (val === 'true') val = true
+    else if (val === 'false') val = false
+    meta[key] = val
+  }
+  return { meta, body: src.slice(m[0].length) }
+}
+
+function truthyMeta(v, dflt) {
+  if (v === undefined) return dflt
+  if (typeof v === 'boolean') return v
+  const s = String(v).trim().toLowerCase()
+  if (s === 'false' || s === 'no' || s === '0' || s === 'off') return false
+  if (s === 'true' || s === 'yes' || s === '1' || s === 'on') return true
+  return dflt
+}
+
+/** 一个技能目录怎么变成一条记录。读不出 name 就用目录名。 */
+function readSkillDir(dir, source, provider) {
+  const file = path.join(dir, 'SKILL.md')
+  let text = ''
+  try {
+    text = fs.readFileSync(file, 'utf8')
+  } catch {
+    return undefined
+  }
+  const { meta, body } = parseFrontmatter(text)
+  const name = String(meta.name || path.basename(dir)).trim()
+  if (!SKILL_NAME_RE.test(name)) return undefined
+  const description = String(meta.description || '').trim()
+  const whenToUse = meta['when-to-use'] || meta.whenToUse
+  return {
+    name,
+    description,
+    ...(whenToUse ? { whenToUse: String(whenToUse) } : {}),
+    invocation: {
+      modelInvocable:
+        meta['model-invocable'] !== undefined
+          ? truthyMeta(meta['model-invocable'], true)
+          : !truthyMeta(meta['disable-model-invocation'], false),
+      userInvocable: truthyMeta(meta['user-invocable'], true),
+    },
+    source,
+    provider,
+    resourceBase: { kind: 'directory', path: dir },
+    content: body.trim(),
+    path: file,
+  }
+}
+
+/**
+ * 扫一个根目录下的技能。认两种摆法：`<root>/<name>/SKILL.md`（主流），
+ * 和 `<root>/<name>.md`（单文件，省事用）。
+ */
+function scanSkillRoot(root, source, provider) {
+  let names = []
+  try {
+    names = fs.readdirSync(root, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  const found = []
+  for (const ent of names) {
+    if (ent.name.startsWith('.')) continue
+    const full = path.join(root, ent.name)
+    if (ent.isDirectory()) {
+      const r = readSkillDir(full, source, provider)
+      if (r) found.push(r)
+    } else if (ent.isFile() && ent.name.endsWith('.md')) {
+      // 单文件：一个 .md 直接当一个技能，不用建目录
+      let text = ''
+      try {
+        text = fs.readFileSync(full, 'utf8')
+      } catch {
+        continue
+      }
+      const { meta, body } = parseFrontmatter(text)
+      const name = String(meta.name || ent.name.replace(/\.md$/, '')).trim()
+      if (!SKILL_NAME_RE.test(name)) continue
+      found.push({
+        name,
+        description: String(meta.description || '').trim(),
+        invocation: { modelInvocable: truthyMeta(meta['model-invocable'], true), userInvocable: truthyMeta(meta['user-invocable'], true) },
+        source,
+        provider,
+        content: body.trim(),
+        path: full,
+      })
+    }
+  }
+  return found
+}
+
+/**
+ * 造一个 skills 服务。形状对齐 dsh：list / get / snapshot / register。
+ *
+ * 查找顺序（近的赢）：工作目录的 .dsh/skills、工作目录的 skills、
+ * 然后全局 $CARBIDE_ROOT/skills。同名的话前面那个盖掉后面那个——
+ * 跟 dsh「token 级作用域最近的赢」是一个意思。
+ */
+function makeSkills({ cwd, warnings }) {
+  const runtime = new Map()
+
+  function roots(where) {
+    const base = where || cwd || process.cwd()
+    return [
+      { dir: path.join(base, '.dsh', 'skills'), source: 'project-dsh' },
+      { dir: path.join(base, 'skills'), source: 'project-agents' },
+      { dir: path.join(ROOT, 'skills'), source: 'user-dsh' },
+    ]
+  }
+
+  function all(where) {
+    const byName = new Map()
+    for (const r of roots(where)) {
+      for (const sk of scanSkillRoot(r.dir, r.source, 'local')) {
+        if (!byName.has(sk.name)) byName.set(sk.name, sk)
+      }
+    }
+    for (const [name, sk] of runtime) {
+      if (!byName.has(name)) byName.set(name, sk)
+    }
+    return [...byName.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  }
+
+  function summaryOf(sk) {
+    return {
+      name: sk.name,
+      description: sk.description,
+      ...(sk.whenToUse ? { whenToUse: sk.whenToUse } : {}),
+      invocation: { ...sk.invocation },
+      source: sk.source,
+      provider: sk.provider,
+      ...(sk.resourceBase ? { resourceBase: { ...sk.resourceBase } } : {}),
+    }
+  }
+
+  return {
+    async list(opts) {
+      return all(opts && opts.cwd).map(summaryOf)
+    },
+    async get(name, opts) {
+      if (typeof name !== 'string' || !SKILL_NAME_RE.test(name)) return undefined
+      const hit = all(opts && opts.cwd).find((sk) => sk.name === name)
+      if (!hit) return undefined
+      return { ...summaryOf(hit), content: hit.content, ...(hit.path ? { path: hit.path } : {}) }
+    },
+    async snapshot(opts) {
+      return { skills: all(opts && opts.cwd).map(summaryOf), complete: true }
+    },
+    /** 插件运行时塞进来的技能（dsh 里 skills.register 的对应物）。 */
+    register(sk) {
+      if (!sk || typeof sk.name !== 'string' || !SKILL_NAME_RE.test(sk.name)) {
+        throw new Error('skills.register 要一个 name 是 kebab-case 的技能')
+      }
+      const entry = {
+        name: sk.name,
+        description: String(sk.description || ''),
+        invocation: { modelInvocable: true, userInvocable: true, ...(sk.invocation || {}) },
+        source: 'runtime',
+        provider: 'runtime',
+        content: String(sk.content || ''),
+      }
+      runtime.set(sk.name, entry)
+      return () => {
+        if (runtime.get(sk.name) === entry) runtime.delete(sk.name)
+      }
+    },
+    unregister() {},
+    add() {
+      return () => {}
+    },
+    of() {
+      return []
+    },
+  }
+}
+
 function makeFs(defaultCwd) {
   const api = {
     get sandboxMode() {
@@ -357,23 +563,38 @@ function makeCtx(opts) {
     },
   }
 
-  services.skills = {
-    register() {
-      return () => {}
-    },
-    unregister() {},
-    add() {
-      return () => {}
-    },
+  services.skills = makeSkills({ cwd, warnings })
+
+  // agents：dsh 里这是一个管理「活着的 agent」的注册表，创建子 agent 要
+  // 走真正的 agent loop（要 LLM、要会话、要审批链）。代理机上是一次性进程，
+  // 没有这个能力。所以这里只把「查询」做实：真的没有 agent，就如实返回空；
+  // 要创建就明确拒绝，而不是给个假的让它以为成了。
+  services.agents = {
     list() {
       return []
     },
     get() {
       return undefined
     },
-    of() {
-      return []
+    currentInitiator() {
+      return undefined
     },
+    requireInitiator() {
+      throw new Error('代理机上没有正在运行的 agent，拿不到 initiator')
+    },
+    withInitiator(_agent, op) {
+      return typeof op === 'function' ? op() : undefined
+    },
+    withNoInitiator(op) {
+      return typeof op === 'function' ? op() : undefined
+    },
+    async create() {
+      throw new Error('代理机不能创建子 agent：这里没有 agent loop')
+    },
+    async createAgent() {
+      throw new Error('代理机不能创建子 agent：这里没有 agent loop')
+    },
+    setFactory() {},
   }
 
   services.fs = makeFs(cwd)
@@ -551,6 +772,16 @@ function makeCtx(opts) {
       return () => {}
     },
     dispose() {},
+    /**
+     * cordis 的探测式取服务：没有就返回 undefined，不抛。
+     * 插件用它来写「有就用、没有就降级」的代码，所以这里绝不能记成缺项。
+     */
+    get(name) {
+      if (typeof name !== 'string') return undefined
+      if (name in services) return services[name]
+      if (name in base) return base[name]
+      return undefined
+    },
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     baseDir: cwd,
   }
@@ -1184,9 +1415,44 @@ function opts() {
   return { cwd: flag('cwd'), session: flag('session') }
 }
 
+/**
+ * 看一眼技能库：从哪些目录找、找到了什么。
+ *
+ * 技能放哪儿一直是「猜」的问题——这个命令直接把答案打出来，
+ * 用户照着路径拷文件就行，不用读源码。
+ */
+function cmdSkills(root, where) {
+  const cwd = where || process.cwd()
+  const svc = makeSkills({ cwd, warnings: [] })
+  const dirs = [
+    { dir: path.join(cwd, '.dsh', 'skills'), source: 'project-dsh' },
+    { dir: path.join(cwd, 'skills'), source: 'project-agents' },
+    { dir: path.join(root, 'skills'), source: 'user-dsh' },
+  ]
+  return svc.snapshot({ cwd }).then((snap) => {
+    out({
+      ok: true,
+      cwd,
+      roots: dirs.map((d) => ({
+        path: d.dir,
+        source: d.source,
+        exists: fs.existsSync(d.dir),
+        found: scanSkillRoot(d.dir, d.source, 'local').map((x) => x.name),
+      })),
+      skills: snap.skills.map((x) => ({
+        name: x.name,
+        description: x.description,
+        source: x.source,
+        modelInvocable: x.invocation.modelInvocable,
+      })),
+      count: snap.skills.length,
+    })
+  })
+}
+
 async function main() {
   if (!cmd || cmd === 'help' || cmd === '--help') {
-    out({ ok: true, commands: ['probe', 'list', 'install <pkg>', 'remove <pkg>', 'harvest <pkg>', 'call <pkg> <tool> --args <file>'] })
+    out({ ok: true, commands: ['probe', 'list', 'install <pkg>', 'remove <pkg>', 'harvest <pkg>', 'call <pkg> <tool> --args <file>', 'skills [--cwd <dir>]'] })
     return
   }
   if (cmd === 'probe') return cmdProbe(ROOT)
@@ -1195,6 +1461,7 @@ async function main() {
   if (cmd === 'remove') return cmdRemove(ROOT, argv[1])
   if (cmd === 'harvest') return cmdHarvest(ROOT, argv[1], parseCfg(flag('config')), opts())
   if (cmd === 'call') return cmdCall(ROOT, argv[1], argv[2], flag('args'), parseCfg(flag('config')), opts())
+  if (cmd === 'skills') return cmdSkills(ROOT, flag('cwd'))
   throw new Error('不认识的子命令：' + cmd)
 }
 
