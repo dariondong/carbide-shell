@@ -157,10 +157,147 @@ function makeFs(defaultCwd) {
  * tools / systemPrompt / skills / fs 是真造的，其余第一次被碰到时才记一笔，
  * 真去调用才抛错——这样「差哪一项」能如实回报，而不是启动就崩。
  */
+// ---------------------------------------------------------------- web 能力层
+// dsh 的 ctx.web 是一层「接缝」：插件只管要结果，具体谁去抓由这里决定。
+// 这里实现一个够用的版本：fetch 直接真抓，search 走 Bing 的结果页。
+// 抓不到就抛带 code 的错，不假装成功。
+
+const WEB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const WEB_TIMEOUT = 15000
+const WEB_MAX_BYTES = 2 * 1024 * 1024
+
+function webError(code, message) {
+  const e = new Error(message)
+  e.code = code
+  return e
+}
+
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+}
+
+function stripTags(s) {
+  return decodeEntities(String(s).replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim()
+}
+
+/** 从 Bing 的结果页里抠出 url/title/snippet。抠不出来就是空数组，不编。 */
+function parseBing(html) {
+  const out = []
+  const chunks = String(html).split('<li class="b_algo"').slice(1)
+  for (const chunk of chunks) {
+    const end = chunk.indexOf('</li>')
+    const block = end === -1 ? chunk : chunk.slice(0, end)
+    const m = /<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block)
+    if (!m) continue
+    const url = decodeEntities(m[1])
+    if (!/^https?:/i.test(url)) continue
+    const title = stripTags(m[2])
+    if (!title) continue
+    const p = /<p[^>]*>([\s\S]*?)<\/p>/.exec(block)
+    const snippet = p ? stripTags(p[1]) : ''
+    out.push(snippet ? { url, title, snippet } : { url, title })
+  }
+  return out
+}
+
+function makeWeb(opts) {
+  const warnings = (opts && opts.warnings) || []
+
+  async function request(url, signal) {
+    if (typeof fetch !== 'function') {
+      throw webError('WEB_UNAVAILABLE', '这个 node 没有全局 fetch，要 18 以上')
+    }
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), WEB_TIMEOUT)
+    const relay = () => ac.abort()
+    if (signal && typeof signal.addEventListener === 'function') signal.addEventListener('abort', relay)
+    try {
+      return await fetch(url, {
+        signal: ac.signal,
+        redirect: 'follow',
+        headers: {
+          'user-agent': WEB_UA,
+          'accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        },
+      })
+    } catch (e) {
+      const why = e && e.name === 'AbortError' ? '超时或被取消' : (e && e.message) || '网络错误'
+      throw webError('WEB_PROVIDER_FAILED', '抓 ' + url + ' 失败：' + why)
+    } finally {
+      clearTimeout(timer)
+      if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', relay)
+    }
+  }
+
+  return {
+    searchProviders: new Map(),
+    fetchProviders: new Map(),
+    registerSearchProvider(p) {
+      if (p && p.id) this.searchProviders.set(p.id, p)
+      return () => this.searchProviders.delete(p && p.id)
+    },
+    registerFetchProvider(p) {
+      if (p && p.id) this.fetchProviders.set(p.id, p)
+      return () => this.fetchProviders.delete(p && p.id)
+    },
+    /** 搜。只在真解析出结果时才算成功。 */
+    async search(req, signal) {
+      const query = String((req && req.query) || '').trim()
+      if (!query) throw webError('WEB_EMPTY_QUERY', '搜索词是空的')
+      const want = Number((req && req.maxResults) || 0) || 8
+      const bound = Math.max(1, Math.min(20, want))
+      const url = 'https://www.bing.com/search?q=' + encodeURIComponent(query) + '&count=' + bound
+      const res = await request(url, signal)
+      if (!res.ok) throw webError('WEB_PROVIDER_FAILED', '搜索服务回了 HTTP ' + res.status)
+      const all = parseBing(await res.text())
+      if (!all.length) {
+        throw webError('WEB_PROVIDER_FAILED', '搜索页能打开，但一条结果都没解析出来（可能被要求验证）')
+      }
+      const sources = all.slice(0, bound)
+      return { sources, truncated: all.length > bound }
+    },
+    /** 抓一页。非 2xx 不算失败，状态码原样带回去。 */
+    async fetch(req, signal) {
+      const url = String((req && req.url) || '').trim()
+      if (!/^https?:\/\//i.test(url)) throw webError('WEB_INVALID_URL', '只抓 http/https：' + url)
+      const res = await request(url, signal)
+      const ct = String(res.headers.get('content-type') || '').toLowerCase()
+      const buf = Buffer.from(await res.arrayBuffer())
+      const truncated = buf.length > WEB_MAX_BYTES
+      const body = truncated ? buf.subarray(0, WEB_MAX_BYTES) : buf
+      const kind = ct.includes('html') ? 'html' : 'text'
+      if (warnings.length < 50) warnings.push('web:' + url)
+      return {
+        url: res.url || url,
+        statusCode: res.status,
+        body: { kind, content: body.toString('utf8') },
+        truncated,
+      }
+    },
+  }
+}
+
+/** 未实现的服务访问到就记一笔，报给用户的是「缺哪一项」，不是假的「无」。 */
+function missesOf(ctx) {
+  if (!ctx || !ctx.__misses) return []
+  return [...ctx.__misses]
+    .map((n) => String(n))
+    .filter((n) => !n.startsWith('__'))
+    .sort()
+}
+
 function makeCtx(opts) {
   const cwd = opts.cwd || process.cwd()
   const warnings = opts.warnings
   const misses = new Set()
+  const sections = []
   const services = Object.create(null)
 
   services.tools = {
@@ -183,13 +320,27 @@ function makeCtx(opts) {
     },
   }
 
+  // dsh 的段是 { name, order, text, complete }，按 order 升序拼。
+  // 以前这里只记了个名字就把内容扔了，等于插件的引导语全丢——现在真收下来。
   services.systemPrompt = {
     section(s) {
-      warnings.push('prompt:' + ((s && s.name) || '?'))
+      const sec = typeof s === 'string' ? { text: s } : s || {}
+      const text = typeof sec.text === 'string' ? sec.text : ''
+      sections.push({
+        name: String(sec.name || ''),
+        order: Number.isFinite(sec.order) ? sec.order : 100,
+        text,
+        complete: sec.complete === true,
+      })
       return () => {}
     },
     text() {
-      return ''
+      return sections
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((x) => x.text)
+        .filter(Boolean)
+        .join('\n\n')
     },
   }
 
@@ -213,6 +364,47 @@ function makeCtx(opts) {
   }
 
   services.fs = makeFs(cwd)
+  services.web = makeWeb({ warnings })
+
+  // 会话投影登记表。dsh 里每个领域（比如 todo 列表）往这儿登记一段纯净的状态
+  // 计算，读的时候由会话日志驱动。这里只做登记和自洽的查询，不编状态。
+  const projections = new Map()
+  services.sessionProjections = {
+    register(def) {
+      if (!def || typeof def.key !== 'string' || !def.key) {
+        throw new Error('session projection 要一个非空字符串 key')
+      }
+      if (!Number.isSafeInteger(def.stateVersion) || def.stateVersion < 0) {
+        throw new Error(
+          'session projection ' + JSON.stringify(def.key) + ' 的 stateVersion 要是非负整数，给的是 ' + String(def.stateVersion),
+        )
+      }
+      const prev = projections.get(def.key)
+      if (prev && prev.stateVersion !== def.stateVersion) {
+        throw new Error(
+          'session projection ' + JSON.stringify(def.key) + ' 已经用 stateVersion ' + prev.stateVersion + ' 登记过了',
+        )
+      }
+      projections.set(def.key, def)
+      return () => projections.delete(def.key)
+    },
+    onChanged() {
+      return () => {}
+    },
+    async snapshot() {
+      return { values: {} }
+    },
+    async checkpoint() {
+      return []
+    },
+    async view() {
+      return []
+    },
+    async restore() {},
+    keys() {
+      return [...projections.keys()]
+    },
+  }
 
   // 沙箱：没人管的时候一律放行，跟没有这一层时一样。
   services.sandbox = {
@@ -281,8 +473,30 @@ function makeCtx(opts) {
       return () => {}
     },
     off() {},
+    /**
+     * dsh 的 effect 是 generator：跑起来后 yield 出一个清理函数。
+     * 以前这里直接 fn() 就当完了，generator 函数被调用只会返回一个迭代器、
+     * 里面一行都不执行。现在真把它跑到第一个 yield，并把清理函数留住。
+     */
     effect(fn) {
-      if (typeof fn === 'function') fn()
+      if (typeof fn !== 'function') return () => {}
+      try {
+        const r = fn()
+        if (r && typeof r.next === 'function') {
+          const first = r.next()
+          const cleanup = first && first.value
+          return () => {
+            try {
+              if (typeof cleanup === 'function') cleanup()
+            } catch {}
+            try {
+              if (typeof r.return === 'function') r.return()
+            } catch {}
+          }
+        }
+      } catch (e) {
+        warnings.push('effect:' + ((e && e.message) || String(e)))
+      }
       return () => {}
     },
     inject(names, fn) {
@@ -316,6 +530,8 @@ function makeCtx(opts) {
   const ctx = new Proxy(base, {
     get(target, prop) {
       if (prop === '__misses') return misses
+      if (prop === '__sections') return sections
+      if (prop === '__projections') return projections
       if (typeof prop === 'symbol') return undefined
       if (prop in target) return target[prop]
       if (prop in services) return services[prop]
@@ -535,16 +751,33 @@ async function cmdRemove(root, pkg) {
 
 async function cmdHarvest(root, pkg, cfgRaw, opts) {
   const c = await collect(root, pkg, cfgRaw, opts)
-  const missing = [...c.ctx.__misses].filter((n) => !String(n).startsWith('__'))
+  const declared = Array.isArray(c.parts.inject) ? c.parts.inject : []
+  const missing = new Set(missesOf(c.ctx))
+  // 光看运行时不够：有些服务插件注明了要用、但装配阶段碰都不碰。
+  // 以前这种一律报「缺的服务：无」，等于骗人。
+  for (const n of declared) {
+    let has = false
+    try {
+      has = !!c.ctx.has(n)
+    } catch {
+      has = false
+    }
+    if (!has) missing.add(n)
+  }
+  const sections = (c.ctx.__sections || [])
+    .filter((x) => x && x.text)
+    .slice()
+    .sort((a, b) => a.order - b.order)
   out({
     ok: true,
     package: pkg,
     version: (c.pj && c.pj.version) || '',
     pluginName: c.parts.name,
-    inject: Array.isArray(c.parts.inject) ? c.parts.inject : [],
+    inject: declared,
     tools: c.tools.map(specOf),
     warnings: c.warnings,
-    missingSeams: missing,
+    sections,
+    missingSeams: [...missing].sort(),
     node: process.version,
   })
 }
@@ -554,6 +787,58 @@ async function readStdin() {
   const chunks = []
   for await (const chunk of process.stdin) chunks.push(chunk)
   return Buffer.concat(chunks).toString('utf8')
+}
+
+/** 一次调用里给插件看到的 exec。dsh 里这是 agent 会话的执行 frame。 */
+function makeExec(ctx, opts) {
+  const cwd = opts.cwd || process.cwd()
+  const events = []
+  const state = new Map()
+  const defs = ctx.__projections instanceof Map ? ctx.__projections : new Map()
+
+  // 每来一个事件，把登记过的投影都往前推一步。这样 snapshot() 读到的是真的，
+  // 而不是一个永远空的假表。
+  function drive(event) {
+    for (const [key, def] of defs) {
+      const before = state.has(key) ? state.get(key) : typeof def.init === 'function' ? def.init() : undefined
+      let after = before
+      if (typeof def.apply === 'function') {
+        try {
+          after = def.apply(before, event)
+        } catch (e) {
+          after = before
+        }
+      }
+      state.set(key, after)
+    }
+  }
+
+  const session = {
+    header: { cwd },
+    events,
+    append(type, data) {
+      const event = { type, data }
+      events.push(event)
+      drive(event)
+      return events.length
+    },
+    appendMany(list) {
+      for (const e of Array.isArray(list) ? list : []) {
+        if (e && e.type) this.append(e.type, e.data)
+      }
+      return events.length
+    },
+    state(key) {
+      return state.get(key)
+    },
+  }
+
+  return {
+    signal: undefined,
+    callId: 'carbide-' + Date.now(),
+    cwd,
+    agent: { session },
+  }
 }
 
 async function cmdCall(root, pkg, toolName, argsFile, cfgRaw, opts) {
@@ -566,11 +851,7 @@ async function cmdCall(root, pkg, toolName, argsFile, cfgRaw, opts) {
   if (!tool) {
     throw new Error('插件 ' + pkg + ' 里没有工具 ' + toolName + '，有的这些：' + c.tools.map((t) => t.name).join(', '))
   }
-  const exec = {
-    signal: undefined,
-    callId: 'carbide-' + Date.now(),
-    agent: { session: { header: { cwd: opts.cwd || process.cwd() } } },
-  }
+  const exec = makeExec(c.ctx, opts)
   const started = Date.now()
   const value = await tool.execute(args, exec)
   let text = ''
@@ -584,7 +865,14 @@ async function cmdCall(root, pkg, toolName, argsFile, cfgRaw, opts) {
   } catch (e) {
     text = ''
   }
-  out({ ok: true, tool: toolName, ms: Date.now() - started, result: value, text })
+  out({
+    ok: true,
+    tool: toolName,
+    ms: Date.now() - started,
+    result: value,
+    text,
+    missingSeams: missesOf(c.ctx),
+  })
 }
 
 const argv = process.argv.slice(2)

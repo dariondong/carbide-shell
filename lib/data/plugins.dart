@@ -116,6 +116,25 @@ class PluginStore extends ChangeNotifier {
   }
 
   /// 改一个工具的风险档。插件本身没有这个概念，默认按名字猜，猜错了能改。
+  /// 改插件配置。配置会影响装配，所以改完立刻重新收割一次清单。
+  Future<void> setConfig(String id, String config) async {
+    final PluginManifest? m = _byId[id];
+    if (m == null) return;
+    final String own = config.trim();
+    if (m.config == own) return;
+    _byId[id] = m.copyWith(config: own);
+    try {
+      // 先拿新配置收割一次：不对就当场抛，别把坏配置留在身上，
+      // 否则会变成「装得上、工具清单却是空的」这种最难查的状态。
+      await refresh(id);
+    } catch (e) {
+      _byId[id] = m;
+      await save();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> setToolRisk(String id, String toolName, String risk) async {
     final PluginManifest? m = _byId[id];
     if (m == null) return;
@@ -235,6 +254,14 @@ exit 0
   String _engineCommand(String rest) =>
       'CARBIDE_ROOT=$_rootExpr $_nodeExpr $_engineExpr $rest';
 
+  /// 带插件配置地跑。配置是 JSON 文本，里面什么引号都可能有，
+  /// 所以还是 base64 走管道，让 shell 只认得干净字符。
+  String _engineCommandWith(String rest, String config) {
+    final String own = config.trim();
+    if (own.isEmpty) return _engineCommand(rest);
+    return _engineCommand('$rest --config "$(printf %s ${_b64(own)} | base64 -d)"');
+  }
+
   /// 把一份文本写到远端某个文件：`printf <base64> | base64 -d > 路径`。
   ///
   /// 比 SFTP 糙，但少一个子系统、少一个「目录在不在」的来回，
@@ -286,16 +313,19 @@ exit 0
   Future<PluginManifest> refresh(String id) async {
     final HostEntry? host = proxyHost;
     if (host == null) throw StateError('还没选代理服务器。');
+    final String cfg = _byId[id]?.config ?? '';
     final _Run har = await _run(
       host,
-      _engineCommand('harvest ${_q(id)}'),
+      _engineCommandWith('harvest ${_q(id)}', cfg),
       timeout: const Duration(seconds: 120),
     );
     final Map<String, Object?> json = _lastJson(har.out);
     if (json['ok'] != true) throw StateError(_explain(har, '取不出 $id 的工具'));
     final PluginManifest fresh = _manifestOf(json, id);
     final PluginManifest? old = _byId[id];
-    _byId[id] = old == null ? fresh : fresh.copyWith(on: old.on);
+    _byId[id] = old == null
+        ? fresh
+        : fresh.copyWith(on: old.on, config: old.config, prompt: fresh.prompt);
     await save();
     notifyListeners();
     return _byId[id]!;
@@ -342,9 +372,10 @@ exit 0
     }
     try {
       final String payload = _b64(jsonEncode(args));
+      final String cfg = _byId[id]?.config ?? '';
       final _Run r = await _run(
         host,
-        'printf %s $payload | base64 -d | ${_engineCommand('call ${_q(id)} ${_q(tool)} --args - --cwd $_workExpr')}',
+        'printf %s $payload | base64 -d | ${_engineCommandWith('call ${_q(id)} ${_q(tool)} --args - --cwd $_workExpr', cfg)}',
         timeout: const Duration(seconds: 120),
       );
       final Map<String, Object?> json = _lastJson(r.out);
@@ -392,6 +423,19 @@ exit 0
         if (e is Map) tools.add(PluginToolSpec.fromJson(Map<String, Object?>.from(e)));
       }
     }
+    // 插件写给模型的引导语：按 order 拼起来。这是它教模型「怎么用我的工具」
+    // 的唯一渠道，丢了就等于让模型瞎猜。
+    final StringBuffer prompt = StringBuffer();
+    final Object? rawSections = json['sections'];
+    if (rawSections is List) {
+      for (final Object? e in rawSections) {
+        if (e is! Map) continue;
+        final String text = '${e['text'] ?? ''}'.trim();
+        if (text.isEmpty) continue;
+        if (prompt.isNotEmpty) prompt.write('\n\n');
+        prompt.write(text);
+      }
+    }
     return PluginManifest(
       id: pkg,
       version: '${json['version'] ?? ''}',
@@ -402,6 +446,8 @@ exit 0
       missingSeams: _list(json['missingSeams']),
       node: '${json['node'] ?? ''}',
       installedAt: DateTime.now().toIso8601String(),
+      config: _byId[pkg]?.config ?? '',
+      prompt: prompt.toString(),
       on: _byId[pkg]?.on ?? true,
     );
   }

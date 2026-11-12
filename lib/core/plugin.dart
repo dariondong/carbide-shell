@@ -65,6 +65,8 @@ class PluginManifest {
     this.missingSeams = const <String>[],
     this.node = '',
     this.installedAt = '',
+    this.config = '',
+    this.prompt = '',
     this.on = true,
   });
 
@@ -89,6 +91,14 @@ class PluginManifest {
 
   final String node;
   final String installedAt;
+
+  /// 插件自己要求的配置（JSON 文本）。空表示它不需要配置。
+  /// 有些插件在装配阶段就校验配置，缺了连工具清单都出不来。
+  final String config;
+
+  /// 插件写给模型的引导语，按 order 拼好了。
+  /// 以前这一段被整个丢掉，模型只看到工具名和一个 schema。
+  final String prompt;
 
   /// 装着但可以临时关掉：关掉只是不挂到模型清单上，包还在。
   final bool on;
@@ -115,6 +125,8 @@ class PluginManifest {
         if (missingSeams.isNotEmpty) 'missingSeams': missingSeams,
         if (node.isNotEmpty) 'node': node,
         if (installedAt.isNotEmpty) 'installedAt': installedAt,
+        if (config.isNotEmpty) 'config': config,
+        if (prompt.isNotEmpty) 'prompt': prompt,
         'on': on,
       };
 
@@ -136,11 +148,19 @@ class PluginManifest {
       missingSeams: _strings(json['missingSeams']),
       node: '${json['node'] ?? ''}',
       installedAt: '${json['installedAt'] ?? ''}',
+      config: '${json['config'] ?? ''}',
+      prompt: '${json['prompt'] ?? ''}',
       on: json['on'] != false,
     );
   }
 
-  PluginManifest copyWith({bool? on, List<PluginToolSpec>? tools}) => PluginManifest(
+  PluginManifest copyWith({
+    bool? on,
+    List<PluginToolSpec>? tools,
+    String? config,
+    String? prompt,
+  }) =>
+      PluginManifest(
         id: id,
         version: version,
         pluginName: pluginName,
@@ -150,6 +170,8 @@ class PluginManifest {
         missingSeams: missingSeams,
         node: node,
         installedAt: installedAt,
+        config: config ?? this.config,
+        prompt: prompt ?? this.prompt,
         on: on ?? this.on,
       );
 }

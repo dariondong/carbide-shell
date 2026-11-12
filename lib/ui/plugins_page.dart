@@ -167,6 +167,46 @@ class _PluginsPageState extends State<PluginsPage> {
     await _guard(() => _store.uninstall(m.id));
   }
 
+  /// 改插件配置。有些插件在装配阶段就校验配置，缺了连工具清单都出不来，
+  /// 这时候光有「装上了」没用，得让人把配置填进去。
+  Future<void> _editConfig(PluginManifest m) async {
+    final TextEditingController cfg = TextEditingController(text: m.config);
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('插件配置',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('填 JSON。留空表示这个插件不需要配置。存下会重新取一次工具清单，配置不对当场报错。',
+                style: TextStyle(fontSize: 11.5, color: C.grey, height: 1.6)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: cfg,
+              maxLines: 7,
+              minLines: 3,
+              style: C.mono,
+              decoration: const InputDecoration(
+                hintText: '{"allowParallelInProgress": false}',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false), child: const Text('算了')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true), child: const Text('存下')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _guard(() => _store.setConfig(m.id, cfg.text.trim()));
+  }
+
   Future<void> _setRisk(PluginManifest m, PluginToolSpec t) async {
     final String? picked = await showModalBottomSheet<String>(
       context: context,
@@ -394,7 +434,7 @@ class _PluginsPageState extends State<PluginsPage> {
             if (m.missingSeams.isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
               Text(
-                '代理机上缺这几项服务，用到它们的功能会报错：${m.missingSeams.join('、')}',
+                '代理机上没有这几项服务，用到它们的工具会直接报错（不是猜的，是它真的说过要用）：${m.missingSeams.join('、')}',
                 style: TextStyle(fontSize: 11, color: C.danger, height: 1.6),
               ),
             ],
@@ -408,6 +448,12 @@ class _PluginsPageState extends State<PluginsPage> {
                     final PluginManifest fresh = await _store.refresh(m.id);
                     _toast('${fresh.label}：${fresh.tools.length} 个工具');
                   }),
+                ),
+                const SizedBox(width: 8),
+                SquareButton(
+                  label: m.config.isEmpty ? '配置' : '配置 ·已填',
+                  tone: 'ink',
+                  onPressed: () => _editConfig(m),
                 ),
                 const SizedBox(width: 8),
                 SquareButton(

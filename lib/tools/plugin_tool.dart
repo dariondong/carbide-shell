@@ -14,11 +14,15 @@ class PluginTool extends Tool {
     required this.plugins,
     required this.pluginId,
     required this.spec,
+    this.guidance = '',
   });
 
   final PluginStore plugins;
   final String pluginId;
   final PluginToolSpec spec;
+
+  /// 插件作者写给模型的引导语。dsh 里它走 systemPrompt，这边没有独立通道，
+  /// 并进工具描述——总比丢掉强，模型至少知道该怎么用它。
 
   @override
   String get name => spec.name;
@@ -26,8 +30,12 @@ class PluginTool extends Tool {
   @override
   String get description {
     final String own = spec.description.trim();
-    if (own.isNotEmpty) return own;
-    return '来自插件 $pluginId 的工具。';
+    final String base = own.isNotEmpty ? own : '来自插件 $pluginId 的工具。';
+    final String guide = guidance.trim();
+    if (guide.isEmpty) return base;
+    // 引导语是别人写的，长度不可控，这里截一刀防止把上下文撑爆。
+    final String clipped = guide.length <= 2000 ? guide : '${guide.substring(0, 2000)}…';
+    return '$base\n\n$clipped';
   }
 
   @override
@@ -102,6 +110,7 @@ class PluginToolSet {
         plugins: plugins,
         pluginId: e.value.id,
         spec: e.value.tools.firstWhere((PluginToolSpec s) => s.name == e.key),
+        guidance: e.value.prompt,
       ));
     }
   }
