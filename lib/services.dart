@@ -219,7 +219,11 @@ class AppServices {
       registry: registry,
       policy: policy,
       journal: FileJournal(conversations.journalOf(c)),
-      context: ToolContext(workspace: workspace, desktop: isDesktopPlatform),
+      context: ToolContext(
+        workspace: workspace,
+        desktop: isDesktopPlatform,
+        conversationId: c.id,
+      ),
       maxSteps: settings.value.maxSteps,
       maxContextChars: settings.value.contextChars,
       messages: c.messages,

@@ -33,6 +33,7 @@ import process from 'node:process'
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
+import crypto from 'node:crypto'
 
 const MAX_BEFORE = 512 * 1024
 
@@ -284,6 +285,16 @@ function makeWeb(opts) {
   }
 }
 
+/** 投影当前的样子。没登记过就是空对象。 */
+function projectionsOf(ctx) {
+  const out = {}
+  const st = ctx.__projState
+  if (st instanceof Map) {
+    for (const [k, v] of st) out[k] = v === undefined ? null : v
+  }
+  return out
+}
+
 /** 未实现的服务访问到就记一笔，报给用户的是「缺哪一项」，不是假的「无」。 */
 function missesOf(ctx) {
   if (!ctx || !ctx.__misses) return []
@@ -299,6 +310,8 @@ function makeCtx(opts) {
   const misses = new Set()
   const sections = []
   const services = Object.create(null)
+  // 投影状态的容器。makeExec 会用真的 Map 换掉它。
+  let projState = new Map()
 
   services.tools = {
     register(tool) {
@@ -392,7 +405,9 @@ function makeCtx(opts) {
       return () => {}
     },
     async snapshot() {
-      return { values: {} }
+      const values = {}
+      for (const [k, v] of projState) values[k] = v === undefined ? null : v
+      return { values }
     },
     async checkpoint() {
       return []
@@ -561,6 +576,9 @@ function makeCtx(opts) {
       if (prop === '__misses') return misses
       if (prop === '__sections') return sections
       if (prop === '__projections') return projections
+      // 这里要问 services：makeExec 会把真的 Map 塞进来（走 set 拦截器），
+      // 直接返回闭包里的那个旧 Map 的话，读回来的永远是空表。
+      if (prop === '__projState') return '__projState' in services ? services.__projState : projState
       if (typeof prop === 'symbol') return undefined
       if (prop in target) return target[prop]
       if (prop in services) return services[prop]
@@ -818,15 +836,190 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-/** 一次调用里给插件看到的 exec。dsh 里这是 agent 会话的执行 frame。 */
+// ---------------------------------------------------------------- 会话日志
+//
+// 为什么要有这一段：dsh 的插件把「记下来的东西」放在会话事件流里，
+// 投影（projection）负责把事件流折成当前状态。桥是一次性进程，
+// 每次调用醒来都是空的——插件昨天记下的待办今天就没了，模型会看到
+// 自己刚写的清单凭空消失。
+//
+// 这里存的**不是** dsh 的会话日志格式。dsh 那边要 seq 连续、要 surface
+// 变换、要 chunk 压缩、事件类型还有白名单；照搬是另一个工程量，而且
+// 没有真实会话在跑，搬来也没法验证。这里只保留对投影有用的三样：
+// type、data、以及一个单调递增的 seq。能重放出正确状态，读一眼也知道
+// 是啥事。它不能喂给 dsh 本体，只能喂给登记过投影的插件。
+
+/** 会话日志放哪儿。id 可能是任意字符串（对话 id），所以落盘前先哈希。 */
+function sessionFile(session, cwd) {
+  const raw = session && String(session).trim() ? String(session).trim() : 'cwd:' + cwd
+  const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 16)
+  return { dir: path.join(ROOT, 'sessions'), file: path.join(ROOT, 'sessions', hash + '.jsonl') }
+}
+
+/** 读一段日志。半截写入的行直接跳过——崩在写一半时不该让整个会话报废。 */
+function loadEvents(file) {
+  let txt = ''
+  try {
+    txt = fs.readFileSync(file, 'utf8')
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return []
+    throw e
+  }
+  const list = []
+  for (const line of txt.split('\n')) {
+    const own = line.trim()
+    if (!own) continue
+    try {
+      const e = JSON.parse(own)
+      if (e && typeof e.type === 'string' && Number.isSafeInteger(e.seq)) list.push(e)
+    } catch {}
+  }
+  list.sort((a, b) => a.seq - b.seq)
+  return list
+}
+
+/** 同步小睡。没别的依赖，Atomics.wait 最省事。 */
+function sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  } catch {}
+}
+
+/**
+ * 守住一份会话日志。
+ *
+ * 同一会话的两个调用撞在一起，seq 会撞号，投影也会互相踩。
+ * 所以整段「读-重放-跑工具-追加」都在锁里做。锁文件里写 pid，
+ * 超过一分钟没动的当成残锁抢过来（进程被 kill 会留下）。
+ */
+/** 异步小睡。 */
+const sleepAsync = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * 异步版的文件锁。工具执行是 async，锁得跨 await 一直握着——
+ * 不然「读历史」和「写新事件」之间就会插进别的调用，
+ * 两边都从同一个 seq 起步，日志里就出现两条 seq 0。
+ */
+async function withLockAsync(file, fn, waitMs) {
+  const lock = file + '.lock'
+  const deadline = Date.now() + (waitMs || 100000)
+  let held = false
+  for (;;) {
+    try {
+      fs.mkdirSync(path.dirname(lock), { recursive: true })
+      const fd = fs.openSync(lock, 'wx')
+      fs.writeSync(fd, String(process.pid))
+      fs.closeSync(fd)
+      held = true
+      break
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e
+      try {
+        const st = fs.statSync(lock)
+        if (Date.now() - st.mtimeMs > 120000) {
+          fs.unlinkSync(lock)
+          continue
+        }
+      } catch {}
+      if (Date.now() > deadline) {
+        throw new Error('会话日志被另一次调用占着，等了 ' + Math.round((waitMs || 100000) / 1000) + ' 秒还没放')
+      }
+      await sleepAsync(40)
+    }
+  }
+  try {
+    return await fn()
+  } finally {
+    if (held) {
+      try {
+        fs.unlinkSync(lock)
+      } catch {}
+    }
+  }
+}
+
+function withLock(file, fn) {
+  const lock = file + '.lock'
+  const deadline = Date.now() + 15000
+  let held = false
+  for (;;) {
+    try {
+      fs.mkdirSync(path.dirname(lock), { recursive: true })
+      const fd = fs.openSync(lock, 'wx')
+      fs.writeSync(fd, String(process.pid))
+      fs.closeSync(fd)
+      held = true
+      break
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e
+      try {
+        const st = fs.statSync(lock)
+        if (Date.now() - st.mtimeMs > 60000) {
+          fs.unlinkSync(lock)
+          continue
+        }
+      } catch {}
+      if (Date.now() > deadline) {
+        throw new Error('会话日志被另一次调用占着，等了 15 秒还没放')
+      }
+      sleepSync(50)
+    }
+  }
+  try {
+    return fn()
+  } finally {
+    if (held) {
+      try {
+        fs.unlinkSync(lock)
+      } catch {}
+    }
+  }
+}
+
+/** 只留最近的一段，别让日志长到把盘吃光。 */
+const SESSION_KEEP = 2000
+const SESSION_TRIM_AT = 5000
+
+function appendEvents(file, events) {
+  if (!events.length) return
+  let existing = 0
+  try {
+    existing = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim()).length
+  } catch {}
+  const body = events.map((e) => JSON.stringify(e)).join('\n') + '\n'
+  if (existing + events.length > SESSION_TRIM_AT) {
+    // 超了就整份重写，只留尾巴。seq 不重新编号——它是身份，不是下标。
+    const all = loadEvents(file).concat(events).slice(-SESSION_KEEP)
+    fs.writeFileSync(file, all.map((e) => JSON.stringify(e)).join('\n') + '\n')
+    return
+  }
+  fs.appendFileSync(file, body)
+}
+
+/**
+ * 一次调用里给插件看到的 exec。dsh 里这是 agent 会话的执行 frame。
+ *
+ * opts.history 是这份会话以前的事件，进来先把投影推到当前状态；
+ * opts.file 有的话，这趟新产生的事件在收尾时追加进去。
+ */
 function makeExec(ctx, opts) {
   const cwd = opts.cwd || process.cwd()
   const events = []
   const state = new Map()
+  // 同一份状态给两处看：exec 内部推它，sessionProjections.snapshot() 读它。
+  // 分成两份的话，插件读回来的永远是空表。
+  ctx.__projState = state
   const defs = ctx.__projections instanceof Map ? ctx.__projections : new Map()
+  const history = Array.isArray(opts.history) ? opts.history : []
+  const file = opts.file || ''
+  let nextSeq = 0
+  for (const e of history) {
+    if (Number.isSafeInteger(e.seq) && e.seq >= nextSeq) nextSeq = e.seq + 1
+  }
+  let fresh = []
+  let flushed = false
 
-  // 每来一个事件，把登记过的投影都往前推一步。这样 snapshot() 读到的是真的，
-  // 而不是一个永远空的假表。
+  // 每来一个事件，把登记过的投影都往前推一步。
   function drive(event) {
     for (const [key, def] of defs) {
       const before = state.has(key) ? state.get(key) : typeof def.init === 'function' ? def.init() : undefined
@@ -842,23 +1035,52 @@ function makeExec(ctx, opts) {
     }
   }
 
+  // 每个投影先落到 init()，再喂历史。没有这一步，一个还没发生过事件的
+  // 会话读出来是 undefined——插件拿到的不是「0」，而是「没有」，
+  // 它一用就踩空。
+  for (const [key, def] of defs) {
+    if (!state.has(key)) state.set(key, typeof def.init === 'function' ? def.init() : undefined)
+  }
+
+  // 然后把历史喂一遍。全部历史走完，投影就回到了上次停下的地方——
+  // 这正是 dsh 里「投影由事件流重建」的那条路子。
+  for (const e of history) drive(e)
+
   const session = {
     header: { cwd },
     events,
+    get seq() {
+      return nextSeq
+    },
     append(type, data) {
-      const event = { type, data }
+      // data 得能落盘。JSON 里塞不下的东西（函数、BigInt）宁可报错，
+      // 也别偷偷存个 undefined 进去，下次读出来是错的。
+      const snap = data === undefined ? null : JSON.parse(JSON.stringify(data))
+      const event = { seq: nextSeq++, type: String(type), data: snap, time: new Date().toISOString() }
       events.push(event)
+      fresh.push(event)
       drive(event)
-      return events.length
+      return event
     },
     appendMany(list) {
       for (const e of Array.isArray(list) ? list : []) {
         if (e && e.type) this.append(e.type, e.data)
       }
-      return events.length
+      return nextSeq
     },
     state(key) {
       return state.get(key)
+    },
+    /** 这趟攒下的事件落盘。只落一次，重复调不出错。 */
+    flush() {
+      if (flushed || !file || !fresh.length) return fresh.length
+      flushed = true
+      appendEvents(file, fresh)
+      return fresh.length
+    },
+    /** 还没落盘的事件条数，给调用方判断要不要报账。 */
+    get pending() {
+      return flushed ? 0 : fresh.length
     },
   }
 
@@ -870,37 +1092,70 @@ function makeExec(ctx, opts) {
   }
 }
 
+
 async function cmdCall(root, pkg, toolName, argsFile, cfgRaw, opts) {
   let rawArgs = '{}'
   if (argsFile === '-') rawArgs = await readStdin()
   else if (argsFile) rawArgs = await fsp.readFile(argsFile, 'utf8')
   const args = JSON.parse(rawArgs)
-  const c = await collect(root, pkg, cfgRaw, opts)
-  const tool = c.tools.find((t) => t.name === toolName)
+
+  // 装配在锁外做：每次进程都是新的，插件 apply 得重跑一遍，
+  // 这一步只碰内存，不碰会话日志。
+  const c0 = await collect(root, pkg, cfgRaw, opts)
+  const tool = c0.tools.find((t) => t.name === toolName)
   if (!tool) {
-    throw new Error('插件 ' + pkg + ' 里没有工具 ' + toolName + '，有的这些：' + c.tools.map((t) => t.name).join(', '))
+    throw new Error('插件 ' + pkg + ' 里没有工具 ' + toolName + '，有的这些：' + c0.tools.map((t) => t.name).join(', '))
   }
-  const exec = makeExec(c.ctx, opts)
-  const started = Date.now()
-  const value = await tool.execute(args, exec)
-  let text = ''
-  try {
-    if (tool.output && typeof tool.output.render === 'function') {
-      const cards = tool.output.render(args, value)
-      if (Array.isArray(cards)) {
-        text = cards.map((c2) => (c2 && c2.text) || '').filter(Boolean).join('\n')
+
+  // 会话日志按「包 + 会话身份」分开存。同一个对话里两个插件不该互相看见
+  // 对方的待办，所以包名也进哈希。
+  const place = sessionFile((opts.session || '') + '|' + pkg, opts.cwd || process.cwd())
+  const file = place.file
+
+  // 读历史、重放、跑工具、追加——整段串行。会话本来就该是串行的：
+  // 并发跑两个，谁先谁后都说不清，记下来的状态也没有意义。
+  return withLockAsync(file, async () => {
+    const history = loadEvents(file)
+    const exec = makeExec(c0.ctx, { ...opts, history, file })
+    const started = Date.now()
+    let value
+    let failure = ''
+    try {
+      value = await tool.execute(args, exec)
+    } catch (e) {
+      failure = (e && e.message) || String(e)
+    } finally {
+      // 工具抛了也要把已经写下的事件落盘——插件可能已经记了账。
+      try {
+        exec.agent.session.flush()
+      } catch (e) {
+        if (!failure) failure = '会话日志没写进去：' + ((e && e.message) || String(e))
       }
     }
-  } catch (e) {
-    text = ''
-  }
-  out({
-    ok: true,
-    tool: toolName,
-    ms: Date.now() - started,
-    result: value,
-    text,
-    missingSeams: missesOf(c.ctx),
+    if (failure) throw new Error(failure)
+
+    let text = ''
+    try {
+      if (tool.output && typeof tool.output.render === 'function') {
+        const cards = tool.output.render(args, value)
+        if (Array.isArray(cards)) {
+          text = cards.map((c2) => (c2 && c2.text) || '').filter(Boolean).join('\n')
+        }
+      }
+    } catch (e) {
+      text = ''
+    }
+    out({
+      ok: true,
+      tool: toolName,
+      ms: Date.now() - started,
+      result: value,
+      text,
+      // 投影当前的样子，方便核对「记下来的东西」是不是真记住了。
+      projections: projectionsOf(c0.ctx),
+      sessionEvents: history.length + exec.agent.session.events.length,
+      missingSeams: missesOf(c0.ctx),
+    })
   })
 }
 
@@ -926,7 +1181,7 @@ function parseCfg(v) {
 }
 
 function opts() {
-  return { cwd: flag('cwd') }
+  return { cwd: flag('cwd'), session: flag('session') }
 }
 
 async function main() {

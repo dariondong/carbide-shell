@@ -55,7 +55,8 @@ class PluginTool extends Tool {
 
   @override
   Future<ToolOutcome> run(Map<String, Object?> args, ToolContext context) async {
-    final PluginCallResult r = await plugins.call(pluginId, spec.name, args);
+    final PluginCallResult r =
+        await plugins.call(pluginId, spec.name, args, session: context.conversationId);
     if (!r.ok) {
       return ToolOutcome.failure('插件 $pluginId 的 ${spec.name} 没跑成：${r.error}');
     }

@@ -271,6 +271,15 @@ exit 0
   String _putFile(String pathExpr, String text) =>
       'printf %s ${_b64(text)} | base64 -d > $pathExpr';
 
+  /// call 那段参数。session 是对话 id，插件拿它找自己的会话日志；
+  /// 空着就让引擎退回按工作目录算，至少不会串到别的插件头上。
+  String _callRest(String id, String tool, String session) {
+    final String tail = 'call ${_q(id)} ${_q(tool)} --args - --cwd $_workExpr';
+    final String own = session.trim();
+    if (own.isEmpty) return tail;
+    return '$tail --session ${_q(own)}';
+  }
+
   // ---------------------------------------------------------------- 装与删
 
   /// 装一个包，顺手收割一次清单。
@@ -365,8 +374,9 @@ exit 0
   Future<PluginCallResult> call(
     String id,
     String tool,
-    Map<String, Object?> args,
-  ) async {
+    Map<String, Object?> args, {
+    String session = '',
+  }) async {
     final HostEntry? host = proxyHost;
     if (host == null) {
       return const PluginCallResult(ok: false, error: '还没选代理服务器。');
@@ -376,7 +386,7 @@ exit 0
       final String cfg = _byId[id]?.config ?? '';
       final _Run r = await _run(
         host,
-        'printf %s $payload | base64 -d | ${_engineCommandWith('call ${_q(id)} ${_q(tool)} --args - --cwd $_workExpr', cfg)}',
+        'printf %s $payload | base64 -d | ${_engineCommandWith(_callRest(id, tool, session), cfg)}',
         timeout: const Duration(seconds: 120),
       );
       final Map<String, Object?> json = _lastJson(r.out);

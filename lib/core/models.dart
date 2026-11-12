@@ -177,6 +177,7 @@ class ToolContext {
     required this.desktop,
     this.timeout = const Duration(seconds: 15),
     this.granted = false,
+    this.conversationId = '',
   });
 
   /// Directory the agent may write inside.
@@ -187,15 +188,20 @@ class ToolContext {
 
   final Duration timeout;
 
-  /// 这一步用户已经点过批准。工具自己在跑之前还要再问一句规则的（比如 http_request
+  /// 这一步用户点过批准。工具自己跑之前还要再问一句规则的（比如 http_request
   /// 的域名允许列表），看它就当成已经过了。
   final bool granted;
+
+  /// 这一步属于哪个对话。插件要靠它把自己的会话日志落到同一个文件里，
+  /// 否则每次调用都是新面孔，插件记下的东西下一句就没了。
+  final String conversationId;
 
   ToolContext copyWith({String? workspace, bool? granted}) => ToolContext(
         workspace: workspace ?? this.workspace,
         desktop: desktop,
         timeout: timeout,
         granted: granted ?? this.granted,
+        conversationId: conversationId,
       );
 }
 
